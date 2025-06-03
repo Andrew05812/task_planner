@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material Design 3 colors -->
+    <color name="primary">#FF6750A4</color>
+    <color name="primary_dark">#FF4F378B</color>
+    <color name="secondary">#FFE8DEF8</color>
+    <color name="secondary_dark">#FFD0BCFF</color>
+    <color name="background">#FFFFFFFF</color>
+    <color name="background_dark">#FF1C1B1F</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="surface_dark">#FF1C1B1F</color>
+    <color name="error">#FFB3261E</color>
+    <color name="on_error">#FFFFFFFF</color>
+    <color name="on_surface">#FF1C1B1F</color>
+    <color name="on_surface_dark">#FFE6E1E5</color>
+
+    <!-- Basic colors -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
+
+    <!-- Task priority colors -->
+    <color name="priority_low">#43A047</color>
+    <color name="priority_medium">#FB8C00</color>
+    <color name="priority_high">#E53935</color>
+
+    <!-- Task status colors -->
+    <color name="status_todo">#FFBDBDBD</color>
+    <color name="status_in_progress">#FF2196F3</color>
+    <color name="status_done">#FF4CAF50</color>
+    <color name="red">#FFFF0000</color>
+</resources>

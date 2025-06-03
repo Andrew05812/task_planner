@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+   Sample data extraction rules file; uncomment and customize as necessary.
+   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
+   for details.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Backup the database -->
+        <include domain="database" path="taskplanner.db"/>
+        <include domain="database" path="taskplanner.db-shm"/>
+        <include domain="database" path="taskplanner.db-wal"/>
+        
+        <!-- Backup shared preferences -->
+        <include domain="sharedpref" path="."/>
+    </cloud-backup>
+    <device-transfer>
+        <include domain="database" path="taskplanner.db"/>
+        <include domain="database" path="taskplanner.db-shm"/>
+        <include domain="database" path="taskplanner.db-wal"/>
+        <include domain="sharedpref" path="."/>
+    </device-transfer>
+</data-extraction-rules>

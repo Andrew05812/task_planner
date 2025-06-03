@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/navigation_tasks">
+
+    <fragment
+        android:id="@+id/navigation_tasks"
+        android:name="com.taskplanner.ui.tasks.TasksFragment"
+        android:label="@string/title_tasks">
+        <action
+            android:id="@+id/action_tasks_to_task_detail"
+            app:destination="@id/navigation_task_detail" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_categories"
+        android:name="com.taskplanner.ui.categories.CategoriesFragment"
+        android:label="@string/title_categories">
+        <action
+            android:id="@+id/action_categories_to_category_detail"
+            app:destination="@id/navigation_category_detail" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_statistics"
+        android:name="com.taskplanner.ui.statistics.StatisticsFragment"
+        android:label="@string/title_statistics" />
+
+    <fragment
+        android:id="@+id/navigation_profile"
+        android:name="com.taskplanner.ui.profile.ProfileFragment"
+        android:label="@string/title_profile">
+        <action
+            android:id="@+id/action_profile_to_profile_selection"
+            app:destination="@id/navigation_profile_selection" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_profile_selection"
+        android:name="com.taskplanner.ui.profile.ProfileSelectionFragment"
+        android:label="@string/title_profile_selection">
+        <action
+            android:id="@+id/action_profile_selection_to_profile_edit"
+            app:destination="@id/navigation_profile_edit" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_profile_edit"
+        android:name="com.taskplanner.ui.profile.ProfileEditFragment"
+        android:label="@string/title_profile_edit">
+        <argument
+            android:name="profileId"
+            app:argType="long" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_task_detail"
+        android:name="com.taskplanner.ui.tasks.TaskDetailFragment"
+        android:label="@string/title_task_detail">
+        <argument
+            android:name="taskId"
+            app:argType="long" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_category_detail"
+        android:name="com.taskplanner.ui.categories.CategoryDetailFragment"
+        android:label="@string/title_category_detail">
+        <argument
+            android:name="categoryId"
+            app:argType="long" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/categoryTasksFragment"
+        android:name="com.taskplanner.ui.categories.CategoryTasksFragment"
+        android:label="Category Tasks"
+        tools:layout="@layout/fragment_category_tasks">
+        <argument
+            android:name="categoryId"
+            app:argType="long" />
+        <action
+            android:id="@+id/action_categoryTasks_to_taskDetail"
+            app:destination="@id/navigation_task_detail" />
+    </fragment>
+
+</navigation> 
