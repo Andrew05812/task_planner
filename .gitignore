@@ -1,3 +1,4 @@
+# Android
 *.iml
 .gradle
 /local.properties
@@ -49,3 +50,33 @@ ENV/
 
 # OS
 Thumbs.db
+
+# Installers
+*.msi
+*.exe
+*.dmg
+*.pkg
+
+# Build files
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+
+# Log Files
+*.log
+*.log.*
+
+# Android Studio
+*.iml
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.hprof
