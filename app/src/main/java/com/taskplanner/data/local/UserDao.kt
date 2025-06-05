@@ -41,19 +41,15 @@ interface UserDao {
 
     @Transaction
     suspend fun setCurrentUser(user: User) {
-        // Get the currently active user if any
         val previouslyCurrentUser = getCurrentUser()
 
-        // Reset current user flag for all users
         clearCurrentUser()
 
-        // If there was a previously current user, ensure its isCurrent flag is false in the database
         if (previouslyCurrentUser != null) {
              val updatedPreviouslyUser = previouslyCurrentUser.copy(isCurrent = false)
-             updateUser(updatedPreviouslyUser) // Explicitly update the previously current user
+             updateUser(updatedPreviouslyUser)
         }
 
-        // Set the new current user with updated last used timestamp
         val updatedUser = user.copy(
             isCurrent = true,
             lastUsed = System.currentTimeMillis()

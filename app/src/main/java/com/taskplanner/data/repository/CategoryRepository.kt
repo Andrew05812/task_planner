@@ -41,7 +41,7 @@ class CategoryRepository @Inject constructor(
         return if (currentUser != null) {
             categoryDao.insertCategory(category.copy(userId = currentUser.id))
         } else {
-            -1 // Indicate insertion failed
+            -1
         }
     }
 

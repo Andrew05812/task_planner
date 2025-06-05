@@ -48,7 +48,7 @@ class TaskRepository @Inject constructor(
         return if (currentUser != null) {
             taskDao.insertTask(task.copy(userId = currentUser.id))
         } else {
-            -1 // Indicate insertion failed
+            -1
         }
     }
 

@@ -30,7 +30,7 @@ object DatabaseModule {
             AppDatabase::class.java,
             dbFile.absolutePath
         )
-        .fallbackToDestructiveMigration() // This will recreate tables if schema version has changed
+        .fallbackToDestructiveMigration()
         .build()
     }
 

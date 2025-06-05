@@ -45,7 +45,6 @@ abstract class AppDatabase : RoomDatabase() {
                             super.onCreate(db)
                             INSTANCE?.let { _ ->
                                 CoroutineScope(Dispatchers.IO).launch {
-                                    // Initial data can be added here if needed
                                 }
                             }
                         }

@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Task Planner</string>
-    
-    <!-- Bottom Navigation -->
+
     <string name="title_tasks">Tasks</string>
     <string name="title_categories">Categories</string>
     <string name="title_statistics">Statistics</string>
     <string name="title_profile">Profile</string>
-    
-    <!-- Task Details -->
+
     <string name="title_task_detail">Task Details</string>
     <string name="hint_task_title">Task Title</string>
     <string name="hint_task_description">Task Description</string>
@@ -19,8 +17,7 @@
     <string name="label_estimated_time">Estimated Time</string>
     <string name="label_actual_time">Actual Time</string>
     <string name="label_tags">Tags</string>
-    
-    <!-- Category Details -->
+
     <string name="title_category_detail">Category Details</string>
     <string name="hint_category_name">Category Name</string>
     <string name="label_category_color">Color</string>
@@ -31,8 +28,7 @@
     <string name="add_category">Add Category</string>
     <string name="dialog_delete_category_title">Delete Category</string>
     <string name="dialog_delete_category_message">Are you sure you want to delete this category? This will not delete the tasks in this category.</string>
-    
-    <!-- Common Actions -->
+
     <string name="action_save">Save</string>
     <string name="action_delete">Delete</string>
     <string name="action_share">Share</string>
@@ -44,16 +40,14 @@
     <string name="action_sort">Sort</string>
     <string name="action_create">Create</string>
     <string name="action_switch">Switch</string>
-    
-    <!-- Sort Options -->
+
     <string name="sort_title_asc">Title (A-Z)</string>
     <string name="sort_title_desc">Title (Z-A)</string>
     <string name="sort_date_asc">Date (Oldest first)</string>
     <string name="sort_date_desc">Date (Newest first)</string>
     <string name="sort_priority_asc">Priority (Low to High)</string>
     <string name="sort_priority_desc">Priority (High to Low)</string>
-    
-    <!-- Messages -->
+
     <string name="msg_task_saved">Task saved successfully</string>
     <string name="msg_task_deleted">Task deleted successfully</string>
     <string name="msg_category_saved">Category saved successfully</string>
@@ -63,15 +57,13 @@
     <string name="msg_profile_deleted">Profile deleted successfully</string>
     <string name="msg_no_profile">No profile found\nCreate a new profile to get started</string>
     <string name="msg_no_profiles">No profiles available</string>
-    
-    <!-- Errors -->
+
     <string name="error_title_required">Title is required</string>
     <string name="error_name_required">Name is required</string>
     <string name="error_email_required">Email is required</string>
     <string name="error_invalid_email">Invalid email address</string>
     <string name="error_email_taken">Email is already taken</string>
-    
-    <!-- Dialogs -->
+
     <string name="dialog_change_status_title">Change Task Status</string>
     <string name="dialog_change_status_message">Change task status to %s?</string>
     <string name="dialog_delete_task_title">Delete Task</string>
@@ -84,28 +76,23 @@
     <string name="dialog_switch_profile_message">Switch to profile %1$s?</string>
     <string name="dialog_start_task_title">Start Task</string>
     <string name="dialog_start_task_message">Start working on this task?</string>
-    
-    <!-- Empty States -->
+
     <string name="empty_tasks_message">No tasks found\nTap + to create a new task</string>
     <string name="empty_statistics">No data available yet.\nCreate and complete some tasks to see statistics.</string>
     <string name="empty_profiles">No profiles found\nTap + to create a new profile</string>
     <string name="no_tasks_in_category">No tasks in this category</string>
-    
-    <!-- Priorities -->
+
     <string name="priority_low">Low</string>
     <string name="priority_medium">Medium</string>
     <string name="priority_high">High</string>
-    
-    <!-- Status -->
+
     <string name="status_todo">To Do</string>
     <string name="status_in_progress">In Progress</string>
     <string name="status_done">Done</string>
-    
-    <!-- Task Actions -->
+
     <string name="start_task">Start Task</string>
     <string name="complete_task">Complete Task</string>
 
-    <!-- Profile -->
     <string name="title_profile_selection">Select Profile</string>
     <string name="title_profile_edit">Edit Profile</string>
     <string name="title_profile_create">Create Profile</string>
@@ -120,16 +107,13 @@
     <string name="action_delete_profile">Delete Profile</string>
     <string name="action_switch_profile">Switch Profile</string>
     <string name="action_add_profile">Add Profile</string>
-    
-    <!-- Input Hints -->
+
     <string name="hint_name">Name</string>
     <string name="hint_email">Email</string>
 
-    <!-- Statistics -->
     <string name="task_completion_rate">Task Completion Rate</string>
     <string name="tasks_by_category">Tasks by Category</string>
 
-    <!-- Plurals -->
     <plurals name="task_count">
         <item quantity="one">%d task</item>
         <item quantity="other">%d tasks</item>
@@ -138,7 +122,6 @@
     <string name="completion_details">%1$d из %2$d задач выполнено</string>
     <string name="category_stat_format">%1$s: %2$s задач (%3$s)</string>
 
-    <!-- Task sorting -->
     <string name="sort_by_date">Sort by Date</string>
     <string name="sort_by_priority">Sort by Priority</string>
     <string name="sort_by_name">Sort by Name</string>

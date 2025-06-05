@@ -107,7 +107,7 @@ class TasksFragment : Fragment() {
 
         itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
             ItemTouchHelper.UP or ItemTouchHelper.DOWN,
-            0 // Disable swipe
+            0
         ) {
             override fun onMove(
                 recyclerView: RecyclerView,
@@ -116,13 +116,11 @@ class TasksFragment : Fragment() {
             ): Boolean {
                 val fromPosition = viewHolder.adapterPosition
                 val toPosition = target.adapterPosition
-                // Perform the swap visually in the adapter
                 tasksAdapter.currentList.toMutableList().apply {
                     val movedTask = removeAt(fromPosition)
                     add(toPosition, movedTask)
                     tasksAdapter.submitList(this.toList())
                 }
-                // We will save the final order in clearView
                 return true
             }
 
@@ -130,7 +128,6 @@ class TasksFragment : Fragment() {
                 viewHolder: RecyclerView.ViewHolder,
                 direction: Int
             ) {
-                // Swipe is disabled
             }
 
             override fun onSelectedChanged(
@@ -150,8 +147,7 @@ class TasksFragment : Fragment() {
                 viewHolder: RecyclerView.ViewHolder
             ) {
                 super.clearView(recyclerView, viewHolder)
-                viewHolder.itemView.alpha = 1.0f // Reset alpha when dropped
-                // Save the final order to the ViewModel/database
+                viewHolder.itemView.alpha = 1.0f
                 viewModel.updateTaskOrder(tasksAdapter.currentList.map { it.task })
             }
         })
