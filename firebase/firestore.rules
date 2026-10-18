@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// Deploy with: firebase deploy --only firestore:rules
+//
+// Every document lives under users/{uid}/..., where {uid} is the Firebase Auth uid.
+// A user can only read and write inside their own uid branch; any other path —
+// including another authenticated user's branch — is denied by the final rule.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // The document id must be the entity's own uuid, so a replayed write from another
+    // account cannot overwrite or forge records.
+    function isIdempotent(required) {
+      return request.resource.data.uuid == request.resource.id
+        && request.resource.data.keys().hasAll(required);
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /tasks/{taskId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && isIdempotent(['uuid', 'title', 'updated_at']);
+      }
+
+      match /categories/{categoryId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && isIdempotent(['uuid', 'name', 'updated_at']);
+      }
+
+      match /groups/{groupId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && isIdempotent(['uuid', 'name', 'updated_at']);
+      }
+    }
+
+    // Default deny for everything outside the users/{uid} layout above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
