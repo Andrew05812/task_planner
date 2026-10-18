@@ -31,6 +31,14 @@ data class User(
     @ColumnInfo(name = "is_current", defaultValue = "0")
     val isCurrent: Boolean = false,
 
+    /** Firebase UID of a Google-authenticated account. Null for local-only profiles.
+     *  This — not the email — is the primary cloud identity. */
+    @ColumnInfo(name = "firebase_uid")
+    val firebaseUid: String? = null,
+
+    @ColumnInfo(name = "avatar_url")
+    val avatarUrl: String? = null,
+
     @ColumnInfo(name = "last_used")
     val lastUsed: Long = System.currentTimeMillis(),
 

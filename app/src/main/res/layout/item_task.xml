@@ -1,137 +1,199 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginHorizontal="8dp"
-    android:layout_marginVertical="4dp"
-    app:cardElevation="2dp">
+    android:layout_height="wrap_content">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <!-- Hidden action panel: the card physically slides left to reveal it -->
+    <LinearLayout
+        android:id="@+id/actionPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/editTaskButton"
+            android:layout_width="76dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_action_edit"
+            android:contentDescription="@string/action_edit"
+            android:padding="20dp"
+            android:src="@drawable/ic_edit"
+            app:tint="@color/white" />
+
+        <ImageButton
+            android:id="@+id/deleteTaskButton"
+            android:layout_width="76dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_action_delete"
+            android:contentDescription="@string/action_delete"
+            android:padding="20dp"
+            android:src="@drawable/ic_delete"
+            app:tint="@color/white" />
+    </LinearLayout>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/taskCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp">
-
-        <TextView
-            android:id="@+id/taskTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
-            android:textAppearance="?attr/textAppearanceSubtitle1"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/buttonGroup"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:text="Task Title" />
-
-        <TextView
-            android:id="@+id/taskDescription"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginEnd="16dp"
-            android:textAppearance="?attr/textAppearanceBody2"
-            android:maxLines="2"
-            android:ellipsize="end"
-            app:layout_constraintStart_toStartOf="@id/taskTitle"
-            app:layout_constraintEnd_toStartOf="@id/buttonGroup"
-            app:layout_constraintTop_toBottomOf="@id/taskTitle"
-            tools:text="Task Description" />
-
-        <View
-            android:id="@+id/priorityIndicator"
-            android:layout_width="4dp"
-            android:layout_height="0dp"
-            android:background="@drawable/bg_priority_indicator"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" />
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginVertical="4dp"
+        app:cardElevation="2dp">
 
         <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/buttonGroup"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent">
+            android:paddingStart="12dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp">
 
-            <ImageButton
-                android:id="@+id/deleteTaskButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+            <ImageView
+                android:id="@+id/selectionCheck"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:layout_marginEnd="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/action_delete"
-                android:padding="8dp"
-                android:src="@drawable/ic_delete"
-                app:layout_constraintEnd_toStartOf="@id/startTaskButton"
-                app:layout_constraintTop_toTopOf="parent"
+                android:contentDescription="@string/select_task"
+                android:src="@drawable/ic_radio_unchecked"
+                android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:tint="?attr/colorError" />
-
-            <ImageButton
-                android:id="@+id/startTaskButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/start_task"
-                android:padding="8dp"
-                android:src="@drawable/ic_play"
-                android:visibility="visible"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/completeTaskButton"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:tint="?attr/colorPrimary" />
 
-            <ImageButton
-                android:id="@+id/completeTaskButton"
+            <ImageView
+                android:id="@+id/dragHandle"
+                android:layout_width="24dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/drag_to_reorder"
+                android:padding="2dp"
+                android:src="@drawable/ic_drag_handle"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toEndOf="@id/selectionCheck"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="?android:attr/textColorSecondary" />
+
+            <View
+                android:id="@+id/priorityIndicator"
+                android:layout_width="4dp"
+                android:layout_height="0dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_priority_indicator"
+                app:layout_constraintBottom_toBottomOf="@id/taskDescription"
+                app:layout_constraintStart_toEndOf="@id/dragHandle"
+                app:layout_constraintTop_toTopOf="@id/taskTitle" />
+
+            <TextView
+                android:id="@+id/taskTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textAppearance="?attr/textAppearanceSubtitle1"
+                app:layout_constraintEnd_toStartOf="@id/buttonGroup"
+                app:layout_constraintStart_toEndOf="@id/priorityIndicator"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="Task Title" />
+
+            <TextView
+                android:id="@+id/taskDescription"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textAppearance="?attr/textAppearanceBody2"
+                app:layout_constraintEnd_toEndOf="@id/taskTitle"
+                app:layout_constraintStart_toStartOf="@id/taskTitle"
+                app:layout_constraintTop_toBottomOf="@id/taskTitle"
+                tools:text="Task Description" />
+
+            <TextView
+                android:id="@+id/taskDueDate"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/complete_task"
-                android:padding="8dp"
-                android:src="@drawable/ic_check"
-                app:layout_constraintBottom_toBottomOf="parent"
+                android:layout_marginTop="6dp"
+                android:textAppearance="?attr/textAppearanceCaption"
+                app:layout_constraintStart_toStartOf="@id/taskTitle"
+                app:layout_constraintTop_toBottomOf="@id/taskDescription"
+                tools:text="Due: Today" />
+
+            <TextView
+                android:id="@+id/taskCategory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textAppearance="?attr/textAppearanceCaption"
+                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
+                app:layout_constraintStart_toEndOf="@id/taskDueDate"
+                app:layout_constraintTop_toTopOf="@id/taskDueDate"
+                tools:text="Work" />
+
+            <TextView
+                android:id="@+id/taskStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textAppearance="?attr/textAppearanceCaption"
+                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
+                app:layout_constraintStart_toEndOf="@id/taskCategory"
+                app:layout_constraintTop_toTopOf="@id/taskDueDate"
+                tools:text="In progress" />
+
+            <LinearLayout
+                android:id="@+id/buttonGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:tint="?attr/colorPrimary" />
+                app:layout_constraintTop_toTopOf="@id/taskTitle">
+
+                <ImageButton
+                    android:id="@+id/startTaskButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/start_task"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_play"
+                    app:tint="?attr/colorPrimary" />
+
+                <ImageButton
+                    android:id="@+id/pauseTaskButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/pause_task"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_pause"
+                    app:tint="@color/status_paused" />
+
+                <ImageButton
+                    android:id="@+id/resumeTaskButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/resume_task"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_play"
+                    app:tint="@color/status_paused" />
+
+                <ImageButton
+                    android:id="@+id/completeTaskButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/complete_task"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_check"
+                    app:tint="@color/status_done" />
+            </LinearLayout>
+
         </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <TextView
-            android:id="@+id/taskDueDate"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textAppearance="?attr/textAppearanceCaption"
-            app:layout_constraintStart_toStartOf="@id/taskTitle"
-            app:layout_constraintTop_toBottomOf="@id/taskDescription"
-            tools:text="Due: Today" />
-
-        <TextView
-            android:id="@+id/taskPriority"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:textAppearance="?attr/textAppearanceBody2"
-            android:textColor="?android:attr/textColorSecondary"
-            app:layout_constraintStart_toEndOf="@id/taskDueDate"
-            app:layout_constraintTop_toTopOf="@id/taskDueDate"
-            app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
-            tools:text="High Priority" />
-
-        <TextView
-            android:id="@+id/taskCategory"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:textAppearance="?attr/textAppearanceBody2"
-            android:textColor="?android:attr/textColorSecondary"
-            app:layout_constraintStart_toEndOf="@id/taskPriority"
-            app:layout_constraintTop_toTopOf="@id/taskPriority"
-            app:layout_constraintBottom_toBottomOf="@id/taskPriority"
-            tools:text="Work" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-</com.google.android.material.card.MaterialCardView> 
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>

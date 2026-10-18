@@ -115,6 +115,7 @@ class TaskDetailFragment : Fragment() {
         return when (status) {
             TaskStatus.TODO -> R.string.status_todo
             TaskStatus.IN_PROGRESS -> R.string.status_in_progress
+            TaskStatus.PAUSED -> R.string.status_paused
             TaskStatus.COMPLETED -> R.string.status_done
         }
     }
@@ -130,6 +131,7 @@ class TaskDetailFragment : Fragment() {
     private fun getStatusFromString(statusString: String): TaskStatus {
         return when (statusString) {
             getString(R.string.status_in_progress) -> TaskStatus.IN_PROGRESS
+            getString(R.string.status_paused) -> TaskStatus.PAUSED
             getString(R.string.status_done) -> TaskStatus.COMPLETED
             else -> TaskStatus.TODO
         }

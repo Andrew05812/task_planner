@@ -1,0 +1,179 @@
+package com.taskplanner.data.auth
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.model.User
+import com.taskplanner.testing.AppFixture
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/**
+ * The explicit local → Google handover, tested against the same Room database the app uses.
+ *
+ * This is the path that used to move rows by rewriting their numeric ids and then delete the source
+ * profile: a second sign-in duplicated every uuid, and asking for the current profile itself wiped
+ * it. The tests below pin the guarantees the handover has to keep.
+ */
+@RunWith(RobolectricTestRunner::class)
+class LocalDataMigrationTest {
+
+    private lateinit var fixture: AppFixture
+    private lateinit var local: User
+
+    @Before
+    fun signInALocalProfileWithData() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        fixture = AppFixture(context)
+        local = runBlocking { fixture.signIn(name = "Local Ivan", email = "ivan@local") }
+    }
+
+    @After
+    fun tearDown() {
+        fixture.close()
+    }
+
+    @Test
+    fun `tasks categories and topics move onto the account that is signed in`() = runTest {
+        val categoryId = fixture.addCategory(local.id, "Home")
+        val group = fixture.addGroup(local.id, "HOUSEWORK")
+        fixture.addTask(local.id, "Pay rent", categoryId = categoryId, groupId = group.uuid)
+        fixture.addTask(local.id, "Vacuum")
+
+        val account = signInAsGoogleAccount()
+        fixture.authRepository.attachLocalDataToAccount(local.id, account)
+
+        val moved = fixture.taskDao.getAllTasksOnce(account.id)
+        assertEquals(setOf("Pay rent", "Vacuum"), moved.map { it.title }.toSet())
+        assertEquals("the local profile must be empty after a move", 0, fixture.taskDao.getAllTasksOnce(local.id).size)
+
+        val movedRent = moved.first { it.title == "Pay rent" }
+        val linkedCategory = movedRent.categoryId?.let { fixture.categoryDao.getCategoryForUser(account.id, it) }
+        assertNotNull("the task must still point at its category", linkedCategory)
+        assertEquals("Home", linkedCategory!!.name)
+        val movedGroup = fixture.groupDao.getGroupByUuid(group.uuid)
+        assertEquals(account.id, movedGroup?.userId)
+    }
+
+    @Test
+    fun `a task the account already has is not copied a second time`() = runTest {
+        val sharedUuid = "00000000-0000-0000-0000-0000000000a1"
+        val account = signInAsGoogleAccount()
+        // The account already holds this task, newer than the local one.
+        fixture.taskDao.insertTask(
+            Task(
+                uuid = sharedUuid, title = "Pay rent (from cloud)", description = "",
+                userId = account.id, updatedAt = 5_000
+            )
+        )
+        fixture.switchTo(local)
+        fixture.taskDao.insertTask(
+            Task(
+                uuid = sharedUuid, title = "Pay rent (old local copy)", description = "",
+                userId = local.id, updatedAt = 1_000
+            )
+        )
+
+        fixture.switchTo(account)
+        fixture.authRepository.attachLocalDataToAccount(local.id, account)
+
+        val rows = fixture.taskDao.getAllRowsOnce(account.id)
+        assertEquals("one uuid must mean exactly one row", listOf("Pay rent (from cloud)"), rows.map { it.title })
+    }
+
+    @Test
+    fun `a deletion marker travels with the data so the cloud cannot resurrect it`() = runTest {
+        val doomed = fixture.addTask(local.id, "Already thrown away")
+        fixture.taskDao.softDeleteTasks(listOf(doomed))
+
+        val account = signInAsGoogleAccount()
+        fixture.authRepository.attachLocalDataToAccount(local.id, account)
+
+        assertEquals(
+            "a deleted task must not reappear as an active one",
+            emptyList<String>(), fixture.taskDao.getAllTasksOnce(account.id).map { it.title }
+        )
+        val tombstone = fixture.taskDao.getAllRowsOnce(account.id).single()
+        assertTrue("the account needs the deletion marker to push it upward", tombstone.isDeleted)
+        assertEquals("Already thrown away", tombstone.title)
+    }
+
+    @Test
+    fun `moving a profile onto itself keeps every row`() = runTest {
+        fixture.addTask(local.id, "Keep me")
+        val account = fixture.userDao.getUserById(local.id)!!
+
+        fixture.authRepository.attachLocalDataToAccount(local.id, account)
+
+        assertEquals(listOf("Keep me"), fixture.taskDao.getAllTasksOnce(local.id).map { it.title })
+    }
+
+    @Test
+    fun `the handover refuses to write onto a profile that is not the signed-in one`() = runTest {
+        fixture.addTask(local.id, "Mine")
+        val google = User(email = "g@example.com", name = "Google Ivan", firebaseUid = "uid-1")
+        val otherId = fixture.userDao.insertUser(google)
+        val other = fixture.userDao.getUserById(otherId)!!
+
+        val refused = runCatching {
+            fixture.authRepository.attachLocalDataToAccount(local.id, other)
+        }.exceptionOrNull()
+
+        assertTrue(
+            "expected a refusal, got $refused",
+            refused is IllegalArgumentException
+        )
+        assertEquals(
+            "a refusal must leave the local data exactly where it was",
+            listOf("Mine"), fixture.taskDao.getAllTasksOnce(local.id).map { it.title }
+        )
+    }
+
+    @Test
+    fun `signing out of the account leaves every stored task alone`() = runTest {
+        val account = signInAsGoogleAccount()
+        fixture.addTask(account.id, "After the move")
+
+        fixture.authRepository.signOut()
+
+        assertNull(fixture.sessionRepository.currentUserId())
+        assertEquals(
+            "signing out is not deleting",
+            listOf("After the move"), fixture.taskDao.getAllTasksOnce(account.id).map { it.title }
+        )
+        assertEquals(account.id, fixture.userDao.getUserById(account.id)?.id)
+    }
+
+    @Test
+    fun `an archived task keeps its archive flag through the move`() = runTest {
+        val done = fixture.addTask(local.id, "Fixed the sink")
+        fixture.taskDao.updateTask(
+            fixture.taskDao.getTaskById(done)!!.copy(
+                status = TaskStatus.COMPLETED, archived = true, archivedAt = 2_000
+            )
+        )
+
+        val account = signInAsGoogleAccount()
+        fixture.authRepository.attachLocalDataToAccount(local.id, account)
+
+        val moved = fixture.taskDao.getAllTasksOnce(account.id).single()
+        assertEquals("Fixed the sink", moved.title)
+        assertTrue("the archive must survive the handover", moved.archived)
+        assertEquals(TaskStatus.COMPLETED, moved.status)
+    }
+
+    /** Signs in a Google-shaped profile: identity is the uid, and it becomes the active session. */
+    private suspend fun signInAsGoogleAccount(): User = fixture.signInAs(
+        User(email = "ivan@gmail.com", name = "Ivan", firebaseUid = "uid-${System.nanoTime()}")
+    )
+}

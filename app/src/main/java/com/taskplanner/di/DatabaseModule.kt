@@ -3,18 +3,28 @@ package com.taskplanner.di
 import android.content.Context
 import androidx.room.Room
 import com.taskplanner.data.local.AppDatabase
+import com.taskplanner.data.local.AppMigrations
 import com.taskplanner.data.local.CategoryDao
+import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.LegacyDbRescuer
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.UserDao
-import com.taskplanner.data.local.Converters
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
-import java.io.File
 
+/**
+ * Single point of Room initialization for the whole app.
+ *
+ * The database lives in the default private location (getDatabasePath), never in
+ * cacheDir. Before the first open, LegacyDbRescuer copies any database found in
+ * legacy locations (cacheDir / externalFilesDir) so pre-existing user data
+ * survives the switch. No destructive fallback: an unhandled schema version
+ * fails loudly instead of silently wiping data.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -24,28 +34,21 @@ object DatabaseModule {
     fun provideDatabase(
         @ApplicationContext context: Context
     ): AppDatabase {
-        val dbFile = File(context.cacheDir, "taskplanner.db")
-        return Room.databaseBuilder(
-            context,
-            AppDatabase::class.java,
-            dbFile.absolutePath
-        )
-        .fallbackToDestructiveMigration()
-        .build()
+        LegacyDbRescuer(context).rescueIfNeeded()
+        return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
+            .addMigrations(*AppMigrations.ALL)
+            .build()
     }
 
     @Provides
-    fun provideTaskDao(database: AppDatabase): TaskDao {
-        return database.taskDao()
-    }
+    fun provideTaskDao(database: AppDatabase): TaskDao = database.taskDao()
 
     @Provides
-    fun provideCategoryDao(database: AppDatabase): CategoryDao {
-        return database.categoryDao()
-    }
+    fun provideCategoryDao(database: AppDatabase): CategoryDao = database.categoryDao()
 
     @Provides
-    fun provideUserDao(database: AppDatabase): UserDao {
-        return database.userDao()
-    }
-} 
+    fun provideUserDao(database: AppDatabase): UserDao = database.userDao()
+
+    @Provides
+    fun provideGroupDao(database: AppDatabase): GroupDao = database.groupDao()
+}

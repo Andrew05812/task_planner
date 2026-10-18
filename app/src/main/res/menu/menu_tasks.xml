@@ -1,13 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    
+
+    <item
+        android:id="@+id/action_search"
+        android:icon="@drawable/ic_search"
+        android:title="@string/action_search"
+        app:actionViewClass="androidx.appcompat.widget.SearchView"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_new_group"
+        android:title="@string/new_group"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_archive"
+        android:icon="@drawable/ic_archive"
+        android:title="@string/action_archive"
+        app:showAsAction="ifRoom" />
+
     <item
         android:id="@+id/action_sort"
         android:icon="@drawable/ic_sort"
         android:title="@string/action_sort"
         app:showAsAction="ifRoom">
         <menu>
+            <item
+                android:id="@+id/action_sort_manual"
+                android:title="@string/sort_manual" />
             <item
                 android:id="@+id/action_sort_by_date"
                 android:title="@string/sort_by_date" />
@@ -19,4 +40,4 @@
                 android:title="@string/sort_by_name" />
         </menu>
     </item>
-</menu> 
+</menu>

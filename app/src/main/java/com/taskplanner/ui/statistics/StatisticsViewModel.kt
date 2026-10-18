@@ -28,8 +28,9 @@ class StatisticsViewModel @Inject constructor(
         viewModelScope.launch {
             _statisticsState.value = StatisticsState.Loading
             try {
-                // val userId = 1L // TODO: Get actual user ID
-                val tasks = taskRepository.getAllTasks().first()
+                // Statistics must see archived (completed) tasks too, so it reads every
+                // non-tombstoned row of the current user instead of the active list.
+                val tasks = taskRepository.getAllTasksOnce().filter { !it.isDeleted }
                 
                 if (tasks.isEmpty()) {
                     _statisticsState.value = StatisticsState.Empty
@@ -40,7 +41,7 @@ class StatisticsViewModel @Inject constructor(
                 val completionRate = tasks.count { it.status == TaskStatus.COMPLETED }.toFloat() / tasks.size
 
                 // Get all categories for the user
-                val categories = categoryRepository.getAllCategories().first()
+                val categories = categoryRepository.getAllCategoriesOnce()
                     .associateBy { it.id }
 
                 // Group tasks by category and count them

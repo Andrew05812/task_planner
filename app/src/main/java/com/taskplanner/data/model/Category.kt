@@ -26,28 +26,40 @@ data class Category(
     @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = "id")
     val id: Long = 0,
-    
+
+    @ColumnInfo(name = "uuid", defaultValue = "''")
+    val uuid: String = "",
+
     @ColumnInfo(name = "name", collate = ColumnInfo.NOCASE)
     val name: String,
-    
+
     @ColumnInfo(name = "color")
     val color: Int,
-    
+
     @ColumnInfo(name = "icon")
     val icon: String,
-    
+
     @ColumnInfo(name = "user_id")
     val userId: Long,
-    
+
     @ColumnInfo(name = "parent_category_id")
     val parentCategoryId: Long? = null,
-    
+
     @ColumnInfo(name = "is_shared", defaultValue = "0")
     val isShared: Boolean = false,
-    
+
+    @ColumnInfo(name = "is_deleted", defaultValue = "0")
+    val isDeleted: Boolean = false,
+
+    @ColumnInfo(name = "deleted_at")
+    val deletedAt: Long? = null,
+
+    @ColumnInfo(name = "sync_state", defaultValue = "'PENDING'")
+    val syncState: SyncState = SyncState.PENDING,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
-    
+
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis()
-) : Parcelable 
+) : Parcelable

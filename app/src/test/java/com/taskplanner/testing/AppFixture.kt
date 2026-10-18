@@ -1,0 +1,139 @@
+package com.taskplanner.testing
+
+import android.content.Context
+import android.content.SharedPreferences
+import android.net.Uri
+import androidx.room.Room
+import com.taskplanner.data.auth.AuthRepository
+import com.taskplanner.data.backup.BackupRepository
+import com.taskplanner.data.local.AppDatabase
+import com.taskplanner.data.local.CategoryDao
+import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.local.UserDao
+import com.taskplanner.data.model.Category
+import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskGroup
+import com.taskplanner.data.model.User
+import com.taskplanner.data.repository.CategoryRepository
+import java.util.concurrent.Executor
+import com.taskplanner.data.repository.GroupRepository
+import com.taskplanner.data.repository.SessionRepository
+import com.taskplanner.data.repository.TaskRepository
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
+import org.robolectric.Shadows.shadowOf
+
+/**
+ * Real objects, no mocked persistence: an in-memory Room database, the production DAOs, the
+ * production repositories and a real SharedPreferences file, so repository, backup and sync tests
+ * execute the same code paths as the app.
+ */
+class AppFixture(private val context: Context) : AutoCloseable {
+
+    // Room normally moves database work onto background threads. Robolectric's SQLite shadow keeps
+    // connection handles per thread, so those background jobs either fail with "illegal connection
+    // pointer" after close() or, worse, never deliver a Flow update at all. Running everything on
+    // the calling thread keeps the harness single-threaded and the emissions synchronous.
+    private val directExecutor = Executor { command -> command.run() }
+
+    val database: AppDatabase = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+        .allowMainThreadQueries()
+        .setQueryExecutor(directExecutor)
+        .setTransactionExecutor(directExecutor)
+        .build()
+
+    val taskDao: TaskDao = database.taskDao()
+    val categoryDao: CategoryDao = database.categoryDao()
+    val groupDao: GroupDao = database.groupDao()
+    val userDao: UserDao = database.userDao()
+
+    val prefs: SharedPreferences =
+        context.getSharedPreferences("fixture-prefs", Context.MODE_PRIVATE)
+
+    val sessionRepository = SessionRepository(userDao, prefs)
+    val taskRepository = TaskRepository(taskDao, sessionRepository)
+    val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
+    val groupRepository = GroupRepository(groupDao, sessionRepository)
+    val backupRepository = BackupRepository(
+        context, database, taskDao, categoryDao, groupDao, sessionRepository
+    )
+    // Firebase is never contacted in these tests: only the local half of AuthRepository runs.
+    val authRepository = AuthRepository(
+        context,
+        dagger.Lazy { throw UnsupportedOperationException("Firebase is not configured in tests") },
+        sessionRepository,
+        userDao,
+        taskDao,
+        categoryDao,
+        groupDao,
+        database
+    )
+
+    /** Signs in a local profile the way the profile screen does. */
+    suspend fun signIn(name: String = "Test User", email: String = "test@example.com"): User =
+        signInAs(User(email = email, name = name))
+
+    /** Signs in [profile] by inserting it and making it the current one. */
+    suspend fun signInAs(profile: User): User {
+        val id = userDao.insertUser(profile)
+        val user = userDao.getUserById(id)!!
+        sessionRepository.setCurrentUser(user)
+        return user
+    }
+
+    /** Makes [user] the active profile again, the way switching profiles in the app does. */
+    suspend fun switchTo(user: User) = sessionRepository.setCurrentUser(user)
+
+    suspend fun addTask(
+        userId: Long,
+        title: String,
+        description: String = "",
+        categoryId: Long? = null,
+        groupId: String? = null
+    ): Long = taskDao.insertTask(
+        Task(
+            title = title,
+            description = description,
+            userId = userId,
+            categoryId = categoryId,
+            groupId = groupId
+        )
+    )
+
+    suspend fun addCategory(userId: Long, name: String): Long = categoryDao.insertCategory(
+        Category(name = name, color = -16711936, icon = "ic_tag", userId = userId)
+    )
+
+    suspend fun addGroup(userId: Long, name: String): TaskGroup =
+        TaskGroup(uuid = "group-$name", userId = userId, name = name).also { groupDao.upsertGroup(it) }
+
+    /**
+     * A SAF-like uri: the app only ever receives a resolver handle, never a path. Robolectric
+     * serves registered streams for such uris, which is what a DocumentsProvider does.
+     */
+    fun uriWithContent(name: String, content: String): Uri =
+        Uri.parse("content://document/$name").also {
+            shadowOf(context.contentResolver).registerInputStream(it, ByteArrayInputStream(content.toByteArray()))
+        }
+
+    fun capture(name: String): CapturedUri {
+        val sink = CapturedUri()
+        shadowOf(context.contentResolver).registerOutputStream(sink.uri, sink)
+        return sink
+    }
+
+    override fun close() {
+        database.close()
+    }
+
+    inner class CapturedUri(val uri: Uri = Uri.parse("content://document/capture")) : OutputStream() {
+        private val buffer = ByteArrayOutputStream()
+        val written: String get() = String(buffer.toByteArray(), Charsets.UTF_8)
+
+        override fun write(b: Int) {
+            buffer.write(b)
+        }
+    }
+}
