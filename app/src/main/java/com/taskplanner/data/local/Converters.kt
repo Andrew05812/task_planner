@@ -4,6 +4,7 @@ import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.taskplanner.data.model.Priority
+import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.TaskStatus
 import java.util.Date
@@ -53,6 +54,22 @@ class Converters {
 
     @TypeConverter
     fun fromPriority(value: Priority): String {
+        return value.name
+    }
+
+    @TypeConverter
+    fun toRepeatUnit(value: String): RepeatUnit {
+        // A rule written by a newer build (or a damaged row) falls back to DAY instead of
+        // throwing while the database is being read.
+        return try {
+            RepeatUnit.valueOf(value)
+        } catch (e: Exception) {
+            RepeatUnit.DAY
+        }
+    }
+
+    @TypeConverter
+    fun fromRepeatUnit(value: RepeatUnit): String {
         return value.name
     }
 

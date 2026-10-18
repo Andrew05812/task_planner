@@ -11,7 +11,11 @@ import kotlinx.parcelize.Parcelize
     indices = [
         Index(value = ["user_id"]),
         Index(value = ["category_id"]),
-        Index(value = ["group_id"])
+        Index(value = ["group_id"]),
+        // A series instance is identified by (series, scheduled instant), so materialising the
+        // same occurrence twice — after a retry, a restart, or a pull from another device —
+        // collides here instead of leaving a duplicate task behind.
+        Index(value = ["series_uuid", "occurrence_at"], unique = true)
     ],
     foreignKeys = [
         ForeignKey(
@@ -54,6 +58,16 @@ data class Task(
      *  historical schema versions remain migratable. */
     @ColumnInfo(name = "group_id")
     val groupId: String? = null,
+
+    /** Recurrence series this row is an instance of (RecurrenceRule.uuid), null for plain tasks.
+     *  Kept without a DB-level FK so a series row and its instances can arrive in any order. */
+    @ColumnInfo(name = "series_uuid")
+    val seriesUuid: String? = null,
+
+    /** Scheduled instant this instance was materialised for. Stays put when the user moves the
+     *  instance itself, so the series can still tell which occurrence is live. */
+    @ColumnInfo(name = "occurrence_at")
+    val occurrenceAt: Long? = null,
 
     @ColumnInfo(name = "archived", defaultValue = "0")
     val archived: Boolean = false,

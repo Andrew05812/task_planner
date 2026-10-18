@@ -106,7 +106,7 @@ class DataSafetyTest {
             )
             assertEquals(
                 "the migrated file must report the schema the app was compiled against",
-                7L, readUserVersion()
+                AppMigrations.ALL.maxOf { it.endVersion }.toLong(), readUserVersion()
             )
         } finally {
             database.close()

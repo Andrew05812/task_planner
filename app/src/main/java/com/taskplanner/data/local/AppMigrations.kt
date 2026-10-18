@@ -199,12 +199,44 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Recurring tasks. Nothing about an existing row changes: a plain task simply has no
+            // series, so both new columns stay NULL and the unique index below ignores them
+            // (SQLite treats NULLs as distinct inside a unique index).
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `series_uuid` TEXT")
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `occurrence_at` INTEGER")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_tasks_series_uuid_occurrence_at` " +
+                    "ON `tasks` (`series_uuid`, `occurrence_at`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE recurrence_rules (`uuid` TEXT NOT NULL PRIMARY KEY, " +
+                    "`user_id` INTEGER NOT NULL, `unit` TEXT NOT NULL DEFAULT 'DAY', " +
+                    "`interval` INTEGER NOT NULL DEFAULT 1, `week_days` TEXT NOT NULL DEFAULT '', " +
+                    "`day_of_month` INTEGER NOT NULL DEFAULT 0, `anchor_at` INTEGER NOT NULL, " +
+                    "`zone_id` TEXT NOT NULL DEFAULT '', `cursor_at` INTEGER NOT NULL, " +
+                    "`paused` INTEGER NOT NULL DEFAULT 0, `ended_at` INTEGER, " +
+                    "`is_deleted` INTEGER NOT NULL DEFAULT 0, `deleted_at` INTEGER, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_recurrence_rules_user_id` " +
+                    "ON `recurrence_rules` (`user_id`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
         MIGRATION_3_4,
         MIGRATION_4_5,
         MIGRATION_5_6,
-        MIGRATION_6_7
+        MIGRATION_6_7,
+        MIGRATION_7_8
     )
 }
