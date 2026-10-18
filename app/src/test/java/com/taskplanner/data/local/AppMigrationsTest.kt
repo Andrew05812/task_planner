@@ -225,7 +225,7 @@ class AppMigrationsTest {
     fun `migrations are idempotently registered for every retained version pair`() {
         val pairs = AppMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8),
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9),
             pairs
         )
     }
@@ -314,6 +314,61 @@ class AppMigrationsTest {
         }
 
         assertTrue("a series must belong to a real profile", rejected)
+    }
+
+    @Test
+    fun `migration 8 to 9 gives an existing database no reminders and no changed rows`() {
+        val db = open(8)
+        val before = counts(db)
+        db.migrate(AppMigrations.MIGRATION_8_9)
+        builder.assertMatchesSchema(db, 9, "MIGRATION_8_9")
+
+        assertEquals(before, counts(db))
+        assertEquals("upgrading adds the feature, it does not invent reminders",
+            0L, db.firstLong("SELECT COUNT(*) FROM reminders"))
+    }
+
+    @Test
+    fun `migration 8 to 9 refuses the same lead time twice on one task`() {
+        val db = open(8)
+        db.migrate(AppMigrations.MIGRATION_8_9)
+
+        insertReminder(db, "reminder-a", 15)
+        var rejected = false
+        try {
+            insertReminder(db, "reminder-b", 15)
+        } catch (e: Exception) {
+            rejected = true
+        }
+
+        assertTrue("a reminder is (task, offset): a second copy of the same minute must not exist", rejected)
+        insertReminder(db, "reminder-c", 60)
+        assertEquals(2L, db.firstLong("SELECT COUNT(*) FROM reminders"))
+    }
+
+    @Test
+    fun `migration 8 to 9 leaves a new reminder pending and alive`() {
+        val db = open(8)
+        db.migrate(AppMigrations.MIGRATION_8_9)
+        db.exec(
+            "INSERT INTO reminders (uuid, task_uuid, user_id, trigger_at, anchor_at, created_at, updated_at) " +
+                "VALUES ('reminder-d', 'task-1', ${Seeder.USER_ID}, 1000, 1000, 1, 1)"
+        )
+
+        // The offset column carries the "at the deadline itself" default, so a plain reminder row is
+        // an insert without one, and a row that is neither deleted nor already notified is what the
+        // sweep looks for.
+        assertEquals(listOf("0", "PENDING", "0", null), db.rows(
+            "SELECT offset_minutes, sync_state, is_deleted, notified_at FROM reminders"
+        ).single())
+    }
+
+    private fun insertReminder(db: SqliteTestDatabase, uuid: String, offsetMinutes: Int) {
+        db.exec(
+            "INSERT INTO reminders (uuid, task_uuid, user_id, offset_minutes, trigger_at, anchor_at, " +
+                "created_at, updated_at) VALUES ('$uuid', 'task-1', ${Seeder.USER_ID}, $offsetMinutes, " +
+                "2000 - $offsetMinutes * 60000, 2000, 1, 1)"
+        )
     }
 
     private fun insertSeriesTask(db: SqliteTestDatabase, title: String) {

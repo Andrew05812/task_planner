@@ -230,6 +230,30 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Reminders. An existing database simply has none: no task row changes, and a task that
+            // gets a reminder later is just an insert here. (task_uuid, offset_minutes) is unique so
+            // the same lead time on the same task cannot be added twice — not by a double tap, not by
+            // a replayed import, not by a pull that already holds it.
+            db.execSQL(
+                "CREATE TABLE reminders (`uuid` TEXT NOT NULL PRIMARY KEY, " +
+                    "`task_uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, " +
+                    "`offset_minutes` INTEGER NOT NULL DEFAULT 0, `trigger_at` INTEGER NOT NULL, " +
+                    "`anchor_at` INTEGER NOT NULL, `notified_at` INTEGER, " +
+                    "`is_deleted` INTEGER NOT NULL DEFAULT 0, `deleted_at` INTEGER, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL)"
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_reminders_user_id` ON `reminders` (`user_id`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_reminders_trigger_at` ON `reminders` (`trigger_at`)")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_reminders_task_uuid_offset_minutes` " +
+                    "ON `reminders` (`task_uuid`, `offset_minutes`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -237,6 +261,7 @@ object AppMigrations {
         MIGRATION_4_5,
         MIGRATION_5_6,
         MIGRATION_6_7,
-        MIGRATION_7_8
+        MIGRATION_7_8,
+        MIGRATION_8_9
     )
 }

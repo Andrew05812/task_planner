@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.RecurrenceRule
+import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.User
@@ -15,9 +16,10 @@ import com.taskplanner.data.model.User
         Category::class,
         User::class,
         TaskGroup::class,
-        RecurrenceRule::class
+        RecurrenceRule::class,
+        Reminder::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -27,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun groupDao(): GroupDao
     abstract fun recurrenceDao(): RecurrenceDao
+    abstract fun reminderDao(): ReminderDao
 
     companion object {
         const val NAME = "taskplanner.db"
