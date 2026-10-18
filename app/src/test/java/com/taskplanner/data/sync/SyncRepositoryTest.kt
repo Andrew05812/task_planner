@@ -48,6 +48,7 @@ class SyncRepositoryTest {
         fixture.categoryDao,
         fixture.groupDao,
         fixture.recurrenceRepository,
+        fixture.reminderRepository,
         fixture.prefs
     )
 

@@ -5,6 +5,16 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Reminders: the notification itself, the alarm that carries it, and the wake-ups that put
+         the alarms back after a reboot, a clock change or an app update. VIBRATE is what lets the
+         reminder channel buzz. Exact alarms are declared because a deadline reminder is worth firing
+         at the minute it names; when the user withholds them the app still arms the reminder, just
+         inside a window, and says so in the editor. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:name=".TaskPlannerApplication"
         android:allowBackup="true"
@@ -19,13 +29,35 @@
         
         <activity
             android:name=".ui.MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Tapping a reminder opens the task it belongs to. singleTop delivers that link to the
+                 screen that is already showing instead of stacking a second copy of the app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="taskplanner" android:host="task" />
+            </intent-filter>
         </activity>
-        
+
+        <!-- Not exported: the alarm, the buttons and the boot/clock broadcasts all come from the
+             system or from this app's own PendingIntents, never from another application. -->
+        <receiver
+            android:name=".data.reminder.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

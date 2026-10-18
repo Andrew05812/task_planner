@@ -33,7 +33,8 @@ import kotlinx.coroutines.flow.flowOf
 class RecurrenceRepository @Inject constructor(
     private val recurrenceDao: RecurrenceDao,
     private val taskDao: TaskDao,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val reminderRepository: ReminderRepository
 ) {
 
     private companion object {
@@ -162,6 +163,9 @@ class RecurrenceRepository @Inject constructor(
         val now = System.currentTimeMillis()
         val open = taskDao.getOpenSeriesInstances(seriesUuid)
         if (open.isNotEmpty()) taskDao.softDeleteTasks(open.map { it.id }, now)
+        // A series that no longer exists cannot remind: its instances' lead times go with it, the
+        // archived ones included, because nobody will ever materialise a row to inherit them.
+        reminderRepository.retireTasks(taskDao.getSeriesTaskUuids(seriesUuid))
         recurrenceDao.upsertRule(
             rule.copy(isDeleted = true, deletedAt = now, updatedAt = now, syncState = SyncState.DELETING)
         )
@@ -220,6 +224,9 @@ class RecurrenceRepository @Inject constructor(
         // Below zero means the unique (series, occurrence) index already holds this instance: a
         // retry, a restart, or another device that produced the same occurrence first. Nothing to do.
         if (taskDao.insertSeriesInstance(instance) < 0) return null
+        // Repeating a task means repeating its reminders; the next occurrence is a new minute, so the
+        // lead times are copied onto it rather than left on the row the user just finished.
+        reminderRepository.inheritForInstance(template.uuid, instance)
         return instance
     }
 

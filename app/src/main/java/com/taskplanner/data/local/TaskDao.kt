@@ -53,6 +53,14 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :taskId AND is_deleted = 0")
     suspend fun getTaskById(taskId: Long): Task?
 
+    /** The rows behind a bulk action, before it happens: deleting tasks also has to tell reminders. */
+    @Query("SELECT * FROM tasks WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<Task>
+
+    /** The uuids of a series' instances in any state, so the whole series can be cleaned up at once. */
+    @Query("SELECT uuid FROM tasks WHERE series_uuid = :seriesUuid")
+    suspend fun getSeriesTaskUuids(seriesUuid: String): List<String>
+
     @Query("SELECT * FROM tasks WHERE user_id = :userId AND id = :taskId AND is_deleted = 0")
     suspend fun getTaskForUser(userId: Long, taskId: Long): Task?
 
