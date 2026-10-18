@@ -47,6 +47,7 @@ class SyncRepositoryTest {
         fixture.taskDao,
         fixture.categoryDao,
         fixture.groupDao,
+        fixture.recurrenceRepository,
         fixture.prefs
     )
 
