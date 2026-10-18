@@ -212,9 +212,23 @@ class TasksAdapter(
             b.taskDescription.text = task.description
             b.taskDescription.visibility =
                 if (task.description.isBlank()) View.GONE else View.VISIBLE
-            b.taskDueDate.text = task.dueDate?.let {
-                dateFormat.format(Date(it))
-            } ?: b.root.context.getString(R.string.no_due_date)
+            val context = b.root.context
+            val dueText = task.dueDate?.let { dateFormat.format(Date(it)) }
+                ?: context.getString(R.string.no_due_date)
+            val seriesLabel = item.series?.let { rule ->
+                context.getString(
+                    when {
+                        rule.paused -> R.string.series_short_paused
+                        rule.endedAt != null -> R.string.series_short_ended
+                        else -> RepeatPreset.of(rule).shortLabelRes
+                    }
+                )
+            }
+            b.taskDueDate.text = if (seriesLabel == null) {
+                dueText
+            } else {
+                context.getString(R.string.task_due_repeats_format, dueText, seriesLabel)
+            }
 
             b.taskCategory.text = item.category?.name
                 ?: b.root.context.getString(R.string.no_category)
