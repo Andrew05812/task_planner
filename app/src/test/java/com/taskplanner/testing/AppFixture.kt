@@ -17,6 +17,9 @@ import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.User
 import com.taskplanner.data.repository.CategoryRepository
 import java.util.concurrent.Executor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
@@ -52,7 +55,18 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val prefs: SharedPreferences =
         context.getSharedPreferences("fixture-prefs", Context.MODE_PRIVATE)
 
-    val sessionRepository = SessionRepository(userDao, prefs)
+    /**
+     * Runs the session's start-up reload on the thread that builds the fixture instead of on a pool
+     * thread: Robolectric keeps SQLite connection handles per thread, so a background query that
+     * outlives its test turns into a failure reported against whichever test runs next.
+     */
+    val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+
+    val sessionRepository = SessionRepository(userDao, prefs, sessionScope)
+
+    /** A session that has not seen this storage yet: what an app restart creates. */
+    fun newSessionRepository(): SessionRepository = SessionRepository(userDao, prefs, sessionScope)
+
     val taskRepository = TaskRepository(taskDao, sessionRepository)
     val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
     val groupRepository = GroupRepository(groupDao, sessionRepository)

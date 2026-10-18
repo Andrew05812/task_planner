@@ -11,6 +11,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -21,6 +24,14 @@ object AppModule {
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
         return context.getSharedPreferences("task_planner_prefs", Context.MODE_PRIVATE)
     }
+
+    /**
+     * The scope one-off background work runs on: reading the stored session at start-up has to
+     * leave the UI thread alone.
+     */
+    @Provides
+    @Singleton
+    fun provideBackgroundScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * Only reachable when CloudConfig.isConfigured; guarded call sites keep the
