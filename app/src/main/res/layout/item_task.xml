@@ -144,6 +144,19 @@
                 app:layout_constraintTop_toTopOf="@id/taskDueDate"
                 tools:text="In progress" />
 
+            <ImageView
+                android:id="@+id/reminderBadge"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/reminder_badge_description"
+                android:src="@drawable/ic_reminder"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
+                app:layout_constraintStart_toEndOf="@id/taskStatus"
+                app:layout_constraintTop_toTopOf="@id/taskDueDate"
+                app:tint="?attr/colorPrimary" />
+
             <LinearLayout
                 android:id="@+id/buttonGroup"
                 android:layout_width="wrap_content"

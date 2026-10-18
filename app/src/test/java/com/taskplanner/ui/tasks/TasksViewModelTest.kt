@@ -56,6 +56,7 @@ class TasksViewModelTest {
         fixture.categoryRepository,
         fixture.groupRepository,
         fixture.recurrenceRepository,
+        fixture.reminderRepository,
         fixture.sessionRepository
     )
 
