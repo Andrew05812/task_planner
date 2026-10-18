@@ -28,5 +28,11 @@
     <color name="status_todo">#FFBDBDBD</color>
     <color name="status_in_progress">#FF2196F3</color>
     <color name="status_done">#FF4CAF50</color>
+    <color name="status_paused">#FFFFA000</color>
     <color name="red">#FFFF0000</color>
+
+    <!-- Swipe action panel -->
+    <color name="action_edit">#FF1976D2</color>
+    <color name="action_delete">#FFD32F2F</color>
+    <color name="material_grey_600">#FF757575</color>
 </resources>

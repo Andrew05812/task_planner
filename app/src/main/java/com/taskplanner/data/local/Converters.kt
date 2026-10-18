@@ -4,8 +4,11 @@ import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.taskplanner.data.model.Priority
+import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.TaskStatus
 import java.util.Date
+
+import java.util.Locale
 
 class Converters {
     private val gson: Gson = Gson()
@@ -55,15 +58,34 @@ class Converters {
 
     @TypeConverter
     fun toTaskStatus(value: String): TaskStatus {
-        return try {
-            TaskStatus.valueOf(value)
-        } catch (e: Exception) {
-            TaskStatus.TODO
+        // Historical databases store TaskStatus constant names as TEXT. Unknown or
+        // legacy aliases fall back to TODO instead of throwing, and COMPLETED (the
+        // value written by every previous release) keeps its exact name.
+        return when (value.uppercase(Locale.ROOT)) {
+            "TODO" -> TaskStatus.TODO
+            "IN_PROGRESS" -> TaskStatus.IN_PROGRESS
+            "PAUSED" -> TaskStatus.PAUSED
+            "COMPLETED", "DONE" -> TaskStatus.COMPLETED
+            else -> TaskStatus.TODO
         }
     }
 
     @TypeConverter
     fun fromTaskStatus(value: TaskStatus): String {
+        return value.name
+    }
+
+    @TypeConverter
+    fun toSyncState(value: String): SyncState {
+        return try {
+            SyncState.valueOf(value)
+        } catch (e: Exception) {
+            SyncState.PENDING
+        }
+    }
+
+    @TypeConverter
+    fun fromSyncState(value: SyncState): String {
         return value.name
     }
 } 

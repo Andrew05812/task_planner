@@ -12,6 +12,9 @@
         <action
             android:id="@+id/action_tasks_to_task_detail"
             app:destination="@id/navigation_task_detail" />
+        <action
+            android:id="@+id/action_tasks_to_archive"
+            app:destination="@id/navigation_archive" />
     </fragment>
 
     <fragment
@@ -35,25 +38,15 @@
         <action
             android:id="@+id/action_profile_to_profile_selection"
             app:destination="@id/navigation_profile_selection" />
+        <action
+            android:id="@+id/action_profile_to_settings"
+            app:destination="@id/navigation_settings" />
     </fragment>
 
     <fragment
         android:id="@+id/navigation_profile_selection"
         android:name="com.taskplanner.ui.profile.ProfileSelectionFragment"
-        android:label="@string/title_profile_selection">
-        <action
-            android:id="@+id/action_profile_selection_to_profile_edit"
-            app:destination="@id/navigation_profile_edit" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/navigation_profile_edit"
-        android:name="com.taskplanner.ui.profile.ProfileEditFragment"
-        android:label="@string/title_profile_edit">
-        <argument
-            android:name="profileId"
-            app:argType="long" />
-    </fragment>
+        android:label="@string/title_profile_selection" />
 
     <fragment
         android:id="@+id/navigation_task_detail"
@@ -85,5 +78,20 @@
             android:id="@+id/action_categoryTasks_to_taskDetail"
             app:destination="@id/navigation_task_detail" />
     </fragment>
+
+
+    <fragment
+        android:id="@+id/navigation_archive"
+        android:name="com.taskplanner.ui.archive.ArchiveFragment"
+        android:label="@string/title_archive">
+        <action
+            android:id="@+id/action_archive_to_task_detail"
+            app:destination="@id/navigation_task_detail" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_settings"
+        android:name="com.taskplanner.ui.settings.SettingsFragment"
+        android:label="@string/title_settings" />
 
 </navigation> 

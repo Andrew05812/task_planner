@@ -39,7 +39,7 @@ class CategoryTasksViewModel @Inject constructor(
                 }
                 _category.value = category
 
-                taskRepository.getTasksByCategory(categoryId)
+                taskRepository.observeTasksByCategory(categoryId)
                     .map { tasks ->
                         tasks.map { task ->
                             TaskWithCategory(
@@ -61,11 +61,18 @@ class CategoryTasksViewModel @Inject constructor(
         }
     }
 
-    fun updateTaskStatus(task: Task) {
+    fun startTask(task: Task) = runTransition { taskRepository.startTask(task.id) }
+
+    fun pauseTask(task: Task) = runTransition { taskRepository.pauseTask(task.id) }
+
+    fun resumeTask(task: Task) = runTransition { taskRepository.resumeTask(task.id) }
+
+    fun completeTask(task: Task) = runTransition { taskRepository.completeAndArchive(task.id) }
+
+    private fun runTransition(block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
-                taskRepository.updateTask(task)
-                // Reload tasks after update
+                block()
                 currentCategoryId?.let { loadCategoryTasks(it) }
             } catch (e: Exception) {
                 _tasksState.value = CategoryTasksState.Error(e.message ?: "Failed to update task")

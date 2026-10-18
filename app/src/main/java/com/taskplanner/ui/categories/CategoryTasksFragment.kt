@@ -12,13 +12,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
-import com.taskplanner.data.model.Task
-import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.TaskWithCategory
 import com.taskplanner.databinding.FragmentCategoryTasksBinding
-import com.taskplanner.ui.tasks.TasksAdapter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -29,7 +27,7 @@ class CategoryTasksFragment : Fragment() {
 
     private val viewModel: CategoryTasksViewModel by viewModels()
     private val args: CategoryTasksFragmentArgs by navArgs()
-    private lateinit var tasksAdapter: TasksAdapter
+    private lateinit var tasksAdapter: CategoryTaskAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -48,27 +46,32 @@ class CategoryTasksFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        tasksAdapter = TasksAdapter(
-            onTaskClick = { task ->
+        tasksAdapter = CategoryTaskAdapter(
+            onTaskClick = { item ->
                 findNavController().navigate(
-                    CategoryTasksFragmentDirections.actionCategoryTasksToTaskDetail(task.id)
+                    CategoryTasksFragmentDirections.actionCategoryTasksToTaskDetail(item.task.id)
                 )
             },
-            onTaskStatusChange = { task ->
-                viewModel.updateTaskStatus(task)
-            },
-            onTaskDelete = { task ->
-                viewModel.deleteTask(task)
-            },
-            onStartDrag = { viewHolder ->
-                // No-op: Drag is not enabled in this fragment
-            }
+            onTaskLongClick = { item -> confirmDelete(item) },
+            onStart = { item -> viewModel.startTask(item.task) },
+            onPause = { item -> viewModel.pauseTask(item.task) },
+            onResume = { item -> viewModel.resumeTask(item.task) },
+            onComplete = { item -> viewModel.completeTask(item.task) }
         )
 
         binding.tasksRecyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = tasksAdapter
         }
+    }
+
+    private fun confirmDelete(item: TaskWithCategory) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.dialog_delete_task_title)
+            .setMessage(R.string.dialog_delete_task_message)
+            .setPositiveButton(R.string.action_delete) { _, _ -> viewModel.deleteTask(item.task) }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
     }
 
     private fun observeViewModel() {

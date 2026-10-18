@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.repository.CategoryRepository
-import com.taskplanner.data.repository.UserRepository
+import com.taskplanner.data.repository.SessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +14,7 @@ import javax.inject.Inject
 @HiltViewModel
 class CategoryDetailViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
-    private val userRepository: UserRepository
+    private val sessionRepository: SessionRepository
 ) : ViewModel() {
 
     private val _categoryDetailState = MutableStateFlow<CategoryDetailState>(CategoryDetailState.Success())
@@ -26,8 +26,10 @@ class CategoryDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _categoryDetailState.value = CategoryDetailState.Loading
             try {
-                val currentUser = userRepository.getCurrentUser()
-                if (currentUser != null) {
+                // currentUserId() resolves the session from disk when needed, so a cold
+                // start can't mistake an existing profile for "no user".
+                val userId = sessionRepository.currentUserId()
+                if (userId != null) {
                     val category = categoryRepository.getCategoryById(categoryId)
                     if (category != null) {
                         currentCategory = category
@@ -73,8 +75,8 @@ class CategoryDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val currentUser = userRepository.getCurrentUser()
-                if (currentUser != null) {
+                val currentUserId = sessionRepository.currentUserId()
+                if (currentUserId != null) {
                     val category = currentCategory?.copy(
                         name = currentState.name,
                         color = currentState.color,
@@ -83,7 +85,7 @@ class CategoryDetailViewModel @Inject constructor(
                         name = currentState.name,
                         color = currentState.color,
                         icon = "ic_category", // Default icon
-                        userId = currentUser.id,
+                        userId = currentUserId,
                         createdAt = System.currentTimeMillis(),
                         updatedAt = System.currentTimeMillis()
                     )

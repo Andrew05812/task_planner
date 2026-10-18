@@ -1,88 +1,84 @@
 package com.taskplanner.ui.profile
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.data.model.User
+import com.taskplanner.data.repository.SessionRepository
+import com.taskplanner.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
-import android.content.SharedPreferences
-import android.util.Patterns
-import com.taskplanner.data.model.User
-import com.taskplanner.data.repository.UserRepository
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val sharedPreferences: SharedPreferences,
+    private val sessionRepository: SessionRepository,
     private val userRepository: UserRepository
 ) : ViewModel() {
-    private val _saveResult = MutableLiveData<SaveResult>()
-    val saveResult: LiveData<SaveResult> = _saveResult
 
     private val _profileState = MutableStateFlow<ProfileState>(ProfileState.Loading)
-    val profileState: StateFlow<ProfileState> = _profileState
+    val profileState: StateFlow<ProfileState> = _profileState.asStateFlow()
 
     private val _profiles = MutableStateFlow<List<User>>(emptyList())
-    val profiles: StateFlow<List<User>> = _profiles
+    val profiles: StateFlow<List<User>> = _profiles.asStateFlow()
 
     init {
+        // The session repository is the only owner of "who is current"; this screen
+        // just mirrors it, so a process kill or a profile switch can't diverge.
+        viewModelScope.launch {
+            sessionRepository.currentUser.collect { user ->
+                _profileState.value = if (user == null) ProfileState.NoUser
+                else ProfileState.Success(user)
+            }
+        }
+        viewModelScope.launch {
+            userRepository.getAllUsers().collect { users -> _profiles.value = users }
+        }
         loadCurrentUser()
-        loadProfiles()
     }
 
-    internal fun loadCurrentUser() {
+    fun loadCurrentUser() {
         viewModelScope.launch {
             try {
-                val currentUser = userRepository.getCurrentUser()
-                if (currentUser != null) {
-                    _profileState.value = ProfileState.Success(currentUser)
-                } else {
-                    _profileState.value = ProfileState.NoUser
-                }
+                sessionRepository.restore()
             } catch (e: Exception) {
-                _profileState.value = ProfileState.Error(e.message ?: "Failed to load user profile")
+                _profileState.value =
+                    ProfileState.Error(e.message ?: "Failed to load user profile")
             }
         }
     }
 
-    private fun loadProfiles() {
+    fun loadProfiles() {
         viewModelScope.launch {
-            try {
-                userRepository.getAllUsers().collect { users ->
-                    _profiles.value = users
-                }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            runCatching { userRepository.getAllUsersOnce() }
+                .onSuccess { _profiles.value = it }
         }
     }
 
     fun createUser(name: String, email: String) {
         viewModelScope.launch {
             try {
-                if (email.isNotBlank() && userRepository.isEmailTaken(email)) {
+                val trimmedEmail = email.trim()
+                if (trimmedEmail.isNotBlank() && userRepository.isEmailTaken(trimmedEmail)) {
                     _profileState.value = ProfileState.Error("Email is already taken")
                     return@launch
                 }
-
-                val initial = name.firstOrNull()?.toString()?.uppercase() ?: ""
-                val avatarColor = generateAvatarColor(name)
-
                 val user = User(
-                    name = name,
-                    email = email,
-                    avatarInitial = initial,
-                    avatarColor = avatarColor,
-                    isCurrent = true
+                    name = name.trim(),
+                    // The email column is unique and non-null; a local profile without an
+                    // email gets an unreachable placeholder instead of a colliding "".
+                    email = trimmedEmail.ifBlank { "local-${UUID.randomUUID()}@local.invalid" },
+                    avatarInitial = name.firstOrNull()?.toString()?.uppercase() ?: "?",
+                    avatarColor = generateAvatarColor(name)
                 )
-                userRepository.insertUser(user)
-                loadCurrentUser()
-                loadProfiles()
+                val id = userRepository.insertUser(user)
+                sessionRepository.setCurrentUser(user.copy(id = id))
             } catch (e: Exception) {
-                _profileState.value = ProfileState.Error(e.message ?: "Failed to create user")
+                _profileState.value =
+                    ProfileState.Error(e.message ?: "Failed to create user")
             }
         }
     }
@@ -94,27 +90,27 @@ class ProfileViewModel @Inject constructor(
                     _profileState.value = ProfileState.Error("User not found")
                     return@launch
                 }
-
-                if (email.isNotBlank() && userRepository.isEmailTaken(email, userId)) {
+                val trimmedEmail = email.trim()
+                if (trimmedEmail.isNotBlank() &&
+                    trimmedEmail != existingUser.email &&
+                    userRepository.isEmailTaken(trimmedEmail, userId)
+                ) {
                     _profileState.value = ProfileState.Error("Email is already taken")
                     return@launch
                 }
-
-                val initial = name.firstOrNull()?.toString()?.uppercase() ?: ""
-                val avatarColor = generateAvatarColor(name)
-
-                val updatedUser = existingUser.copy(
-                    name = name,
-                    email = email,
-                    avatarInitial = initial,
-                    avatarColor = avatarColor,
-                    updatedAt = System.currentTimeMillis()
+                userRepository.updateUser(
+                    existingUser.copy(
+                        name = name.trim(),
+                        email = trimmedEmail.ifBlank { existingUser.email },
+                        avatarInitial = name.firstOrNull()?.toString()?.uppercase() ?: "?",
+                        avatarColor = generateAvatarColor(name),
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-                userRepository.updateUser(updatedUser)
-                loadCurrentUser()
-                loadProfiles()
+                sessionRepository.restore()
             } catch (e: Exception) {
-                _profileState.value = ProfileState.Error(e.message ?: "Failed to update user")
+                _profileState.value =
+                    ProfileState.Error(e.message ?: "Failed to update user")
             }
         }
     }
@@ -122,17 +118,15 @@ class ProfileViewModel @Inject constructor(
     fun deleteProfile(user: User? = null) {
         viewModelScope.launch {
             try {
-                val userToDelete = user ?: userRepository.getCurrentUser()
-                if (userToDelete != null) {
-                    userRepository.deleteUser(userToDelete)
-                    if (user == null) {
-                        _profileState.value = ProfileState.NoUser
-                    }
-                    loadCurrentUser()
-                    loadProfiles()
+                val userToDelete = user ?: sessionRepository.currentUser.value ?: return@launch
+                userRepository.deleteUser(userToDelete)
+                if (sessionRepository.snapshotUserId() == userToDelete.id) {
+                    sessionRepository.endSession()
                 }
+                sessionRepository.restore()
             } catch (e: Exception) {
-                _profileState.value = ProfileState.Error(e.message ?: "Failed to delete profile")
+                _profileState.value =
+                    ProfileState.Error(e.message ?: "Failed to delete profile")
             }
         }
     }
@@ -140,78 +134,22 @@ class ProfileViewModel @Inject constructor(
     fun switchUser(user: User) {
         viewModelScope.launch {
             try {
-                userRepository.setCurrentUser(user)
-                loadCurrentUser()
-                loadProfiles()
+                sessionRepository.setCurrentUser(user)
             } catch (e: Exception) {
-                _profileState.value = ProfileState.Error(e.message ?: "Failed to switch user")
+                _profileState.value =
+                    ProfileState.Error(e.message ?: "Failed to switch user")
             }
         }
-    }
-
-    fun saveProfile(name: String, email: String) {
-        viewModelScope.launch {
-            try {
-                if (name.isBlank()) {
-                    _saveResult.value = SaveResult.Error("Name is required")
-                    return@launch
-                }
-
-                if (email.isBlank()) {
-                    _saveResult.value = SaveResult.Error("Email is required")
-                    return@launch
-                }
-
-                if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                    _saveResult.value = SaveResult.Error("Invalid email address")
-                    return@launch
-                }
-
-                sharedPreferences.edit()
-                    .putString(KEY_NAME, name.trim())
-                    .putString(KEY_EMAIL, email.trim())
-                    .apply()
-
-                _saveResult.value = SaveResult.Success
-                loadCurrentUser()
-            } catch (e: Exception) {
-                _saveResult.value = SaveResult.Error(e.message ?: "Failed to save profile")
-            }
-        }
-    }
-
-    fun resetSaveResult() {
-        _saveResult.value = SaveResult.Initial
     }
 
     private fun generateAvatarColor(name: String): Int {
         val colors = listOf(
-            0xFFE91E63.toInt(), // Pink
-            0xFF9C27B0.toInt(), // Purple
-            0xFF673AB7.toInt(), // Deep Purple
-            0xFF3F51B5.toInt(), // Indigo
-            0xFF2196F3.toInt(), // Blue
-            0xFF03A9F4.toInt(), // Light Blue
-            0xFF00BCD4.toInt(), // Cyan
-            0xFF009688.toInt(), // Teal
-            0xFF4CAF50.toInt(), // Green
-            0xFF8BC34A.toInt(), // Light Green
-            0xFFCDDC39.toInt(), // Lime
-            0xFFFFEB3B.toInt(), // Yellow
-            0xFFFFC107.toInt(), // Amber
-            0xFFFF9800.toInt(), // Orange
-            0xFFFF5722.toInt(), // Deep Orange
-            0xFF795548.toInt()  // Brown
+            0xFFE91E63.toInt(), 0xFF9C27B0.toInt(), 0xFF673AB7.toInt(), 0xFF3F51B5.toInt(),
+            0xFF2196F3.toInt(), 0xFF03A9F4.toInt(), 0xFF00BCD4.toInt(), 0xFF009688.toInt(),
+            0xFF4CAF50.toInt(), 0xFF8BC34A.toInt(), 0xFFCDDC39.toInt(), 0xFFFFEB3B.toInt(),
+            0xFFFFC107.toInt(), 0xFFFF9800.toInt(), 0xFFFF5722.toInt(), 0xFF795548.toInt()
         )
-        return colors[name.hashCode().absoluteValue % colors.size]
-    }
-
-    private val Int.absoluteValue: Int
-        get() = if (this < 0) -this else this
-
-    companion object {
-        private const val KEY_NAME = "user_name"
-        private const val KEY_EMAIL = "user_email"
+        return colors[kotlin.math.abs(name.hashCode()) % colors.size]
     }
 }
 
@@ -221,9 +159,3 @@ sealed class ProfileState {
     data class Success(val user: User) : ProfileState()
     data class Error(val message: String) : ProfileState()
 }
-
-sealed class SaveResult {
-    object Initial : SaveResult()
-    object Success : SaveResult()
-    data class Error(val message: String) : SaveResult()
-} 

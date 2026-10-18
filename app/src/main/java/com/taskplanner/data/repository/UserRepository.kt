@@ -13,6 +13,11 @@ class UserRepository @Inject constructor(
     suspend fun getUserByEmail(email: String): User? =
         userDao.getUserByEmail(email)
 
+    suspend fun getUserByFirebaseUid(uid: String): User? =
+        userDao.getUserByFirebaseUid(uid)
+
+    suspend fun getAllUsersOnce(): List<User> = userDao.getAllUsersOnce()
+
     suspend fun getUserById(userId: Long): User? =
         userDao.getUserById(userId)
 

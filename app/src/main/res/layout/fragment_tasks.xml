@@ -6,111 +6,195 @@
     android:layout_height="match_parent"
     tools:context=".ui.tasks.TasksFragment">
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipeRefreshLayout"
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <FrameLayout
+        <!-- Mass-actions bar (selection mode) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/selectionBar"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp"
+            android:visibility="gone"
+            app:cardElevation="4dp"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:visibility="visible">
 
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp">
+
+                <TextView
+                    android:id="@+id/selectionCount"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:textAppearance="?attr/textAppearanceSubtitle2"
+                    tools:text="3 selected" />
+
+                <ImageButton
+                    android:id="@+id/selectAllButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/select_all"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_select_all"
+                    app:tint="?attr/colorPrimary" />
+
+                <ImageButton
+                    android:id="@+id/deleteSelectedButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/delete_selected"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_delete"
+                    app:tint="?attr/colorError" />
+
+                <ImageButton
+                    android:id="@+id/cancelSelectionButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/cancel_selection"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_close"
+                    app:tint="?android:attr/textColorSecondary" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <HorizontalScrollView
+            android:id="@+id/categoryScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:scrollbars="none"
+            app:layout_constraintTop_toBottomOf="@id/selectionBar">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupCategory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                app:selectionRequired="false"
+                app:singleLine="true"
+                app:singleSelection="true" />
+        </HorizontalScrollView>
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="4dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/categoryScroll"
+            app:selectionRequired="false"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipTodo"
+                style="@style/Widget.MaterialComponents.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checkable="true"
+                android:text="@string/status_todo"
+                app:chipBackgroundColor="@color/chip_background_color"
+                app:chipStrokeColor="@color/chip_stroke_color"
+                app:chipStrokeWidth="1dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipInProgress"
+                style="@style/Widget.MaterialComponents.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checkable="true"
+                android:text="@string/status_in_progress"
+                app:chipBackgroundColor="@color/chip_background_color"
+                app:chipStrokeColor="@color/chip_stroke_color"
+                app:chipStrokeWidth="1dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipPaused"
+                style="@style/Widget.MaterialComponents.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checkable="true"
+                android:text="@string/status_paused"
+                app:chipBackgroundColor="@color/chip_background_color"
+                app:chipStrokeColor="@color/chip_stroke_color"
+                app:chipStrokeWidth="1dp" />
+        </com.google.android.material.chip.ChipGroup>
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipeRefreshLayout"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="4dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/chipGroupStatus">
+
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
-
-                <com.google.android.material.chip.ChipGroup
-                    android:id="@+id/chipGroupStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:layout_marginTop="8dp"
-                    app:singleSelection="true"
-                    app:selectionRequired="false"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipTodo"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/status_todo"
-                        android:checkable="true"
-                        app:chipBackgroundColor="@color/chip_background_color"
-                        app:chipStrokeColor="@color/chip_stroke_color"
-                        app:chipStrokeWidth="1dp"
-                        style="@style/Widget.MaterialComponents.Chip.Filter" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipInProgress"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/status_in_progress"
-                        android:checkable="true"
-                        app:chipBackgroundColor="@color/chip_background_color"
-                        app:chipStrokeColor="@color/chip_stroke_color"
-                        app:chipStrokeWidth="1dp"
-                        style="@style/Widget.MaterialComponents.Chip.Filter" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipDone"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/status_done"
-                        android:checkable="true"
-                        app:chipBackgroundColor="@color/chip_background_color"
-                        app:chipStrokeColor="@color/chip_stroke_color"
-                        app:chipStrokeWidth="1dp"
-                        style="@style/Widget.MaterialComponents.Chip.Filter" />
-                </com.google.android.material.chip.ChipGroup>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recyclerView"
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_marginTop="8dp"
+                    android:layout_height="match_parent"
                     android:clipToPadding="false"
                     android:paddingBottom="88dp"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/chipGroupStatus"
                     tools:listitem="@layout/item_task" />
 
                 <ProgressBar
                     android:id="@+id/progressBar"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="center"
                     android:visibility="gone"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
                     tools:visibility="visible" />
 
-                <TextView
+                <LinearLayout
                     android:id="@+id/emptyView"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/empty_tasks_message"
-                    android:textAppearance="?attr/textAppearanceBody1"
-                    android:visibility="gone"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:visibility="gone">
 
-            </androidx.constraintlayout.widget.ConstraintLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/empty_tasks_message"
+                        android:textAppearance="?attr/textAppearanceBody1" />
 
-        </FrameLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/emptyCreateTopicButton"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/new_group" />
+                </LinearLayout>
+            </FrameLayout>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabAddTask"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            android:contentDescription="@string/action_add"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:srcCompat="@drawable/ic_add" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabAddTask"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:contentDescription="@string/action_add"
-        app:srcCompat="@drawable/ic_add" />
-
-</androidx.coordinatorlayout.widget.CoordinatorLayout> 
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
