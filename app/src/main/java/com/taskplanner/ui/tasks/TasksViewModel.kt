@@ -4,11 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
+import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.GroupRepository
+import com.taskplanner.data.repository.RecurrenceRepository
+import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +33,9 @@ sealed interface TasksListItem {
     data class TaskRow(
         val task: Task,
         val category: Category?,
-        val isSelected: Boolean
+        val isSelected: Boolean,
+        /** The series this row is an instance of, when the task repeats. */
+        val series: RecurrenceRule? = null
     ) : TasksListItem
 }
 
@@ -56,7 +61,9 @@ data class TasksState(
 class TasksViewModel @Inject constructor(
     private val taskRepository: TaskRepository,
     private val categoryRepository: CategoryRepository,
-    private val groupRepository: GroupRepository
+    private val groupRepository: GroupRepository,
+    private val recurrenceRepository: RecurrenceRepository,
+    private val sessionRepository: SessionRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TasksState())
@@ -72,6 +79,10 @@ class TasksViewModel @Inject constructor(
     private val _currentTask = MutableStateFlow<Task?>(null)
     val currentTask: StateFlow<Task?> = _currentTask.asStateFlow()
 
+    /** The series of the task open in the editor, null when the task does not repeat. */
+    private val _seriesRule = MutableStateFlow<RecurrenceRule?>(null)
+    val seriesRule: StateFlow<RecurrenceRule?> = _seriesRule.asStateFlow()
+
     private data class Filters(
         val categoryId: Long?,
         val status: TaskStatus?,
@@ -85,6 +96,7 @@ class TasksViewModel @Inject constructor(
         val tasks: List<Task>,
         val categories: List<Category>,
         val groups: List<TaskGroup>,
+        val rules: Map<String, RecurrenceRule>,
         val filters: Filters
     )
 
@@ -106,11 +118,20 @@ class TasksViewModel @Inject constructor(
                 taskRepository.observeActiveTasks(),
                 categoryRepository.getAllCategories(),
                 groupRepository.observeGroups(),
+                recurrenceRepository.observeRules(),
                 filterSignals
-            ) { tasks, categories, groups, signal ->
-                RenderInput(tasks, categories, groups, signal.filters)
+            ) { tasks, categories, groups, rules, signal ->
+                RenderInput(tasks, categories, groups, rules.associateBy { it.uuid }, signal.filters)
             }.collect { input ->
                 render(input)
+            }
+        }
+        // A series that was due while the app was closed owes the user its next task. Bringing the
+        // open series up to date whenever a profile becomes active is idempotent, so it is safe to
+        // run on every start, profile switch and sign-in; WorkManager covers the time in between.
+        viewModelScope.launch {
+            sessionRepository.currentUser.collect {
+                recurrenceRepository.ensureOpenInstances()
             }
         }
     }
@@ -162,7 +183,12 @@ class TasksViewModel @Inject constructor(
             items += TasksListItem.GroupHeader(group, groupTasks.size, allSelected)
             if (!group.collapsed) {
                 groupTasks.forEach { task ->
-                    items += TasksListItem.TaskRow(task, task.categoryId?.let { categoryMap[it] }, task.id in selected)
+                    items += TasksListItem.TaskRow(
+                        task,
+                        task.categoryId?.let { categoryMap[it] },
+                        task.id in selected,
+                        task.seriesUuid?.let { input.rules[it] }
+                    )
                     groupedTaskIds += task.id
                 }
             } else {
@@ -170,7 +196,12 @@ class TasksViewModel @Inject constructor(
             }
         }
         visible.filter { it.id !in groupedTaskIds }.forEach { task ->
-            items += TasksListItem.TaskRow(task, task.categoryId?.let { categoryMap[it] }, task.id in selected)
+            items += TasksListItem.TaskRow(
+                task,
+                task.categoryId?.let { categoryMap[it] },
+                task.id in selected,
+                task.seriesUuid?.let { input.rules[it] }
+            )
         }
 
         _categories.value = input.categories
@@ -394,7 +425,8 @@ class TasksViewModel @Inject constructor(
         priority: Priority = Priority.MEDIUM,
         status: TaskStatus = TaskStatus.TODO,
         categoryId: Long? = null,
-        groupId: String? = null
+        groupId: String? = null,
+        repeat: RepeatPlan = RepeatPlan()
     ) {
         if (title.isBlank()) {
             _taskSaveState.value = TaskSaveState.Error("Title cannot be empty")
@@ -425,10 +457,110 @@ class TasksViewModel @Inject constructor(
                     // DONE means "completed and filed in the archive"; keeping the editor
                     // and the card button consistent avoids a COMPLETED row in active list.
                     if (status == TaskStatus.COMPLETED) taskRepository.completeAndArchive(resultId)
-                    _taskSaveState.value = TaskSaveState.Success
+                    val conflict = applyRepeat(resultId, existing?.dueDate, repeat)
+                    _seriesRule.value = seriesOf(resultId)
+                    _taskSaveState.value = if (conflict) {
+                        TaskSaveState.ScheduleConflict
+                    } else {
+                        TaskSaveState.Success
+                    }
                 }
             } catch (e: Exception) {
                 _taskSaveState.value = TaskSaveState.Error(e.message ?: "Failed to save task")
+            }
+        }
+    }
+
+    /**
+     * Carries the editor's repeat section over to the stored series.
+     *
+     * Returns true when the user asked to re-schedule the series onto a date another instance of it
+     * already owns. The task itself is saved either way — only the schedule change is refused, so
+     * pressing save never throws away what was typed.
+     */
+    private suspend fun applyRepeat(
+        taskId: Long,
+        previousDueDate: Long?,
+        plan: RepeatPlan
+    ): Boolean {
+        val saved = taskRepository.getTaskById(taskId) ?: return false
+        val rule = saved.seriesUuid?.let { recurrenceRepository.ruleFor(saved) }
+
+        if (plan.preset.unit == null) {
+            // "Does not repeat" on a running series means "stop it here"; the task on screen stays.
+            if (rule != null && plan.appliesToSeries && rule.endedAt == null) {
+                recurrenceRepository.finish(rule.uuid)
+            }
+            return false
+        }
+        if (rule == null) {
+            recurrenceRepository.startSeries(
+                saved,
+                plan.preset.unit,
+                plan.effectiveInterval,
+                plan.effectiveWeekDays,
+                plan.effectiveDayOfMonth
+            )
+            return false
+        }
+        // "Only this task" leaves the rule alone: the row keeps the slot it was materialised for,
+        // so the series goes on from the date it had planned.
+        if (!plan.appliesToSeries) return false
+        // Rebase only when the date on screen actually moved, otherwise a series whose instance was
+        // shifted by an earlier "only this task" edit would be dragged back to that date.
+        val rebaseAt = saved.dueDate.takeIf { it != previousDueDate }
+        return recurrenceRepository.updateThisAndFuture(
+            rule.uuid,
+            plan.preset.unit,
+            plan.effectiveInterval,
+            plan.effectiveWeekDays,
+            plan.effectiveDayOfMonth,
+            rebaseAt
+        ) == null
+    }
+
+    private suspend fun seriesOf(taskId: Long): RecurrenceRule? =
+        taskRepository.getTaskById(taskId)?.let { recurrenceRepository.ruleFor(it) }
+
+    // ---------------------------------------------------------------- series management
+
+    fun setSeriesPaused(paused: Boolean, onResult: (Boolean) -> Unit = {}) = seriesCommand(
+        onResult
+    ) { uuid -> recurrenceRepository.setPaused(uuid, paused) }
+
+    fun finishSeries(onResult: (Boolean) -> Unit = {}) =
+        seriesCommand(onResult) { recurrenceRepository.finish(it) }
+
+    fun deleteSeries(onResult: (Boolean) -> Unit = {}) {
+        val uuid = _seriesRule.value?.uuid ?: return onResult(false)
+        viewModelScope.launch {
+            try {
+                val done = recurrenceRepository.deleteSeries(uuid)
+                // The instances the series owed the user are gone, so the editor no longer belongs
+                // to a series at all.
+                _seriesRule.value = null
+                _currentTask.value = _currentTask.value?.copy(seriesUuid = null, occurrenceAt = null)
+                onResult(done)
+            } catch (e: Exception) {
+                setError(e)
+                onResult(false)
+            }
+        }
+    }
+
+    private fun seriesCommand(
+        onResult: (Boolean) -> Unit,
+        change: suspend (String) -> Boolean
+    ) {
+        val uuid = _seriesRule.value?.uuid ?: return onResult(false)
+        viewModelScope.launch {
+            try {
+                val done = change(uuid)
+                _seriesRule.value = _currentTask.value?.let { seriesOf(it.id) }
+                onResult(done)
+            } catch (e: Exception) {
+                setError(e)
+                onResult(false)
             }
         }
     }
@@ -443,7 +575,9 @@ class TasksViewModel @Inject constructor(
     fun loadTask(taskId: Long) {
         viewModelScope.launch {
             try {
-                _currentTask.value = if (taskId == 0L) null else taskRepository.getTaskById(taskId)
+                val task = if (taskId == 0L) null else taskRepository.getTaskById(taskId)
+                _currentTask.value = task
+                _seriesRule.value = task?.let { recurrenceRepository.ruleFor(it) }
             } catch (e: Exception) {
                 _taskSaveState.value = TaskSaveState.Error(e.message ?: "Failed to load task")
             }
@@ -452,6 +586,7 @@ class TasksViewModel @Inject constructor(
 
     fun clearCurrentTask() {
         _currentTask.value = null
+        _seriesRule.value = null
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
@@ -474,5 +609,9 @@ sealed class TaskSaveState {
     object Initial : TaskSaveState()
     object Loading : TaskSaveState()
     object Success : TaskSaveState()
+
+    /** The task was stored but its series kept the old schedule; the editor stays open. */
+    object ScheduleConflict : TaskSaveState()
+
     data class Error(val message: String) : TaskSaveState()
 }

@@ -45,6 +45,13 @@ interface UserDao {
     @Query("SELECT * FROM users ORDER BY last_used DESC LIMIT 5")
     fun getRecentUsers(): Flow<List<User>>
 
+    /**
+     * Marks [user] as current.
+     *
+     * The profile is updated in place, never re-inserted: INSERT OR REPLACE resolves a primary key
+     * conflict by deleting the row first, and that delete cascades to everything a user owns with a
+     * foreign key — topics and recurrence series would vanish on a plain profile switch.
+     */
     @Transaction
     suspend fun setCurrentUser(user: User) {
         val previouslyCurrentUser = getCurrentUser()
@@ -52,15 +59,10 @@ interface UserDao {
         clearCurrentUser()
 
         if (previouslyCurrentUser != null) {
-             val updatedPreviouslyUser = previouslyCurrentUser.copy(isCurrent = false)
-             updateUser(updatedPreviouslyUser)
+            updateUser(previouslyCurrentUser.copy(isCurrent = false))
         }
 
-        val updatedUser = user.copy(
-            isCurrent = true,
-            lastUsed = System.currentTimeMillis()
-        )
-        insertUser(updatedUser)
+        updateUser(user.copy(isCurrent = true, lastUsed = System.currentTimeMillis()))
     }
 
     @Query("UPDATE users SET is_current = 0")

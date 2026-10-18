@@ -40,10 +40,10 @@ class AppMigrationsTest {
     }
 
     @Test
-    fun `full history chain 1 to 7 produces the current schema`() {
+    fun `full history chain produces the newest schema room exported`() {
         val db = open(1)
         AppMigrations.ALL.forEach { db.migrate(it) }
-        builder.assertMatchesSchema(db, 7, "full chain 1->7")
+        builder.assertMatchesSchema(db, latestVersion, "full chain 1->$latestVersion")
         assertTrue(db.tableNames().contains("task_groups"))
         assertEquals(
             setOf("uuid", "group_id", "archived", "archived_at", "started_at", "is_deleted", "deleted_at", "sync_state"),
@@ -218,15 +218,109 @@ class AppMigrationsTest {
         val db = open(1)
         assertTrue(db.tableNames().contains("preferences"))
         AppMigrations.ALL.forEach { db.migrate(it) }
-        builder.assertMatchesSchema(db, 7, "chain with preferences present")
+        builder.assertMatchesSchema(db, latestVersion, "chain with preferences present")
     }
 
     @Test
     fun `migrations are idempotently registered for every retained version pair`() {
         val pairs = AppMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7),
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8),
             pairs
+        )
+    }
+
+    private val latestVersion: Int = AppMigrations.ALL.maxOf { it.endVersion }
+
+    @Test
+    fun `migration 7 to 8 leaves existing tasks without a series`() {
+        val db = open(7)
+        val before = counts(db)
+        db.migrate(AppMigrations.MIGRATION_7_8)
+        builder.assertMatchesSchema(db, 8, "MIGRATION_7_8")
+
+        assertEquals(before, counts(db))
+        assertEquals(
+            listOf(null to null),
+            db.rows("SELECT series_uuid, occurrence_at FROM tasks WHERE id = ${Seeder.TODO_TASK_ID}")
+                .map { it[0] to it[1] }
+        )
+    }
+
+    @Test
+    fun `migration 7 to 8 does not treat rows without a series as duplicates of each other`() {
+        val db = open(7)
+        db.migrate(AppMigrations.MIGRATION_7_8)
+
+        db.exec(
+            "INSERT INTO tasks (title, description, priority, status, user_id, `order`, created_at, updated_at) " +
+                "VALUES ('plain a', '', 'MEDIUM', 'TODO', ${Seeder.USER_ID}, 0, 1, 1), " +
+                "('plain b', '', 'MEDIUM', 'TODO', ${Seeder.USER_ID}, 1, 1, 1)"
+        )
+
+        assertEquals("plain tasks keep being insertable", 4L, db.firstLong("SELECT COUNT(*) FROM tasks"))
+    }
+
+    @Test
+    fun `migration 7 to 8 refuses a second instance of the same occurrence`() {
+        val db = open(7)
+        db.migrate(AppMigrations.MIGRATION_7_8)
+
+        var rejected = false
+        try {
+            insertSeriesTask(db, "instance 1")
+            insertSeriesTask(db, "instance 2")
+        } catch (e: Exception) {
+            rejected = true
+        }
+
+        assertTrue("the unique (series, occurrence) index must reject a duplicate instance", rejected)
+        assertEquals(1L, db.firstLong("SELECT COUNT(*) FROM tasks WHERE series_uuid = 'series-1'"))
+        assertEquals(3L, db.firstLong("SELECT COUNT(*) FROM tasks"))
+    }
+
+    @Test
+    fun `migration 7 to 8 creates the rule table the repository writes to`() {
+        val db = open(7)
+        db.migrate(AppMigrations.MIGRATION_7_8)
+
+        db.exec(
+            "INSERT INTO recurrence_rules (uuid, user_id, unit, `interval`, week_days, day_of_month, " +
+                "anchor_at, zone_id, cursor_at, created_at, updated_at) " +
+                "VALUES ('series-1', ${Seeder.USER_ID}, 'WEEK', 2, '1,3,5', 0, 1000, 'Europe/Berlin', 1000, 1, 1)"
+        )
+
+        val row = db.rows(
+            "SELECT unit, `interval`, week_days, zone_id, paused, sync_state FROM recurrence_rules"
+        ).single()
+        assertEquals(listOf("WEEK", "2", "1,3,5", "Europe/Berlin", "0", "PENDING"), row)
+    }
+
+    @Test
+    fun `migration 7 to 8 refuses a rule for a profile that does not exist`() {
+        val db = open(7)
+        db.migrate(AppMigrations.MIGRATION_7_8)
+        db.exec("PRAGMA foreign_keys = ON")
+
+        var rejected = false
+        try {
+            db.exec(
+                "INSERT INTO recurrence_rules (uuid, user_id, unit, `interval`, week_days, day_of_month, " +
+                    "anchor_at, zone_id, cursor_at, created_at, updated_at) " +
+                    "VALUES ('ghost', 999, 'DAY', 1, '', 0, 1, '', 1, 1, 1)"
+            )
+        } catch (e: Exception) {
+            rejected = true
+        }
+
+        assertTrue("a series must belong to a real profile", rejected)
+    }
+
+    private fun insertSeriesTask(db: SqliteTestDatabase, title: String) {
+        db.exec(
+            "INSERT INTO tasks (title, description, priority, status, user_id, `order`, created_at, " +
+                "updated_at, uuid, series_uuid, occurrence_at) VALUES " +
+                "('$title', '', 'MEDIUM', 'TODO', ${Seeder.USER_ID}, 0, 1, 1, 'uuid-$title', 'series-1', 1000)"
         )
     }
 

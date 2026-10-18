@@ -9,6 +9,7 @@ import com.taskplanner.data.backup.BackupRepository
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.UserDao
 import com.taskplanner.data.model.Category
@@ -21,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.taskplanner.data.repository.GroupRepository
+import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
 import java.io.ByteArrayInputStream
@@ -50,6 +52,7 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val taskDao: TaskDao = database.taskDao()
     val categoryDao: CategoryDao = database.categoryDao()
     val groupDao: GroupDao = database.groupDao()
+    val recurrenceDao: RecurrenceDao = database.recurrenceDao()
     val userDao: UserDao = database.userDao()
 
     val prefs: SharedPreferences =
@@ -67,7 +70,10 @@ class AppFixture(private val context: Context) : AutoCloseable {
     /** A session that has not seen this storage yet: what an app restart creates. */
     fun newSessionRepository(): SessionRepository = SessionRepository(userDao, prefs, sessionScope)
 
-    val taskRepository = TaskRepository(taskDao, sessionRepository)
+    // Declared before the task repository on purpose: finishing a task is what advances a series.
+    val recurrenceRepository = RecurrenceRepository(recurrenceDao, taskDao, sessionRepository)
+
+    val taskRepository = TaskRepository(taskDao, sessionRepository, recurrenceRepository)
     val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
     val groupRepository = GroupRepository(groupDao, sessionRepository)
     val backupRepository = BackupRepository(

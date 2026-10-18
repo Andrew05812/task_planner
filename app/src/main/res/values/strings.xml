@@ -210,4 +210,73 @@
     <string name="backup_scope_hint">Backup contains tasks, categories, topics, statuses, dates and ordering. It never contains passwords or sign-in tokens.</string>
     <string name="action_import">Import</string>
     <string name="action_replace">Replace</string>
+
+    <!-- Recurring tasks: the presets the editor offers -->
+    <string name="label_repeat">Repeat</string>
+    <string name="repeat_none">Does not repeat</string>
+    <string name="repeat_daily">Every day</string>
+    <string name="repeat_every_n_days">Every N days</string>
+    <string name="repeat_weekly">Every week</string>
+    <string name="repeat_biweekly">Every two weeks</string>
+    <string name="repeat_every_n_weeks">Every N weeks</string>
+    <string name="repeat_weekdays">On chosen days of the week</string>
+    <string name="repeat_monthly">Every month</string>
+    <string name="repeat_every_n_months">Every N months</string>
+    <string name="repeat_yearly">Every year</string>
+    <string name="repeat_every_n_years">Every N years</string>
+
+    <!-- Short forms shown on a task card in the list -->
+    <string name="repeats_daily">repeats daily</string>
+    <string name="repeats_every_n_days">repeats every N days</string>
+    <string name="repeats_weekly">repeats weekly</string>
+    <string name="repeats_biweekly">repeats every 2 weeks</string>
+    <string name="repeats_every_n_weeks">repeats every N weeks</string>
+    <string name="repeats_weekdays">repeats on chosen days</string>
+    <string name="repeats_monthly">repeats monthly</string>
+    <string name="repeats_every_n_months">repeats every N months</string>
+    <string name="repeats_yearly">repeats yearly</string>
+    <string name="repeats_every_n_years">repeats every N years</string>
+    <string name="series_short_paused">series paused</string>
+    <string name="series_short_ended">series stopped</string>
+    <string name="task_due_repeats_format">%1$s · %2$s</string>
+
+    <string name="repeat_unit_days">Days between repeats</string>
+    <string name="repeat_unit_weeks">Weeks between repeats</string>
+    <string name="repeat_unit_months">Months between repeats</string>
+    <string name="repeat_unit_years">Years between repeats</string>
+    <string name="repeat_day_of_month">Day of month</string>
+    <string name="repeat_day_of_month_hint">Blank keeps the day of the first due date. Shorter months use their last day.</string>
+    <string name="day_short_mon">Mon</string>
+    <string name="day_short_tue">Tue</string>
+    <string name="day_short_wed">Wed</string>
+    <string name="day_short_thu">Thu</string>
+    <string name="day_short_fri">Fri</string>
+    <string name="day_short_sat">Sat</string>
+    <string name="day_short_sun">Sun</string>
+
+    <!-- Recurring tasks: which tasks a change applies to -->
+    <string name="repeat_scope_title">Apply the change to</string>
+    <string name="repeat_scope_this">Only this task</string>
+    <string name="repeat_scope_future">This task and all following ones</string>
+    <string name="repeat_scope_hint_new">Choosing a repeat makes this task the first of a series. New tasks are created one at a time, as each one is finished.</string>
+    <string name="repeat_scope_hint_start">This task starts a series. Its date becomes the first occurrence.</string>
+    <string name="repeat_scope_hint_this">Only this task changes. The series keeps its own schedule and will create the next task from the date it planned.</string>
+    <string name="repeat_scope_hint_future">This task and every task the series creates after it follow the new schedule. Tasks already in the archive are not touched.</string>
+    <string name="repeat_scope_hint_stops">The series stops after this task. Tasks already archived stay in the archive.</string>
+
+    <!-- Recurring tasks: managing the series itself -->
+    <string name="series_status_running">Running series</string>
+    <string name="series_status_paused">Series paused: no new tasks are created</string>
+    <string name="series_status_ended">Series finished: no new tasks will be created</string>
+    <string name="action_pause_series">Pause series</string>
+    <string name="action_resume_series">Resume series</string>
+    <string name="action_finish_series">Stop after this task</string>
+    <string name="action_delete_series">Delete series</string>
+    <string name="dialog_delete_series_title">Delete the whole series?</string>
+    <string name="dialog_delete_series_message">The tasks this series still owes you will be deleted. Tasks you already completed stay in the archive.</string>
+    <string name="msg_series_paused">Series paused</string>
+    <string name="msg_series_resumed">Series resumed</string>
+    <string name="msg_series_finished">The series stops after this task</string>
+    <string name="msg_series_deleted">Series deleted</string>
+    <string name="error_schedule_conflict">Saved the task, but the new schedule was not applied: another task of this series already has that date.</string>
 </resources>

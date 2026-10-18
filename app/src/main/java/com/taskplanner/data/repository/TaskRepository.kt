@@ -16,7 +16,8 @@ import javax.inject.Singleton
 @Singleton
 class TaskRepository @Inject constructor(
     private val taskDao: TaskDao,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val recurrenceRepository: RecurrenceRepository
 ) {
     /** Convenience alias kept for statistics/categories screens. */
     fun getAllTasks(): Flow<List<Task>> = observeActiveTasks()
@@ -92,22 +93,32 @@ class TaskRepository @Inject constructor(
         task.copy(status = TaskStatus.IN_PROGRESS)
     }
 
-    /** DONE: completed + physically kept in the archive, hidden from the active list. */
-    suspend fun completeAndArchive(taskId: Long) = taskDao.archiveTask(taskId)
+    /**
+     * DONE: completed + physically kept in the archive, hidden from the active list.
+     *
+     * Finishing an instance of a series is what tells the series to produce the next one, so the
+     * advance happens here rather than in the screen: swipe, editor, notification and sync all
+     * reach the task through this method.
+     */
+    suspend fun completeAndArchive(taskId: Long) {
+        taskDao.archiveTask(taskId)
+        recurrenceRepository.ensureOpenInstances()
+    }
 
     suspend fun restoreTask(taskId: Long) = taskDao.restoreTask(taskId)
 
-    suspend fun softDeleteTasks(ids: List<Long>) = taskDao.softDeleteTasks(ids)
+    suspend fun softDeleteTasks(ids: List<Long>) {
+        taskDao.softDeleteTasks(ids)
+        // Deleting the instance a series points at must not strand the series.
+        recurrenceRepository.ensureOpenInstances()
+    }
 
     suspend fun hardDeleteTasks(ids: List<Long>) = taskDao.deleteTasksByIds(ids)
 
     /** Single visible delete path: soft delete keeps a tombstone for sync. */
-    suspend fun deleteTask(task: Task) = taskDao.softDeleteTasks(listOf(task.id))
+    suspend fun deleteTask(task: Task) = softDeleteTasks(listOf(task.id))
 
-    suspend fun deleteAllTasksForCurrentUser() {
-        val ids = getAllTasksOnce().map { it.id }
-        if (ids.isNotEmpty()) taskDao.softDeleteTasks(ids)
-    }
+    suspend fun deleteAllTasksForCurrentUser() = softDeleteTasks(getAllTasksOnce().map { it.id })
 
     suspend fun moveTaskToGroup(taskId: Long, groupUuid: String?) {
         val task = taskDao.getTaskById(taskId) ?: return

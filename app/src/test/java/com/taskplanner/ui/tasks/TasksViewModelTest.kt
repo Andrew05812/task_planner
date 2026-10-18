@@ -54,7 +54,9 @@ class TasksViewModelTest {
     private fun newModel() = TasksViewModel(
         fixture.taskRepository,
         fixture.categoryRepository,
-        fixture.groupRepository
+        fixture.groupRepository,
+        fixture.recurrenceRepository,
+        fixture.sessionRepository
     )
 
     private fun addTask(

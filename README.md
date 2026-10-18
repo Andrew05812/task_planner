@@ -1,8 +1,8 @@
 # Task Planner
 
 Offline-first task manager for Android. Tasks, categories, topic groups, an archive and a lifecycle
-(`TODO → IN_PROGRESS → PAUSED → DONE`), with optional Google sign-in and cloud sync that never has
-to be used for the app to work.
+(`TODO → IN_PROGRESS → PAUSED → DONE`), repeating tasks with series management, optional Google
+sign-in and cloud sync that never has to be used for the app to work.
 
 ## Build and test
 
@@ -10,7 +10,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 88 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 152 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -30,7 +30,7 @@ On first start `LegacyDbRescuer` looks for a database in the old locations (`cac
 recently it was updated, and copies the richest one — together with its `-wal` and `-shm` sidecars —
 into the permanent location. Nothing is deleted: the legacy files stay where they were.
 
-Migrations run for every retained schema version (1 → 7) and are covered by tests that execute the
+Migrations run for every retained schema version (1 → 8) and are covered by tests that execute the
 production `Migration` objects against real SQLite files built from the exported schema JSON. There
 is deliberately **no** `fallbackToDestructiveMigration()`: if the app meets a schema it does not
 know, it refuses to open the database and the rows stay on disk untouched, instead of the user
@@ -47,6 +47,9 @@ waking up to an empty list.
 - **Archive**: completing a task archives it rather than removing it; the archive has its own
   search and category filter, restores, and an explicit hard delete that really drops the row.
 - **Categories** with a filter chip row on the list screen, including "no category".
+- **Repeating tasks**: daily / weekly / monthly / yearly and counted variants, chosen weekdays,
+  month ends and leap days included, with series pause, resume, finish and delete (see
+  *Recurring tasks* below).
 - **Backup**: versioned JSON exported and imported through the Storage Access Framework, so the app
   never asks for a broad storage permission. Import previews what is in the file first, then either
   merges by stable uuid or replaces, keeping a safety copy in app-private storage before a replace.
@@ -55,6 +58,33 @@ waking up to an empty list.
   moved onto a Google account explicitly, from Settings.
 - **Sync**: an offline queue of pending writes with stable uuids, timestamps, tombstones and sync
   states, pushed and pulled by WorkManager when a network is available.
+
+## Recurring tasks
+
+A series is stored as one `RecurrenceRule` row plus **one open instance** in `tasks` — the row its
+cursor points at — so a daily series that has been running for a year costs two rows, not 365. The
+next instance is produced when the current one is finished: completing, archiving or deleting it is
+what advances the cursor, and the repair step that creates the missing row is idempotent, so
+start-up, a profile switch, a sync pass and the background worker can all call it freely.
+
+- **Engine** (`RecurrenceCalculator`): dates are computed from the series' own anchor by ordinal —
+  `day`/`week`/`month`/`year` plus an interval, optionally on chosen weekdays — in the wall-clock
+  zone the series recorded when it was created. That is what makes month ends behave (Jan 31 → Feb 28
+  → Mar 31), keeps `Feb 29` a yearly series instead of dropping it, and returns a spring-forward
+  `02:30` series to `02:30` the day after the clock jumps. Moving the device to another zone does not
+  move an existing series.
+- **Stable identity**: an instance uuid is derived from `(series, scheduled instant)`, and a unique
+  `(series_uuid, occurrence_at)` index refuses a second copy, so a retry, a restart or another device
+  that produced the same occurrence first cannot duplicate the task. Materialisation inserts with
+  `IGNORE` — an instance the user already edited is never overwritten.
+- **In the editor**: presets (daily, every N days, weekly, biweekly, chosen weekdays, monthly, every
+  N months, yearly, custom counts), the interval and day-of-month fields only appear when the chosen
+  preset uses them, and the screen always states which tasks a change applies to — *"Only this task"*
+  moves that one instance and leaves the series schedule alone, *"This task and all following ones"*
+  re-anchors the series. A running series can be paused, resumed, stopped after the current task, or
+  deleted together with the instances it still owes; completed history in the archive is never taken.
+- **Local work**: `RecurrenceRefreshWorker` keeps series producing their next task while the app is
+  closed, with no network constraint and no cloud dependency, and Room stays the source of truth.
 
 ## Testing approach
 
@@ -69,13 +99,18 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 
 | Suite | Covers |
 | --- | --- |
-| `AppMigrationsTest` | every 1 → 7 migration against real SQLite, compared with the exported schema |
+| `AppMigrationsTest` | every 1 → 8 migration against real SQLite, compared with the exported schema |
 | `LegacyDbRescuerTest` | rescue selection, WAL sidecars, never overwriting or consuming the original |
 | `DataSafetyTest` | the production `DatabaseModule` wiring: private location, rescue + migration end to end, restart, refusal of an unknown schema |
-| `SessionRepositoryTest` | session survives restart, no fixed-user fallback, concurrent profile switches |
+| `SessionRepositoryTest` | session survives restart, no fixed-user fallback, concurrent profile switches, switching keeps what a profile owns |
 | `LocalDataMigrationTest` | the local → Google handover: moves rows, keeps links, dedups by uuid, refuses the wrong target |
 | `BackupRepositoryTest` | export/import, version and relation validation, merge, replace, tombstone revival |
 | `SyncRepositoryTest` | offline queue, uuid assignment, push/pull dedup |
+| `RecurrenceCalculatorTest` | month ends, leap days, weekday blocks, DST shifts, zone independence, year rollover, monotonic long runs |
+| `RecurrenceRepositoryTest` | one open instance per series, idempotent repair, catch-up after a week away, pause / finish / delete, per-profile isolation |
+| `TasksRecurrenceTest` | the editor's repeat plan end to end: starting a series, "only this task" versus "this and following", refused date clashes, series controls |
+| `RepeatPresetTest` | the presets the user reads and the rule fields that are stored translate into each other both ways |
+| `TaskDetailLayoutTest` | the editor inflates under the app's theme, keeps the recurrence detail collapsed, and lays out inside 320dp |
 | `TasksViewModelTest` | grouping, filters, search, sorting, selection, lifecycle, per-profile isolation |
 | `RoomHarnessSmokeTest` | the test harness itself really executes DAO SQL and emits flows |
 
@@ -99,3 +134,13 @@ provide.
   concurrently are not merged field by field — the row that still has local edits is pushed last and
   wins upstream.
 - On-device (Espresso) tests compile but have not been executed as part of this work.
+- Recurrence is local-only so far. Instances travel as ordinary tasks, but the series rule itself is
+  not in the backup file and not pushed to Firestore yet, so a second device or a restored backup
+  gets the tasks that were already produced and not the schedule that makes more of them. Export,
+  import and sync of `recurrence_rules` are the next step.
+- The background recurrence worker is exercised on a device only: the JVM test process has no
+  initialized `WorkManager`, so its `Application`-level scheduling is not reachable from a unit test.
+  The work it performs — `ensureOpenInstances()` — is fully covered by the repository and UI suites.
+- Restoring an archived instance of a series from the archive leaves it open next to the instance the
+  series produced afterwards. Nothing is lost and the schedule is unaffected; the older row simply
+  becomes an ordinary task of that series.

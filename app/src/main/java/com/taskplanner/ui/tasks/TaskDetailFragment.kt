@@ -12,9 +12,12 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
 import com.taskplanner.data.model.Priority
+import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.databinding.FragmentTaskDetailBinding
 import dagger.hilt.android.AndroidEntryPoint
@@ -31,6 +34,12 @@ class TaskDetailFragment : Fragment() {
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     private var selectedDate: Date? = null
 
+    /** The series of the task on screen, kept so the repeat section can describe what it changes. */
+    private var series: RecurrenceRule? = null
+
+    /** The preset the user picked; the text field alone can be edited away by the keyboard. */
+    private var preset: RepeatPreset = RepeatPreset.NONE
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -46,6 +55,7 @@ class TaskDetailFragment : Fragment() {
         setupButtons()
         observeTaskSaveState()
         observeCurrentTask()
+        observeSeries()
         args.taskId.let { taskId ->
             if (taskId > 0) {
                 viewModel.loadTask(taskId)
@@ -58,6 +68,7 @@ class TaskDetailFragment : Fragment() {
         setupPrioritySpinner()
         setupStatusSpinner()
         setupCategorySpinner()
+        setupRepeat()
     }
 
     private fun setupDatePicker() {
@@ -102,6 +113,127 @@ class TaskDetailFragment : Fragment() {
             }
         }
     }
+
+    private fun setupRepeat() {
+        val presets = RepeatPreset.values()
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_dropdown_item_1line,
+            presets.map { getString(it.labelRes) }
+        )
+        binding.repeatPreset.setAdapter(adapter)
+        binding.repeatPreset.setText(getString(RepeatPreset.NONE.labelRes), false)
+        binding.repeatPreset.setOnItemClickListener { _, _, position, _ ->
+            preset = presets[position]
+            applyPreset(preset)
+        }
+        binding.repeatScopeGroup.setOnCheckedChangeListener { _, _ -> refreshRepeatUi() }
+        binding.pauseSeriesButton.setOnClickListener { toggleSeriesPaused() }
+        binding.finishSeriesButton.setOnClickListener {
+            viewModel.finishSeries { showSnackbar(getString(R.string.msg_series_finished)) }
+        }
+        binding.deleteSeriesButton.setOnClickListener { confirmDeleteSeries() }
+        applyPreset(RepeatPreset.NONE)
+    }
+
+    /** Only the fields the chosen preset actually uses are shown. */
+    private fun applyPreset(preset: RepeatPreset) {
+        binding.repeatIntervalLayout.isVisible = preset.editableInterval
+        binding.repeatIntervalLayout.hint = getString(preset.unitLabelRes)
+        binding.repeatWeekDaysLabel.isVisible = preset.showsWeekDays
+        binding.repeatWeekDays.isVisible = preset.showsWeekDays
+        binding.repeatDayLayout.isVisible = preset.showsDayOfMonth
+        binding.repeatDayHint.isVisible = preset.showsDayOfMonth
+        refreshRepeatUi()
+    }
+
+    private fun refreshRepeatUi() {
+        val rule = series
+        val onlyThisInstance = binding.repeatScopeThis.isChecked
+        // A series' pattern belongs to the series, so editing "only this task" cannot change it.
+        val patternEnabled = rule == null || !onlyThisInstance
+        binding.repeatLayout.isEnabled = patternEnabled
+        binding.repeatInterval.isEnabled = patternEnabled
+        binding.repeatDayOfMonth.isEnabled = patternEnabled
+        weekdayChips().forEach { (chip, _) -> chip.isEnabled = patternEnabled }
+        binding.repeatScopeGroup.isVisible = rule != null
+        binding.seriesStatus.isVisible = rule != null
+        binding.seriesControls.isVisible = rule != null
+        binding.repeatScopeHint.text = getString(scopeHintRes(rule, onlyThisInstance))
+        if (rule != null) {
+            binding.seriesStatus.text = getString(
+                when {
+                    rule.paused -> R.string.series_status_paused
+                    rule.endedAt != null -> R.string.series_status_ended
+                    else -> R.string.series_status_running
+                }
+            )
+            binding.pauseSeriesButton.text = getString(
+                if (rule.paused) R.string.action_resume_series else R.string.action_pause_series
+            )
+            binding.finishSeriesButton.isEnabled = rule.endedAt == null
+        }
+    }
+
+    private fun scopeHintRes(rule: RecurrenceRule?, onlyThisInstance: Boolean): Int = when {
+        rule == null && preset != RepeatPreset.NONE -> R.string.repeat_scope_hint_start
+        rule == null -> R.string.repeat_scope_hint_new
+        onlyThisInstance -> R.string.repeat_scope_hint_this
+        preset == RepeatPreset.NONE -> R.string.repeat_scope_hint_stops
+        else -> R.string.repeat_scope_hint_future
+    }
+
+    private fun renderSeries(rule: RecurrenceRule) {
+        series = rule
+        preset = RepeatPreset.of(rule)
+        binding.repeatPreset.setText(getString(preset.labelRes), false)
+        binding.repeatInterval.setText(rule.interval.toString())
+        binding.repeatDayOfMonth.setText(if (rule.dayOfMonth == 0) "" else rule.dayOfMonth.toString())
+        val days = rule.scheduledWeekDays
+        weekdayChips().forEach { (chip, day) -> chip.isChecked = day in days }
+        applyPreset(preset)
+    }
+
+    private fun toggleSeriesPaused() {
+        val rule = series ?: return
+        viewModel.setSeriesPaused(!rule.paused) { changed ->
+            if (changed) {
+                showSnackbar(
+                    getString(if (rule.paused) R.string.msg_series_resumed else R.string.msg_series_paused)
+                )
+            }
+        }
+    }
+
+    private fun confirmDeleteSeries() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.dialog_delete_series_title)
+            .setMessage(R.string.dialog_delete_series_message)
+            .setPositiveButton(R.string.action_delete) { _, _ ->
+                viewModel.deleteSeries { showSnackbar(getString(R.string.msg_series_deleted)) }
+            }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    /** The chips in ISO order (Monday = 1), which is what the rule stores. */
+    private fun weekdayChips(): List<Pair<Chip, Int>> = with(binding) {
+        listOf(
+            dayMon to 1, dayTue to 2, dayWed to 3, dayThu to 4,
+            dayFri to 5, daySat to 6, daySun to 7
+        )
+    }
+
+    private fun selectedWeekDays(): List<Int> =
+        weekdayChips().filter { (chip, _) -> chip.isChecked }.map { (_, day) -> day }
+
+    private fun repeatPlan(): RepeatPlan = RepeatPlan(
+        preset = preset,
+        interval = binding.repeatInterval.text.toString().toIntOrNull() ?: 1,
+        weekDays = selectedWeekDays(),
+        dayOfMonth = binding.repeatDayOfMonth.text.toString().toIntOrNull() ?: 0,
+        appliesToSeries = !binding.repeatScopeThis.isChecked
+    )
 
     private fun getPriorityStringRes(priority: Priority): Int {
         return when (priority) {
@@ -151,13 +283,13 @@ class TaskDetailFragment : Fragment() {
                 val categoryId = taskCategory.text.toString().let { categoryName ->
                     if (categoryName.isNotBlank()) getCategoryFromString(categoryName) else null
                 }
-                
+
                 taskTitleLayout.error = null
                 if (title.isBlank()) {
                     taskTitleLayout.error = getString(R.string.error_title_required)
                     return@setOnClickListener
                 }
-                
+
                 viewModel.saveTask(
                     taskId = args.taskId,
                     title = title,
@@ -165,7 +297,8 @@ class TaskDetailFragment : Fragment() {
                     dueDate = selectedDate,
                     priority = priority,
                     status = status,
-                    categoryId = categoryId
+                    categoryId = categoryId,
+                    repeat = repeatPlan()
                 )
             }
 
@@ -190,6 +323,12 @@ class TaskDetailFragment : Fragment() {
                         setFieldsEnabled(true)
                         showSnackbar(getString(R.string.msg_task_saved))
                         findNavController().navigateUp()
+                    }
+                    is TaskSaveState.ScheduleConflict -> {
+                        binding.saveTask.isEnabled = true
+                        binding.progressBar.isVisible = false
+                        setFieldsEnabled(true)
+                        showSnackbar(getString(R.string.error_schedule_conflict))
                     }
                     is TaskSaveState.Error -> {
                         binding.saveTask.isEnabled = true
@@ -231,6 +370,25 @@ class TaskDetailFragment : Fragment() {
         }
     }
 
+    private fun observeSeries() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.seriesRule.collect { rule ->
+                if (rule == null) {
+                    series = null
+                    refreshRepeatUi()
+                } else {
+                    renderSeries(rule)
+                    // The radio is the user's choice, not part of the rule, so it survives a reload
+                    // of the series and defaults to the safer "this and following".
+                    if (binding.repeatScopeGroup.checkedRadioButtonId == View.NO_ID) {
+                        binding.repeatScopeFuture.isChecked = true
+                    }
+                    refreshRepeatUi()
+                }
+            }
+        }
+    }
+
     private fun setFieldsEnabled(enabled: Boolean) {
         binding.taskTitle.isEnabled = enabled
         binding.taskDescription.isEnabled = enabled
@@ -238,6 +396,13 @@ class TaskDetailFragment : Fragment() {
         binding.taskPriority.isEnabled = enabled
         binding.taskStatus.isEnabled = enabled
         binding.taskCategory.isEnabled = enabled
+        binding.repeatPreset.isEnabled = enabled
+        binding.repeatInterval.isEnabled = enabled
+        binding.repeatDayOfMonth.isEnabled = enabled
+        binding.repeatScopeGroup.isEnabled = enabled
+        binding.pauseSeriesButton.isEnabled = enabled
+        binding.finishSeriesButton.isEnabled = enabled
+        binding.deleteSeriesButton.isEnabled = enabled
     }
 
     private fun showSnackbar(message: String) {
@@ -247,6 +412,7 @@ class TaskDetailFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         viewModel.resetTaskSaveState()
+        viewModel.clearCurrentTask()
         _binding = null
     }
-} 
+}
