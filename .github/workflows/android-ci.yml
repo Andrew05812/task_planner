@@ -35,6 +35,10 @@ jobs:
           sed -i '/^org\.gradle\.user\.home=/d' gradle.properties
           sed -i '/^org\.gradle\.daemon=/d' gradle.properties
 
+      # The repository was created on Windows, where the wrapper has no executable bit.
+      - name: Make the Gradle wrapper runnable
+        run: chmod +x gradlew
+
       - name: Assemble debug APK
         run: ./gradlew --no-daemon --console=plain assembleDebug
 
@@ -43,6 +47,11 @@ jobs:
 
       - name: Android lint
         run: ./gradlew --no-daemon --console=plain lintDebug
+
+      # The instrumented tests need a device, which a runner does not provide, so CI only proves
+      # that they build; running them stays a manual, on-device step.
+      - name: Compile instrumented tests
+        run: ./gradlew --no-daemon --console=plain assembleDebugAndroidTest
 
       - name: Upload test report
         if: always()
