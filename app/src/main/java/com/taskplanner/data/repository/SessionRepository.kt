@@ -4,8 +4,6 @@ import android.content.SharedPreferences
 import com.taskplanner.data.local.UserDao
 import com.taskplanner.data.model.User
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,9 +25,10 @@ import javax.inject.Singleton
 @Singleton
 class SessionRepository @Inject constructor(
     private val userDao: UserDao,
-    private val prefs: SharedPreferences
+    private val prefs: SharedPreferences,
+    // Provided, not created here, so a caller can decide which thread the start-up reload runs on.
+    private val scope: CoroutineScope
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val switchMutex = Mutex()
 
     private val _currentUser = MutableStateFlow<User?>(null)

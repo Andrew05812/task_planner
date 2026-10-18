@@ -10,7 +10,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 89 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 88 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -62,6 +62,10 @@ Persistence is never mocked. `AppFixture` builds an in-memory Room database with
 DAOs, repositories and a real `SharedPreferences` file, so repository, backup, session and UI-layer
 tests execute the same SQL and the same code paths as the app. Migration tests read the schema
 version they expect straight from the JSON Room exported into `app/schemas/`.
+
+Everything runs on the thread that owns the test: the fixture pins Room's executors and hands
+`SessionRepository` an unconfined scope, because Robolectric keeps SQLite connection handles per
+thread, so a background job that outlives its test surfaces as a failure in whichever test runs next.
 
 | Suite | Covers |
 | --- | --- |

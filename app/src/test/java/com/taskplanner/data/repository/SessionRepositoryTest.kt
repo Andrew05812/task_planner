@@ -57,7 +57,7 @@ class SessionRepositoryTest {
         val user = fixture.signIn()
         fixture.addTask(user.id, "keep me")
 
-        val restarted = SessionRepository(fixture.userDao, fixture.prefs)
+        val restarted = fixture.newSessionRepository()
 
         assertEquals(user.id, restarted.currentUserId())
         assertEquals(listOf("keep me"), restarted.currentUserId()?.let {
@@ -71,7 +71,7 @@ class SessionRepositoryTest {
         // simulate the crash window: the row exists, but is_current was never committed
         fixture.userDao.clearCurrentUser()
 
-        val restarted = SessionRepository(fixture.userDao, fixture.prefs)
+        val restarted = fixture.newSessionRepository()
 
         assertEquals(user.id, restarted.currentUserId())
         assertEquals(user.id, fixture.userDao.getCurrentUser()?.id)
