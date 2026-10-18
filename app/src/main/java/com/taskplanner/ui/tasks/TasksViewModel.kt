@@ -11,12 +11,14 @@ import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.RecurrenceRepository
+import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -35,7 +37,9 @@ sealed interface TasksListItem {
         val category: Category?,
         val isSelected: Boolean,
         /** The series this row is an instance of, when the task repeats. */
-        val series: RecurrenceRule? = null
+        val series: RecurrenceRule? = null,
+        /** Lead times still armed on this task — what puts the bell on the card. */
+        val pendingReminders: Int = 0
     ) : TasksListItem
 }
 
@@ -63,6 +67,7 @@ class TasksViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val groupRepository: GroupRepository,
     private val recurrenceRepository: RecurrenceRepository,
+    private val reminderRepository: ReminderRepository,
     private val sessionRepository: SessionRepository
 ) : ViewModel() {
 
@@ -83,6 +88,10 @@ class TasksViewModel @Inject constructor(
     private val _seriesRule = MutableStateFlow<RecurrenceRule?>(null)
     val seriesRule: StateFlow<RecurrenceRule?> = _seriesRule.asStateFlow()
 
+    /** The lead times stored on the task open in the editor, soonest fire first. */
+    private val _reminderOffsets = MutableStateFlow<List<Int>>(emptyList())
+    val reminderOffsets: StateFlow<List<Int>> = _reminderOffsets.asStateFlow()
+
     private data class Filters(
         val categoryId: Long?,
         val status: TaskStatus?,
@@ -97,6 +106,7 @@ class TasksViewModel @Inject constructor(
         val categories: List<Category>,
         val groups: List<TaskGroup>,
         val rules: Map<String, RecurrenceRule>,
+        val pendingReminders: Map<String, Int>,
         val filters: Filters
     )
 
@@ -104,7 +114,7 @@ class TasksViewModel @Inject constructor(
     private val selectionFlow = MutableStateFlow<Pair<Set<Long>, Boolean>>(emptySet<Long>() to false)
 
     private val filterSignals =
-        kotlinx.coroutines.flow.combine(filters, selectionFlow) { f, sel ->
+        combine(filters, selectionFlow) { f, sel ->
             FilterWithSelection(f, sel.first, sel.second)
         }
 
@@ -114,14 +124,27 @@ class TasksViewModel @Inject constructor(
         // Declared last on purpose: viewModelScope starts on the main thread immediately, so the
         // collector would read these properties before they are initialised.
         viewModelScope.launch {
-            kotlinx.coroutines.flow.combine(
+            // combine has typed overloads up to five sources; the three plain lists share one.
+            val lists = combine(
                 taskRepository.observeActiveTasks(),
                 categoryRepository.getAllCategories(),
-                groupRepository.observeGroups(),
+                groupRepository.observeGroups()
+            ) { tasks, categories, groups -> Triple(tasks, categories, groups) }
+
+            combine(
+                lists,
                 recurrenceRepository.observeRules(),
+                reminderRepository.observeLiveForCurrentUser(),
                 filterSignals
-            ) { tasks, categories, groups, rules, signal ->
-                RenderInput(tasks, categories, groups, rules.associateBy { it.uuid }, signal.filters)
+            ) { (tasks, categories, groups), rules, reminders, signal ->
+                RenderInput(
+                    tasks,
+                    categories,
+                    groups,
+                    rules.associateBy { it.uuid },
+                    reminders.filter { it.isPending }.groupBy { it.taskUuid }.mapValues { it.value.size },
+                    signal.filters
+                )
             }.collect { input ->
                 render(input)
             }
@@ -129,9 +152,13 @@ class TasksViewModel @Inject constructor(
         // A series that was due while the app was closed owes the user its next task. Bringing the
         // open series up to date whenever a profile becomes active is idempotent, so it is safe to
         // run on every start, profile switch and sign-in; WorkManager covers the time in between.
+        // The same pass rebuilds the alarms from the rows — the instances have to exist first, because
+        // a reminder belongs to one — so opening the app delivers what came due while it was away
+        // instead of waiting for the six-hourly sweep.
         viewModelScope.launch {
             sessionRepository.currentUser.collect {
                 recurrenceRepository.ensureOpenInstances()
+                reminderRepository.rescheduleAll()
             }
         }
     }
@@ -187,7 +214,8 @@ class TasksViewModel @Inject constructor(
                         task,
                         task.categoryId?.let { categoryMap[it] },
                         task.id in selected,
-                        task.seriesUuid?.let { input.rules[it] }
+                        task.seriesUuid?.let { input.rules[it] },
+                        input.pendingReminders[task.uuid] ?: 0
                     )
                     groupedTaskIds += task.id
                 }
@@ -200,7 +228,8 @@ class TasksViewModel @Inject constructor(
                 task,
                 task.categoryId?.let { categoryMap[it] },
                 task.id in selected,
-                task.seriesUuid?.let { input.rules[it] }
+                task.seriesUuid?.let { input.rules[it] },
+                input.pendingReminders[task.uuid] ?: 0
             )
         }
 
@@ -426,10 +455,18 @@ class TasksViewModel @Inject constructor(
         status: TaskStatus = TaskStatus.TODO,
         categoryId: Long? = null,
         groupId: String? = null,
-        repeat: RepeatPlan = RepeatPlan()
+        repeat: RepeatPlan = RepeatPlan(),
+        reminders: List<Int>? = null
     ) {
         if (title.isBlank()) {
             _taskSaveState.value = TaskSaveState.Error("Title cannot be empty")
+            return
+        }
+        val offsets = reminders?.let { ReminderPreset.normalize(it) }
+        // A lead time is measured backwards from a deadline. Without one there is no minute to ring
+        // at, so the editor is told to ask for a date instead of the task quietly losing the chips.
+        if (!offsets.isNullOrEmpty() && dueDate == null) {
+            _taskSaveState.value = TaskSaveState.ReminderNeedsDeadline
             return
         }
         viewModelScope.launch {
@@ -454,11 +491,18 @@ class TasksViewModel @Inject constructor(
                 if (resultId <= 0 && existing == null) {
                     _taskSaveState.value = TaskSaveState.Error("Create a profile first")
                 } else {
+                    // getTaskById is what gives a brand new task the uuid its reminders attach to, and
+                    // applying them before the archive step means finishing the task here also
+                    // silences the alarms that were just armed.
+                    val saved = taskRepository.getTaskById(resultId)
+                    saved?.let { reminderRepository.applyReminders(it, offsets) }
                     // DONE means "completed and filed in the archive"; keeping the editor
                     // and the card button consistent avoids a COMPLETED row in active list.
                     if (status == TaskStatus.COMPLETED) taskRepository.completeAndArchive(resultId)
                     val conflict = applyRepeat(resultId, existing?.dueDate, repeat)
                     _seriesRule.value = seriesOf(resultId)
+                    _reminderOffsets.value = saved?.let { reminderRepository.offsetsFor(it.uuid) }
+                        ?: emptyList()
                     _taskSaveState.value = if (conflict) {
                         TaskSaveState.ScheduleConflict
                     } else {
@@ -578,6 +622,8 @@ class TasksViewModel @Inject constructor(
                 val task = if (taskId == 0L) null else taskRepository.getTaskById(taskId)
                 _currentTask.value = task
                 _seriesRule.value = task?.let { recurrenceRepository.ruleFor(it) }
+                _reminderOffsets.value = task?.let { reminderRepository.offsetsFor(it.uuid) }
+                    ?: emptyList()
             } catch (e: Exception) {
                 _taskSaveState.value = TaskSaveState.Error(e.message ?: "Failed to load task")
             }
@@ -587,7 +633,14 @@ class TasksViewModel @Inject constructor(
     fun clearCurrentTask() {
         _currentTask.value = null
         _seriesRule.value = null
+        _reminderOffsets.value = emptyList()
     }
+
+    /** Whether the notification bar will actually show a reminder for this app. */
+    fun canPostNotifications(): Boolean = reminderRepository.canPostNotifications()
+
+    /** Whether Android lets this app ring at the exact minute the user chose. */
+    fun canScheduleExactAlarms(): Boolean = reminderRepository.canScheduleExactAlarms()
 
     fun clearError() = _state.update { it.copy(error = null) }
 
@@ -612,6 +665,9 @@ sealed class TaskSaveState {
 
     /** The task was stored but its series kept the old schedule; the editor stays open. */
     object ScheduleConflict : TaskSaveState()
+
+    /** Nothing was stored: the chosen lead times have no deadline to count back from. */
+    object ReminderNeedsDeadline : TaskSaveState()
 
     data class Error(val message: String) : TaskSaveState()
 }

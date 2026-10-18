@@ -17,7 +17,8 @@ import javax.inject.Singleton
 class TaskRepository @Inject constructor(
     private val taskDao: TaskDao,
     private val sessionRepository: SessionRepository,
-    private val recurrenceRepository: RecurrenceRepository
+    private val recurrenceRepository: RecurrenceRepository,
+    private val reminderRepository: ReminderRepository
 ) {
     /** Convenience alias kept for statistics/categories screens. */
     fun getAllTasks(): Flow<List<Task>> = observeActiveTasks()
@@ -98,22 +99,37 @@ class TaskRepository @Inject constructor(
      *
      * Finishing an instance of a series is what tells the series to produce the next one, so the
      * advance happens here rather than in the screen: swipe, editor, notification and sync all
-     * reach the task through this method.
+     * reach the task through this method. The same holds for its reminders — a task the user is done
+     * with stops making noise, whoever it was that finished it.
      */
     suspend fun completeAndArchive(taskId: Long) {
+        val task = taskDao.getTaskById(taskId)
         taskDao.archiveTask(taskId)
         recurrenceRepository.ensureOpenInstances()
+        task?.let { reminderRepository.onTaskArchived(it) }
     }
 
-    suspend fun restoreTask(taskId: Long) = taskDao.restoreTask(taskId)
+    /** Undoing the above: the lead times the task still owns come back on its current deadline. */
+    suspend fun restoreTask(taskId: Long) {
+        val task = taskDao.getTaskById(taskId)
+        taskDao.restoreTask(taskId)
+        task?.let { reminderRepository.onTaskRestored(it) }
+    }
 
     suspend fun softDeleteTasks(ids: List<Long>) {
+        val rows = taskDao.getByIds(ids)
         taskDao.softDeleteTasks(ids)
         // Deleting the instance a series points at must not strand the series.
         recurrenceRepository.ensureOpenInstances()
+        reminderRepository.onTasksDeleted(rows)
     }
 
-    suspend fun hardDeleteTasks(ids: List<Long>) = taskDao.deleteTasksByIds(ids)
+    /** Physically dropping a row takes its reminders with it: nothing is left that could still ring. */
+    suspend fun hardDeleteTasks(ids: List<Long>) {
+        val rows = taskDao.getByIds(ids)
+        reminderRepository.retireTasks(rows.map { it.uuid })
+        taskDao.deleteTasksByIds(ids)
+    }
 
     /** Single visible delete path: soft delete keeps a tombstone for sync. */
     suspend fun deleteTask(task: Task) = softDeleteTasks(listOf(task.id))

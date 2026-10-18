@@ -1,6 +1,7 @@
 package com.taskplanner.ui.tasks
 
 import android.content.Context
+import android.text.InputType
 import android.util.TypedValue
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
@@ -107,7 +108,9 @@ class TaskDetailLayoutTest {
         // Nothing may stick out past the screen: a view that does is unreachable for the user,
         // because the editor scrolls vertically only.
         listOf(
-            binding.taskTitle, binding.taskDueDate, binding.taskCategory,
+            binding.taskTitle, binding.taskDueDate, binding.taskDueTime, binding.taskCategory,
+            binding.reminderAtTime, binding.reminderOneDay, binding.reminderCustomMinutes,
+            binding.reminderHint, binding.reminderStatus,
             binding.repeatPreset, binding.repeatInterval, binding.repeatDayOfMonth,
             binding.repeatScopeThis, binding.repeatScopeFuture,
             binding.pauseSeriesButton, binding.deleteSeriesButton, binding.saveTask
@@ -134,5 +137,81 @@ class TaskDetailLayoutTest {
             index(R.id.button_container)
         )
         assertTrue(index(R.id.task_category_layout) < index(R.id.repeat_section))
+    }
+
+    @Test
+    fun `every preset lead time is offered as its own chip`() {
+        val binding = inflated()
+        val context = binding.root.context
+        val chips = listOf(
+            binding.reminderAtTime, binding.reminderFiveMin, binding.reminderFifteenMin,
+            binding.reminderThirtyMin, binding.reminderOneHour, binding.reminderOneDay,
+            binding.reminderCustom
+        )
+
+        assertEquals(
+            listOf(
+                context.getString(R.string.reminder_at_time),
+                context.getString(R.string.reminder_five_min),
+                context.getString(R.string.reminder_fifteen_min),
+                context.getString(R.string.reminder_thirty_min),
+                context.getString(R.string.reminder_one_hour),
+                context.getString(R.string.reminder_one_day),
+                context.getString(R.string.reminder_custom)
+            ),
+            chips.map { it.text.toString() }
+        )
+        chips.forEach { chip ->
+            assertTrue("a lead time has to be ticked on its own", chip.isCheckable)
+            assertFalse("nothing is chosen until the user chooses it", chip.isChecked)
+            assertTrue(chip.parent === binding.reminderChips)
+        }
+        assertFalse(
+            "one deadline can be worth warning about several times",
+            binding.reminderChips.isSingleSelection
+        )
+        assertFalse(
+            "the custom minutes only appear once Custom is chosen",
+            binding.reminderCustomLayout.isVisible
+        )
+    }
+
+    @Test
+    fun `the reminder section says what it needs before anything is chosen`() {
+        val binding = inflated()
+        val context = binding.root.context
+
+        assertEquals(
+            context.getString(R.string.reminder_hint_needs_date),
+            binding.reminderHint.text.toString()
+        )
+        assertEquals(
+            context.getString(R.string.reminder_custom_hint),
+            binding.reminderCustomLayout.hint.toString()
+        )
+        assertFalse("a plan is only worth showing once there is one", binding.reminderStatus.isVisible)
+        assertEquals(
+            "the custom lead time is typed in minutes, so the keyboard offers digits",
+            InputType.TYPE_CLASS_NUMBER,
+            binding.reminderCustomMinutes.inputType
+        )
+    }
+
+    @Test
+    fun `reminders sit with the deadline they count back from`() {
+        val binding = inflated()
+        val content = binding.root.getChildAt(0) as ViewGroup
+        val index = { id: Int ->
+            (0 until content.childCount).first { content.getChildAt(it).id == id }
+        }
+
+        assertTrue(
+            "the time of the deadline comes before the warnings about it",
+            index(R.id.task_due_time_layout) < index(R.id.reminder_section)
+        )
+        assertTrue(
+            "and the warnings come before the repetition, which is a different question",
+            index(R.id.reminder_section) < index(R.id.repeat_section)
+        )
     }
 }

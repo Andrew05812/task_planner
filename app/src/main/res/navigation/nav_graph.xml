@@ -55,6 +55,10 @@
         <argument
             android:name="taskId"
             app:argType="long" />
+        <!-- What a reminder notification opens: the task that caused it. -->
+        <deepLink
+            android:id="@+id/deepLink_task_detail"
+            app:uri="taskplanner://task/{taskId}" />
     </fragment>
 
     <fragment

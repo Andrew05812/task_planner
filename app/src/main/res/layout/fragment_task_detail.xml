@@ -67,6 +67,25 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/task_due_time_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="@string/label_due_time"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            app:startIconDrawable="@drawable/ic_reminder"
+            app:layout_constraintTop_toBottomOf="@id/task_due_date_layout">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/task_due_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:inputType="none" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/task_priority_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -74,7 +93,7 @@
             android:hint="@string/label_priority"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             app:startIconDrawable="@drawable/ic_priority"
-            app:layout_constraintTop_toBottomOf="@id/task_due_date_layout">
+            app:layout_constraintTop_toBottomOf="@id/task_due_time_layout">
 
             <AutoCompleteTextView
                 android:id="@+id/task_priority"
@@ -121,12 +140,131 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <LinearLayout
-            android:id="@+id/repeat_section"
+            android:id="@+id/reminder_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:orientation="vertical"
             app:layout_constraintTop_toBottomOf="@id/task_category_layout">
+
+            <TextView
+                android:id="@+id/reminder_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/reminder_section_title"
+                android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/reminder_chips"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                app:chipSpacingHorizontal="4dp"
+                app:singleLine="false">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/reminder_at_time"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/reminder_at_time" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/reminder_five_min"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/reminder_five_min" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/reminder_fifteen_min"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/reminder_fifteen_min" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/reminder_thirty_min"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/reminder_thirty_min" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/reminder_one_hour"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/reminder_one_hour" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/reminder_one_day"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/reminder_one_day" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/reminder_custom"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/reminder_custom" />
+
+            </com.google.android.material.chip.ChipGroup>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/reminder_custom_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                android:hint="@string/reminder_custom_hint"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/reminder_custom_minutes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:maxLength="5"
+                    android:maxLines="1" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:id="@+id/reminder_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/reminder_hint_needs_date"
+                android:textAppearance="?attr/textAppearanceCaption" />
+
+            <TextView
+                android:id="@+id/reminder_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:visibility="gone"
+                android:textAppearance="?attr/textAppearanceCaption"
+                tools:text="2 reminders set" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/repeat_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            app:layout_constraintTop_toBottomOf="@id/reminder_section">
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/repeat_layout"

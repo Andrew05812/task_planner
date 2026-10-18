@@ -10,12 +10,15 @@ import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.RecurrenceDao
+import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.UserDao
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.User
+import com.taskplanner.data.reminder.ReminderNotifier
+import com.taskplanner.data.reminder.ReminderScheduler
 import com.taskplanner.data.repository.CategoryRepository
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.RecurrenceRepository
+import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
 import java.io.ByteArrayInputStream
@@ -53,6 +57,7 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val categoryDao: CategoryDao = database.categoryDao()
     val groupDao: GroupDao = database.groupDao()
     val recurrenceDao: RecurrenceDao = database.recurrenceDao()
+    val reminderDao: ReminderDao = database.reminderDao()
     val userDao: UserDao = database.userDao()
 
     val prefs: SharedPreferences =
@@ -70,10 +75,24 @@ class AppFixture(private val context: Context) : AutoCloseable {
     /** A session that has not seen this storage yet: what an app restart creates. */
     fun newSessionRepository(): SessionRepository = SessionRepository(userDao, prefs, sessionScope)
 
-    // Declared before the task repository on purpose: finishing a task is what advances a series.
-    val recurrenceRepository = RecurrenceRepository(recurrenceDao, taskDao, sessionRepository)
+    /**
+     * The real alarm and notification gateways, on Robolectric's shadows of them: reminders are
+     * armed and posted for real in these tests, because "the row exists but nothing was scheduled"
+     * is exactly the bug a fake would hide. Assertions read them through
+     * `shadowOf(alarmManager)` and `shadowOf(notificationManager)`.
+     */
+    val reminderScheduler = ReminderScheduler(context)
+    val reminderNotifier = ReminderNotifier(context)
+    val reminderRepository = ReminderRepository(
+        reminderDao, taskDao, categoryDao, sessionRepository, reminderScheduler, reminderNotifier
+    )
 
-    val taskRepository = TaskRepository(taskDao, sessionRepository, recurrenceRepository)
+    // Declared before the task repository on purpose: finishing a task is what advances a series.
+    val recurrenceRepository =
+        RecurrenceRepository(recurrenceDao, taskDao, sessionRepository, reminderRepository)
+
+    val taskRepository =
+        TaskRepository(taskDao, sessionRepository, recurrenceRepository, reminderRepository)
     val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
     val groupRepository = GroupRepository(groupDao, sessionRepository)
     val backupRepository = BackupRepository(
@@ -111,11 +130,13 @@ class AppFixture(private val context: Context) : AutoCloseable {
         title: String,
         description: String = "",
         categoryId: Long? = null,
-        groupId: String? = null
+        groupId: String? = null,
+        dueAt: Long? = null
     ): Long = taskDao.insertTask(
         Task(
             title = title,
             description = description,
+            dueDate = dueAt,
             userId = userId,
             categoryId = categoryId,
             groupId = groupId

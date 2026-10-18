@@ -11,6 +11,7 @@ import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.repository.RecurrenceRepository
+import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import dagger.Lazy
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,7 @@ class SyncRepository @Inject constructor(
     private val categoryDao: CategoryDao,
     private val groupDao: GroupDao,
     private val recurrenceRepository: RecurrenceRepository,
+    private val reminderRepository: ReminderRepository,
     private val prefs: SharedPreferences
 ) {
     private val syncMutex = Mutex()
@@ -78,6 +80,11 @@ class SyncRepository @Inject constructor(
                 // Another device may have completed or deleted the instance this series points at,
                 // so the pull leaves the local series without an open task until it is repaired.
                 recurrenceRepository.ensureOpenInstances()
+                // A remote edit can move a deadline, finish a task or delete one, and none of that can
+                // leave an alarm pointed at the minute the other device used. Reminders are rebuilt
+                // from the rows that are now on disk, and the ones whose minute arrived while the
+                // sync was away are delivered here.
+                reminderRepository.rescheduleAll()
                 val finished = System.currentTimeMillis()
                 prefs.edit().putLong(KEY_LAST_SYNC_AT + uid, finished).apply()
                 SyncStatus.Done(pushed, pulled, finished).also { _status.value = it }

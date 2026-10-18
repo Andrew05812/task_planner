@@ -8,6 +8,7 @@ import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.LegacyDbRescuer
 import com.taskplanner.data.local.RecurrenceDao
+import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.UserDao
 import dagger.Module
@@ -52,6 +53,9 @@ object DatabaseModule {
 
     @Provides
     fun provideGroupDao(database: AppDatabase): GroupDao = database.groupDao()
+
+    @Provides
+    fun provideReminderDao(database: AppDatabase): ReminderDao = database.reminderDao()
 
     @Provides
     fun provideRecurrenceDao(database: AppDatabase): RecurrenceDao = database.recurrenceDao()

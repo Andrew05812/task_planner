@@ -6,6 +6,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -246,6 +247,14 @@ class TasksAdapter(
                     TaskStatus.COMPLETED -> R.string.status_done
                 }
             )
+
+            // The bell says "this task will speak up", so a screen reader gets the same news.
+            b.reminderBadge.isVisible = item.pendingReminders > 0
+            if (item.pendingReminders > 0) {
+                b.reminderBadge.contentDescription = context.resources.getQuantityString(
+                    R.plurals.reminder_count, item.pendingReminders, item.pendingReminders
+                )
+            }
 
             val priorityColor = when (task.priority) {
                 com.taskplanner.data.model.Priority.LOW -> R.color.priority_low
