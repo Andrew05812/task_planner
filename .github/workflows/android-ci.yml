@@ -9,7 +9,9 @@ on:
 
 concurrency:
   group: android-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A pull request check is superseded by the next push, so replacing it is right. A run on master
+  # is the record of whether the merged commit is healthy, and cancelling it destroys that record.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-test-lint:
