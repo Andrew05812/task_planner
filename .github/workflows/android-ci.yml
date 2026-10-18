@@ -7,11 +7,10 @@ on:
     branches: [master]
   workflow_dispatch:
 
-concurrency:
-  group: android-ci-${{ github.ref }}
-  # A pull request check is superseded by the next push, so replacing it is right. A run on master
-  # is the record of whether the merged commit is healthy, and cancelling it destroys that record.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# Deliberately no `concurrency` block. Superseding was configured to replace a stale run, but which
+# run gets replaced is not the stale one: two manual runs of the same master commit cancelled each
+# other (measured), leaving that commit with no recorded verdict. Every commit and every run of it
+# deserves its own result, so runs queue on the runner instead of replacing one another.
 
 jobs:
   build-test-lint:
