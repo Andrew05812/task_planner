@@ -2,6 +2,7 @@ package com.taskplanner.data.repository
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.User
 import com.taskplanner.testing.AppFixture
@@ -102,6 +103,22 @@ class SessionRepositoryTest {
         assertTrue("no data may be saved for user 0", fixture.taskDao.getActiveTasksOnce(0L).isEmpty())
         assertEquals(listOf("task of A"), fixture.taskDao.getActiveTasksOnce(first.id).map { it.title })
         assertEquals(emptyList<Task>(), fixture.taskDao.getActiveTasksOnce(secondId))
+    }
+
+    @Test
+    fun `switching profiles keeps everything the first profile owns`() = runTest {
+        val first = fixture.signIn(name = "A", email = "a@example.com")
+        val secondId = fixture.userDao.insertUser(User(email = "b@example.com", name = "B"))
+        val second = fixture.userDao.getUserById(secondId)!!
+        val topic = fixture.addGroup(first.id, "РАБОТА")
+        val task = fixture.taskDao.getTaskById(fixture.addTask(first.id, "water the plants"))!!
+        val rule = fixture.recurrenceRepository.startSeries(task, RepeatUnit.DAY)!!
+
+        fixture.switchTo(second)
+        fixture.switchTo(fixture.userDao.getUserById(first.id)!!)
+
+        assertNotNull("a topic must survive a profile switch", fixture.groupDao.getGroupByUuid(topic.uuid))
+        assertNotNull("a series must survive a profile switch", fixture.recurrenceDao.findByUuid(rule.uuid))
     }
 
     @Test
