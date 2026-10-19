@@ -7,14 +7,24 @@ import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.TrackingSession
 import com.taskplanner.data.model.TrackingState
+import com.taskplanner.data.model.WorkHistoryRow
 import com.taskplanner.data.model.WorkPeriodSummary
 import com.taskplanner.data.model.WorkSession
 import com.taskplanner.data.model.WorkSource
+import com.taskplanner.data.repository.AdjustmentResult
+import com.taskplanner.data.repository.HistorySort
 import com.taskplanner.data.repository.WorkPeriod
+import com.taskplanner.data.repository.WorkWindow
 import com.taskplanner.data.tracking.WorkTimeMath
 import com.taskplanner.testing.AppFixture
 import java.time.LocalDate
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -79,20 +89,20 @@ class WorkStatisticsDaoTest {
         unclassified = addTask(user.id, "Answer the mail", null)
 
         // S1: report, two stretches on day0 and one on day1.
-        session("s1", report, TrackingState.PAUSED, startedAt = instantIn(day0), day = day0)
+        session("s1", report, TrackingState.PAUSED, startedAt = instantIn(day0))
         interval("i1", "s1", report, instantIn(day0), 600L)
         interval("i2", "s1", report, instantIn(day0, 14), 300L)
         interval("i3", "s1", report, instantIn(day1), 1200L)
         // S2: report, one closed stretch on day1 and one still open on day2.
-        session("s2", report, TrackingState.RUNNING, startedAt = instantIn(day1), day = day1,
+        session("s2", report, TrackingState.RUNNING, startedAt = instantIn(day1),
             marker = userId.toString())
         interval("i4", "s2", report, instantIn(day1, 11), 90L)
         openInterval("i5", "s2", report, instantIn(day2))
         // S3: plants, a manually entered stretch on day0.
-        session("s3", plants, TrackingState.COMPLETED, startedAt = instantIn(day0), day = day0)
+        session("s3", plants, TrackingState.COMPLETED, startedAt = instantIn(day0))
         interval("i6", "s3", plants, instantIn(day0, 8), 45L, source = WorkSource.MANUAL)
         // S4: unclassified, a stretch the user threw away and one that stayed.
-        session("s4", unclassified, TrackingState.COMPLETED, startedAt = instantIn(day2), day = day2)
+        session("s4", unclassified, TrackingState.COMPLETED, startedAt = instantIn(day2))
         interval("i7", "s4", unclassified, instantIn(day2), 10_000L)
         fixture.workSessionDao.softDelete("i7", instantIn(day2, 23))
         interval("i8", "s4", unclassified, instantIn(day1, 16), 120L)
@@ -135,7 +145,6 @@ class WorkStatisticsDaoTest {
         task: Task,
         state: TrackingState,
         startedAt: Long,
-        day: Long,
         marker: String? = null
     ) = fixture.trackingSessionDao.insert(
         TrackingSession(
@@ -645,6 +654,247 @@ class WorkStatisticsDaoTest {
             week.toMillis
         )
         assertTrue(week.fromMillis < week.toMillis)
+    }
+
+    // ---------------------------------------------------------------- the history screen's own reads
+
+    @Test
+    fun `the history orders by the run's own total when the screen asks for duration`() = runTest {
+        seed()
+        val window = fixture.workStatisticsRepository.window(day0..day2)
+
+        val rows = fixture.workStatisticsRepository.history(window, HistorySort.DURATION)
+
+        assertEquals(listOf("s1", "s4", "s2", "s3"), rows.map { it.uuid })
+        assertEquals(
+            "s1 carries three stretches, s4 the visible hour only, s2 the closed minute of a run still going",
+            listOf(2_100L, 120L, 90L, 45L),
+            rows.map { it.closedSeconds }
+        )
+        assertEquals(
+            "the open stretch is measured against the clock of the read, and is in no total",
+            (fixture.timeBase.wall - instantIn(day2)) / 1_000L,
+            rows.single { it.uuid == "s2" }.openSeconds
+        )
+    }
+
+    @Test
+    fun `the history groups runs of one task together when the screen asks for the task`() = runTest {
+        seed()
+        val window = fixture.workStatisticsRepository.window(day0..day2)
+
+        val rows = fixture.workStatisticsRepository.history(window, HistorySort.TASK)
+
+        assertEquals(
+            "one task's runs sit next to each other, newest first inside it",
+            listOf("s4", "s3", "s2", "s1"),
+            rows.map { it.uuid }
+        )
+        assertEquals(
+            listOf("Answer the mail", "Water the plants", "Write the report", "Write the report"),
+            rows.map { it.taskTitle }
+        )
+        assertTrue(
+            "and the two runs of the report task keep their own totals",
+            rows.filter { it.taskTitle == "Write the report" }.map { it.closedSeconds }
+                .containsAll(listOf(2_100L, 90L))
+        )
+    }
+
+    @Test
+    fun `an entered stretch counts in its run's total and is labelled as entered`() = runTest {
+        seed()
+        val window = fixture.workStatisticsRepository.window(day0..day2)
+
+        val entered = fixture.workStatisticsRepository.history(window, HistorySort.DATE)
+            .single { it.uuid == "s3" }
+
+        assertEquals(45L, entered.closedSeconds)
+        assertEquals(1, entered.intervals)
+        assertEquals("the list can say which figure was typed in", 1, entered.manual)
+        assertEquals(
+            "and every measured run says it holds none",
+            listOf(0, 0, 0),
+            fixture.workStatisticsRepository.history(window, HistorySort.DATE)
+                .filter { it.uuid != "s3" }.map { it.manual }
+        )
+    }
+
+    @Test
+    fun `a run whose stretches were all thrown away stays in the history with nothing in it`() = runTest {
+        seed()
+        fixture.workSessionDao.softDelete("i8", instantIn(day2, 23))
+        val window = fixture.workStatisticsRepository.window(day0..day2)
+
+        val row = fixture.workStatisticsRepository.history(window, HistorySort.DATE)
+            .single { it.uuid == "s4" }
+
+        assertEquals(
+            "the run happened, so the list still shows it — with what is left of it",
+            0L,
+            row.closedSeconds
+        )
+        assertEquals(0, row.intervals)
+        assertEquals(
+            "and the period total is the smaller for it",
+            600L + 300L + 1_200L + 90L + 45L,
+            fixture.workStatisticsDao.periodSummary(userId, day0, day2 + 1).seconds
+        )
+    }
+
+    @Test
+    fun `the repository's history reads the same rows the dao answers with, filters included`() = runTest {
+        seed()
+        val window = fixture.workStatisticsRepository.window(day0..day2)
+        val now = fixture.timeBase.wall
+        val homeId = fixture.categoryDao.getAllCategoriesOnce(userId).first { it.name == "Home" }.id
+
+        val throughRepository = fixture.workStatisticsRepository.history(window, HistorySort.DATE)
+        val throughDao = fixture.workSessionDao.historyByDate(userId, window.fromMillis, window.toMillis, now, -1L, -1L)
+        val byCategory = fixture.workStatisticsRepository.history(
+            window, HistorySort.DATE, categoryId = homeId
+        )
+        val byTask = fixture.workStatisticsRepository.history(window, HistorySort.DATE, taskId = plants.id)
+
+        assertEquals(throughDao, throughRepository)
+        assertEquals(listOf("s3"), byCategory.map { it.uuid })
+        assertEquals(listOf("s3"), byTask.map { it.uuid })
+        assertEquals(45L, byCategory.single().closedSeconds)
+        assertEquals(
+            "a filter narrows the list and changes no figure in it",
+            throughRepository.single { it.uuid == "s3" }.intervals,
+            byCategory.single().intervals
+        )
+    }
+
+    @Test
+    fun `no profile means no history rather than somebody else's`() = runTest {
+        seed()
+        fixture.sessionRepository.endSession()
+        val window = fixture.workStatisticsRepository.window(day0..day2)
+
+        assertTrue(fixture.workStatisticsRepository.history(window, HistorySort.DATE).isEmpty())
+        assertTrue(fixture.workStatisticsRepository.intervalsOf("s1").isEmpty())
+    }
+
+    @Test
+    fun `an expanded entry lists its stretches oldest first and leaves the thrown-away one out`() = runTest {
+        seed()
+
+        val expanded = fixture.workStatisticsRepository.intervalsOf("s1")
+        val partlyDiscarded = fixture.workStatisticsRepository.intervalsOf("s4")
+
+        assertEquals(listOf("i1", "i2", "i3"), expanded.map { it.uuid })
+        assertEquals(listOf(600L, 300L, 1_200L), expanded.map { it.durationSeconds })
+        assertEquals(
+            "an expansion says which of these the timer measured",
+            listOf("TRACKER", "TRACKER", "TRACKER"),
+            expanded.map { it.source }
+        )
+        assertEquals(listOf("i8"), partlyDiscarded.map { it.uuid })
+        assertTrue(
+            "the deleted stretch is not hidden from the database, only from this list",
+            fixture.workSessionDao.findIncludingDeleted("i7")!!.isDeleted
+        )
+    }
+
+    @Test
+    fun `a corrected stretch keeps the figure it was changed from, oldest change first`() = runTest {
+        seed()
+        val firstStart = instantIn(day0, 9)
+        val firstEnd = firstStart + 1_800_000L
+        assertEquals(
+            AdjustmentResult.Accepted("i2"),
+            fixture.workTrackingRepository.correctInterval("i2", firstStart, firstEnd, "measured late")
+        )
+
+        // Real time between the two writes, so the correction history has an order to be read in.
+        fixture.timeBase.advance(1_000L)
+        val secondEnd = firstStart + 2_400_000L
+        fixture.workTrackingRepository.correctInterval("i2", firstStart, secondEnd, "ended early")
+
+        val corrections = fixture.workStatisticsRepository.correctionsOf("i2")
+        assertEquals(2, corrections.size)
+        assertEquals(listOf(firstEnd, secondEnd), corrections.map { it.newEndedAt })
+        assertEquals(
+            "the second change records what the first one left behind, not what the timer said",
+            corrections.first().newEndedAt,
+            corrections.last().oldEndedAt
+        )
+        assertEquals(instantIn(day0, 14), corrections.first().oldStartedAt)
+        val row = fixture.workSessionDao.getByUuid("i2")!!
+        assertEquals(2_400L, row.durationSeconds)
+        assertEquals(WorkSource.TRACKER, row.source)
+        assertEquals(
+            "and every figure the screens read is built on the corrected numbers",
+            closedInRange(day0, day2 + 1).sumOf { it.durationSeconds!! },
+            fixture.workStatisticsDao.periodSummary(userId, day0, day2 + 1).seconds
+        )
+    }
+
+    @Test
+    /**
+     * The list is a `GROUP BY` over two tables, so Room cannot infer a Flow from its own result and the
+     * screen watches the two change signals instead. This is the test that the signal is enough: a write
+     * anywhere in the history reaches the list with nothing polling it.
+     */
+    fun `the history list rebuilds itself when a write lands, without a timer`() = runBlocking {
+        seed()
+        val window = fixture.workStatisticsRepository.window(day0..day2)
+
+        val lists = rebuildAround(window) {
+            fixture.workTrackingRepository.recordManualInterval(
+                unclassified, instantIn(day0, 20), instantIn(day0, 20) + 300_000L
+            )
+        }
+
+        assertEquals(2, lists.size)
+        assertEquals(listOf("s4", "s2", "s3", "s1"), lists.first().map { it.uuid })
+        val rebuilt = lists.last()
+        val newEntry = rebuilt.single { it.intervals == 1 && it.manual == 1 && it.uuid != "s3" }
+        assertEquals(
+            "the entered run sits where the order the screen asked for puts it, by the clock instant",
+            listOf("s4", "s2", newEntry.uuid, "s3", "s1"),
+            rebuilt.map { it.uuid }
+        )
+        assertEquals(300L, newEntry.closedSeconds)
+        assertEquals(
+            "nothing that was already in the list changed its figure",
+            mapOf("s1" to 2_100L, "s2" to 90L, "s3" to 45L, "s4" to 120L),
+            rebuilt.filter { it.uuid != newEntry.uuid }
+                .associate { it.uuid to it.closedSeconds }
+        )
+    }
+
+    /**
+     * The first two answers of the history Flow, with [write] run only after the list has answered once.
+     *
+     * `fixture.awaitIdle()` cannot be used in this test: it blocks the thread the collection runs on, so
+     * the watcher would never subscribe and the write would land before anything was listening. Waiting on
+     * the first answer is both what makes the test work and the proof it needs — the write is known to
+     * have happened while the screen was already watching the list.
+     */
+    private suspend fun rebuildAround(
+        window: WorkWindow,
+        write: suspend () -> Unit
+    ): List<List<WorkHistoryRow>> = coroutineScope {
+        val seen = ArrayList<List<WorkHistoryRow>>()
+        val firstAnswer = CompletableDeferred<List<WorkHistoryRow>>()
+        val twoAnswers = CompletableDeferred<Unit>()
+        val watching = launch {
+            fixture.workStatisticsRepository.observeHistory(window, HistorySort.DATE)
+                .take(2)
+                .collect { rows ->
+                    seen.add(rows)
+                    if (seen.size == 1) firstAnswer.complete(rows) else twoAnswers.complete(Unit)
+                }
+        }
+
+        withTimeout(5_000L) { firstAnswer.await() }
+        write()
+        withTimeout(5_000L) { twoAnswers.await() }
+        watching.cancel()
+        seen.toList()
     }
 
     /** `EXPLAIN QUERY PLAN` for one statement, as the text SQLite reports it. */

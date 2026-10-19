@@ -7,6 +7,7 @@ import com.taskplanner.data.model.TrackingSession
 import com.taskplanner.data.model.TrackingState
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.WorkSession
+import com.taskplanner.data.model.WorkSource
 import com.taskplanner.data.tracking.ConflictResolution
 import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.data.tracking.WorkTimeMath
@@ -67,6 +68,10 @@ class WorkTrackingRepositoryTest {
         fixture.workSessionDao.getAllForUser(userId).sortedBy { it.startedAt }
 
     private suspend fun openIntervals(): List<WorkSession> = intervals().filter { it.isOpen }
+
+    /** The correction history of one interval, as this fixture's own profile may read it. */
+    private suspend fun correctionsOf(intervalUuid: String) =
+        fixture.workSessionDao.getCorrectionsOf(intervalUuid, userId)
 
     /** Starts work on [task] after [forMillis] of real time has passed since the fixture began. */
     private suspend fun startAfter(task: Task, forMillis: Long): TrackingOutcome {
@@ -564,5 +569,353 @@ class WorkTrackingRepositoryTest {
         assertEquals(TrackingPhase.RUNNING, measured.phase)
         assertEquals(45L, measured.liveSeconds)
         assertEquals(0L, measured.closedSeconds)
+    }
+
+    // ---------------------------------------------------------------- time the user types in
+
+    /**
+     * A stretch of wall time the fixture's clock puts in the past, so an entered interval is not confused
+     * with the run a test may have started at "now".
+     */
+    private fun entered(beforeNow: Long, seconds: Long): Pair<Long, Long> {
+        val startedAt = fixture.timeBase.wall - beforeNow
+        return startedAt to startedAt + seconds * 1_000L
+    }
+
+    @Test
+    fun `a manual entry stores a completed session and one closed interval marked as hand-entered`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        val (start, end) = entered(beforeNow = 3_600_000L, seconds = 1_800L)
+
+        val result = fixture.workTrackingRepository.recordManualInterval(report, start, end)
+
+        val intervalUuid = (result as AdjustmentResult.Accepted).intervalUuid
+        val session = sessions().single()
+        assertEquals(TrackingState.COMPLETED, session.state)
+        assertEquals(report.id, session.taskId)
+        assertNull("an entered stretch holds no timer", session.runningMarker)
+        assertEquals(start, session.startedAt)
+        assertEquals(end, session.stoppedAt)
+        val stored = fixture.workSessionDao.getByUuid(intervalUuid)!!
+        assertEquals(session.uuid, stored.trackingSessionUuid)
+        assertEquals(WorkSource.MANUAL, stored.source)
+        assertNull("a hand-entered stretch is never the open one", stored.openMarker)
+        assertEquals(end, stored.endedAt)
+        assertEquals(1_800L, stored.durationSeconds)
+        assertEquals(WorkTimeMath.epochDayOf(start), stored.localDay)
+        assertTrue("the entry is on the board the history screen reads", stored.taskId == report.id)
+    }
+
+    @Test
+    fun `an entry that spans no time is refused and writes nothing`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        val start = fixture.timeBase.wall - 600_000L
+
+        assertEquals(
+            "an interval that ends where it begins measures nothing",
+            AdjustmentResult.Rejected(AdjustmentRejection.START_NOT_BEFORE_END),
+            fixture.workTrackingRepository.recordManualInterval(report, start, start)
+        )
+        assertEquals(
+            "and neither does one that ends before it starts",
+            AdjustmentResult.Rejected(AdjustmentRejection.START_NOT_BEFORE_END),
+            fixture.workTrackingRepository.recordManualInterval(report, start, start - 1_000L)
+        )
+        assertTrue(sessions().isEmpty())
+        assertTrue(intervals().isEmpty())
+    }
+
+    @Test
+    fun `an entry over work that is already measured comes back with the rows in the way and nothing written`() = runTest {
+        val (report, draft) = signInWithTwoTasks()
+        val (start, end) = entered(beforeNow = 3_600_000L, seconds = 1_800L)
+        fixture.workTrackingRepository.recordManualInterval(report, start, end)
+
+        // Half of the entered stretch, asked for under another task.
+        val result = fixture.workTrackingRepository.recordManualInterval(
+            draft, end - 900_000L, end + 900_000L
+        )
+
+        val conflict = result as AdjustmentResult.Overlapping
+        assertEquals(listOf(start to end), conflict.intervals.map { it.startedAt to it.endedAt })
+        assertEquals("the first entry is not joined by a second account of it", 1, intervals().size)
+        assertEquals(1, sessions().size)
+    }
+
+    @Test
+    fun `a stretch ending exactly when the timer began does not conflict with the running one`() = runTest {
+        val (report, draft) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        val open = openIntervals().single()
+
+        val result = fixture.workTrackingRepository.recordManualInterval(
+            draft, open.startedAt - 1_800_000L, open.startedAt
+        )
+
+        assertTrue("touching at one instant is not sharing time", result is AdjustmentResult.Accepted)
+        assertEquals(2, intervals().size)
+        assertEquals("the run is still the only open stretch", 1, openIntervals().size)
+    }
+
+    @Test
+    fun `an entry reaching into a running stretch is refused as a conflict`() = runTest {
+        val (report, draft) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        val open = openIntervals().single()
+
+        val result = fixture.workTrackingRepository.recordManualInterval(
+            draft, open.startedAt, open.startedAt + 600_000L
+        )
+
+        val conflict = result as AdjustmentResult.Overlapping
+        assertEquals(
+            "the conflict names the stretch the user has to end first",
+            listOf(open.uuid),
+            conflict.intervals.map { it.uuid }
+        )
+        assertEquals(1, intervals().size)
+    }
+
+    @Test
+    fun `ten identical entries asked for at once leave exactly one of them`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        val (start, end) = entered(beforeNow = 3_600_000L, seconds = 1_800L)
+        val repository = fixture.workTrackingRepository
+
+        val results = (1..10).map { async { repository.recordManualInterval(report, start, end) } }.awaitAll()
+
+        assertEquals(1, results.count { it is AdjustmentResult.Accepted })
+        assertEquals(
+            "the nine that came second are conflicts the user can see, not silent no-ops",
+            9,
+            results.count { it is AdjustmentResult.Overlapping }
+        )
+        assertEquals(1, intervals().size)
+        assertEquals(1, sessions().size)
+    }
+
+    @Test
+    fun `a correction stores the new numbers and remembers what they were`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        fixture.timeBase.advance(600_000L)
+        fixture.workTrackingRepository.stop(report)
+        val measured = intervals().single()
+
+        val (start, end) = entered(beforeNow = 7_200_000L, seconds = 900L)
+        val result = fixture.workTrackingRepository.correctInterval(
+            measured.uuid, start, end, "started the timer late"
+        )
+
+        assertEquals(AdjustmentResult.Accepted(measured.uuid), result)
+        val corrected = fixture.workSessionDao.getByUuid(measured.uuid)!!
+        assertEquals(start, corrected.startedAt)
+        assertEquals(end, corrected.endedAt)
+        assertEquals(900L, corrected.durationSeconds)
+        assertEquals(
+            "the day the work is filed under follows the corrected start",
+            WorkTimeMath.epochDayOf(start),
+            corrected.localDay
+        )
+        assertEquals(
+            "a correction does not change how the stretch was obtained",
+            WorkSource.TRACKER,
+            corrected.source
+        )
+        val correction = correctionsOf(measured.uuid).single()
+        assertEquals(measured.startedAt, correction.oldStartedAt)
+        assertEquals(measured.endedAt, correction.oldEndedAt)
+        assertEquals(start, correction.newStartedAt)
+        assertEquals(end, correction.newEndedAt)
+        assertEquals("started the timer late", correction.reason)
+        assertEquals(userId, correction.userId)
+    }
+
+    @Test
+    fun `a correction keeps the anomaly the measurement recorded and the blank reason is not stored`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        fixture.timeBase.shiftWall(3_600_000L)
+        fixture.timeBase.advance(300_000L)
+        fixture.workTrackingRepository.stop(report)
+        val measured = intervals().single()
+        assertNotNull(measured.clockAnomaly)
+
+        val (start, end) = entered(beforeNow = 1_800_000L, seconds = 300L)
+        fixture.workTrackingRepository.correctInterval(measured.uuid, start, end, "   ")
+
+        val corrected = fixture.workSessionDao.getByUuid(measured.uuid)!!
+        assertEquals(
+            "the user's opinion about the numbers does not undo what the clocks said",
+            measured.clockAnomaly,
+            corrected.clockAnomaly
+        )
+        assertNull(
+            "and an empty reason is left empty rather than turned into words nobody typed",
+            correctionsOf(measured.uuid).single().reason
+        )
+    }
+
+    @Test
+    fun `a stretch still being measured is not the user's to correct`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        val open = openIntervals().single()
+        val (start, end) = entered(beforeNow = 1_800_000L, seconds = 300L)
+
+        val result = fixture.workTrackingRepository.correctInterval(open.uuid, start, end, null)
+
+        assertEquals(AdjustmentResult.Rejected(AdjustmentRejection.STILL_BEING_MEASURED), result)
+        assertEquals("the timer keeps running", open.uuid, openIntervals().single().uuid)
+        assertNull(fixture.workSessionDao.getByUuid(open.uuid)!!.endedAt)
+        assertTrue(correctionsOf(open.uuid).isEmpty())
+    }
+
+    @Test
+    fun `a correction that would land on other work is refused and the row keeps its numbers`() = runTest {
+        val (report, draft) = signInWithTwoTasks()
+        val (ownStart, ownEnd) = entered(beforeNow = 7_200_000L, seconds = 600L)
+        fixture.workTrackingRepository.recordManualInterval(report, ownStart, ownEnd)
+        val (otherStart, otherEnd) = entered(beforeNow = 3_600_000L, seconds = 600L)
+        fixture.workTrackingRepository.recordManualInterval(draft, otherStart, otherEnd)
+        val movable = fixture.workSessionDao.getByUuid(
+            intervals().first { it.startedAt == ownStart }.uuid
+        )!!
+
+        val result = fixture.workTrackingRepository.correctInterval(
+            movable.uuid, otherStart - 300_000L, otherEnd, "wrong task"
+        )
+
+        val conflict = result as AdjustmentResult.Overlapping
+        assertEquals(listOf(otherStart to otherEnd), conflict.intervals.map { it.startedAt to it.endedAt })
+        val unchanged = fixture.workSessionDao.getByUuid(movable.uuid)!!
+        assertEquals(ownStart, unchanged.startedAt)
+        assertEquals(ownEnd, unchanged.endedAt)
+        assertTrue(
+            "a refused correction leaves no history of itself",
+            correctionsOf(movable.uuid).isEmpty()
+        )
+    }
+
+    @Test
+    fun `a correction of a row another profile owns, or of no row at all, is refused`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        val (start, end) = entered(beforeNow = 3_600_000L, seconds = 600L)
+        val mine = fixture.workTrackingRepository.recordManualInterval(report, start, end) as
+            AdjustmentResult.Accepted
+
+        // A second profile, with its own entry, and then back to the first.
+        val other = fixture.signIn(name = "Other Person", email = "other@example.com")
+        val theirStart = start - 86_400_000L
+        val theirEnd = start - 82_800_000L
+        val theirs = fixture.workTrackingRepository.recordManualInterval(
+            addTask(other.id, "Somebody else's work"), theirStart, theirEnd
+        ) as AdjustmentResult.Accepted
+        fixture.switchTo(fixture.userDao.getUserById(userId)!!)
+
+        assertEquals(
+            "the uuid is not a permission; the row belongs to the profile that wrote it",
+            AdjustmentResult.Rejected(AdjustmentRejection.NOT_FOUND),
+            fixture.workTrackingRepository.correctInterval(theirs.intervalUuid, start, end, null)
+        )
+        assertEquals(
+            AdjustmentResult.Rejected(AdjustmentRejection.NOT_FOUND),
+            fixture.workTrackingRepository.correctInterval("no-such-interval", start, end, null)
+        )
+        val untouched = fixture.workSessionDao.getByUuid(theirs.intervalUuid)!!
+        assertEquals(theirStart, untouched.startedAt)
+        assertEquals(theirEnd, untouched.endedAt)
+        assertTrue(correctionsOf(theirs.intervalUuid).isEmpty())
+        assertNotNull(fixture.workSessionDao.getByUuid(mine.intervalUuid))
+    }
+
+    @Test
+    fun `throwing an interval away hides it and keeps the corrections it had`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        fixture.timeBase.advance(600_000L)
+        fixture.workTrackingRepository.stop(report)
+        val measured = intervals().single()
+        val (start, end) = entered(beforeNow = 1_800_000L, seconds = 300L)
+        fixture.workTrackingRepository.correctInterval(measured.uuid, start, end, "the run began early")
+
+        val result = fixture.workTrackingRepository.removeInterval(measured.uuid)
+
+        assertEquals(AdjustmentResult.Accepted(measured.uuid), result)
+        val kept = fixture.workSessionDao.findIncludingDeleted(measured.uuid)!!
+        assertTrue("the history hides the row rather than erasing it", kept.isDeleted)
+        assertNotNull(kept.deletedAt)
+        assertEquals(
+            "the session it belonged to is untouched",
+            1,
+            sessions().size
+        )
+        assertEquals(
+            "and the run it came from now reads as having no stretches left to show",
+            0,
+            fixture.workSessionDao.countIntervalsOf(kept.trackingSessionUuid)
+        )
+        assertEquals(
+            "what it was corrected from is still there to be audited",
+            1,
+            correctionsOf(measured.uuid).size
+        )
+        assertEquals(
+            "a row that was thrown away is not the user's to correct either",
+            AdjustmentResult.Rejected(AdjustmentRejection.NOT_FOUND),
+            fixture.workTrackingRepository.correctInterval(measured.uuid, start, end, null)
+        )
+    }
+
+    @Test
+    fun `an open stretch cannot be thrown away`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        val open = openIntervals().single()
+
+        val result = fixture.workTrackingRepository.removeInterval(open.uuid)
+
+        assertEquals(AdjustmentResult.Rejected(AdjustmentRejection.STILL_BEING_MEASURED), result)
+        assertEquals(1, openIntervals().size)
+        assertEquals(TrackingState.RUNNING, sessions().single().state)
+    }
+
+    @Test
+    fun `an adjustment without a signed-in profile writes nothing`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        val (start, end) = entered(beforeNow = 1_800_000L, seconds = 300L)
+        fixture.sessionRepository.endSession()
+
+        assertEquals(
+            AdjustmentResult.Rejected(AdjustmentRejection.NO_PROFILE),
+            fixture.workTrackingRepository.recordManualInterval(report, start, end)
+        )
+        assertTrue(sessions().isEmpty())
+        assertTrue(intervals().isEmpty())
+    }
+
+    @Test
+    fun `a manual entry, a correction and a removal are each left pending for sync`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        val (start, end) = entered(beforeNow = 3_600_000L, seconds = 600L)
+        val accepted = fixture.workTrackingRepository.recordManualInterval(report, start, end) as
+            AdjustmentResult.Accepted
+
+        val (newStart, newEnd) = entered(beforeNow = 7_200_000L, seconds = 600L)
+        fixture.workTrackingRepository.correctInterval(accepted.intervalUuid, newStart, newEnd, null)
+        val row = fixture.workSessionDao.getByUuid(accepted.intervalUuid)!!
+        val correction = correctionsOf(accepted.intervalUuid).single()
+
+        assertEquals(SyncState.PENDING, row.syncState)
+        assertEquals(SyncState.PENDING, correction.syncState)
+        assertEquals(SyncState.PENDING, sessions().single().syncState)
+
+        fixture.workTrackingRepository.removeInterval(accepted.intervalUuid)
+
+        assertEquals(
+            "a row the user threw away still has to reach the other devices",
+            SyncState.DELETING,
+            fixture.workSessionDao.findIncludingDeleted(accepted.intervalUuid)!!.syncState
+        )
     }
 }
