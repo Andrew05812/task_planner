@@ -107,12 +107,38 @@ completed-task count over `completed_at`, average interval length, session count
 `GROUP BY local_day` series for the trend. Day-of-week/month boundaries are computed with `java.time`
 and passed as epoch-day bounds, so no query loads a whole profile.
 
+## The history screen
+
+One entry per tracking session, in the period and the order the user named. The header and the list come
+from the same two aggregates the statistics screens use, so a figure on this screen cannot disagree with
+the figure beside it, and the screen itself computes nothing.
+
+The stretches of an entry are read only when somebody opens it — a month of history is a hundred sessions,
+and fetching every interval to draw a list is the row-by-row walk the aggregation rule exists to prevent.
+The list is a `GROUP BY` across both tables, which Room cannot derive a Flow from, so the screen watches
+the last-write signal of each table (`MAX(updated_at)`) and re-runs the grouped query when either moves:
+a pause, a stop or a correction written by another screen reaches the list without a timer and without a
+refresh.
+
+Corrections and deletions go through the tracking repository, which answers with one of four shapes the
+screen has to tell apart: a change that landed, a change that cannot be made, a stretch another
+measurement already occupies (§13 — the conflicting rows are named and nothing is written until the user
+has seen them), and a storage failure. A closed interval is hidden rather than deleted, and every change
+appends a row to `work_interval_corrections`, so "this was measured" and "this is what the user now
+believes" stay distinguishable.
+
+Hand-entered and corrected instants are typed as `uuuu-MM-dd HH:mm` and parsed in strict resolution: an
+unparseable text, a day that does not exist in that year (`2025-02-29`), an empty stretch or one that ends
+before it starts is refused with the field named, and nothing reaches the database on a guess.
+
 ## Where it plugs in
 
 `MIGRATION_11_12` adds `tasks.completed_at`, both work tables and their indices — three
 `CREATE TABLE`/`CREATE INDEX` statements and one `ALTER TABLE … ADD COLUMN`, no table rebuild, no row
-rewritten. Backup goes to `formatVersion` 1.2, importing 1.0 and 1.1 unchanged; the new arrays carry
-uuids and never a device-local row id. Sync gains `users/{uid}/tracking_sessions/{uuid}` and
-`users/{uid}/work_sessions/{uuid}` with matching rules, and the offline path stays exactly as it is now:
-with no `google-services.json` the cloud is never contacted, so nothing here is claimed as a tested
-round trip.
+rewritten.
+
+Not wired yet, and deliberately left out of this sub-stage: the tracking tables are **not** in the backup
+file (still `formatVersion` 1.1, which exports and imports unchanged) and have no Firestore collection,
+path or security rule. Measured work therefore stays on the device it was measured on, survives export
+and import only as what the local database holds, and is not claimed as a round trip. Carrying it through
+backup and sync is a later stage's work.

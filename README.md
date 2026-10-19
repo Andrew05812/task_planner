@@ -11,7 +11,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 412 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 593 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -31,7 +31,7 @@ On first start `LegacyDbRescuer` looks for a database in the old locations (`cac
 recently it was updated, and copies the richest one — together with its `-wal` and `-shm` sidecars —
 into the permanent location. Nothing is deleted: the legacy files stay where they were.
 
-Migrations run for every retained schema version (1 → 11) and are covered by tests that execute the
+Migrations run for every retained schema version (1 → 12) and are covered by tests that execute the
 production `Migration` objects against real SQLite files built from the exported schema JSON. There
 is deliberately **no** `fallbackToDestructiveMigration()`: if the app meets a schema it does not
 know, it refuses to open the database and the rows stay on disk untouched, instead of the user
@@ -59,6 +59,10 @@ waking up to an empty list.
   by category, an overdue and overload signal per day, overlapping tasks laid side by side instead of
   hidden, and drag-and-drop that moves a task to another day, re-arms its reminders and queues the
   change for sync (see *Calendar* below).
+- **Time tracking**: Start / Pause / Resume / Stop on a task, one running timer per profile enforced by
+  the database rather than by the UI, and a history of every measured stretch with period filters, three
+  orderings, hand-entered intervals and corrections of closed ones — the earlier account kept, conflicts
+  shown instead of written over (see *Time tracking* below).
 - **Backup**: versioned JSON (`1.1`) exported and imported through the Storage Access Framework, so
   the app never asks for a broad storage permission. The file carries tasks with their planned window,
   categories, topics, repeat patterns and lead times. Import previews what is in the file first, then
@@ -196,6 +200,40 @@ nine, for an hour and a half" is a plan the user described, and a deadline alone
   already open. The three view levels share one anchor and one aggregation, so switching from month to
   week to day cannot change which tasks a day contains — only how many days are on screen.
 
+## Time tracking
+
+Schema version 12 gave measured work its own two tables: `tracking_sessions` (a start–stop run, with the
+task it was worked on snapshotted by id, uuid and title) and `work_sessions` (one closed or open stretch
+of that run). Nothing about time is stored on the task row, so a task's plan and what it actually took
+stay separate figures.
+
+- **One running timer is a database rule**: `tracking_sessions` has a unique index on
+  `(user_id, open_marker)`, and an interval carries its session's uuid as that marker while it is open and
+  NULL once it closes. A double tap, a second screen or a retried transaction is rejected by SQLite rather
+  than by a UI courtesy.
+- **The row is the account of what is running.** The ticker's number is the stored `started_at` plus the
+  already-closed intervals of the same session, so the run survives a process kill, a reboot and a screen
+  nobody opened. Within one process the display also consults the monotonic clock through an injected
+  `TimeBase`; when an interval closes, a wall-clock difference that is negative or disagrees with the
+  monotonic reading by more than a minute is stored in `clock_anomaly` and the monotonic figure is used.
+  A moved system clock is recorded, never silently clamped to zero.
+- **Every total is answered by SQL.** Per task, per category, per day/week/month or an arbitrary range over
+  `local_day` (the epoch day resolved once at measurement, so DST and travel cannot re-file a finished
+  afternoon), completed-task counts, average stretch length and the history list's grouping. Screens read
+  aggregates; none of them loads a profile to sum it in Kotlin.
+- **History keeps its own corrections.** Editing a closed stretch appends a row to
+  `work_interval_corrections` with the instant pair it replaced; throwing a stretch away hides it
+  (`is_deleted`) and leaves the numbers and the correction chain in the database. A hand-entered interval
+  that overlaps measured work is refused with the blocking rows named, and nothing is written until the
+  user has seen them.
+- **The history screen computes nothing.** Its header and its list come from the same aggregates the
+  statistics screens use; an entry's stretches are read only when it is opened; and because the list is a
+  `GROUP BY` Room cannot derive a Flow from, the screen watches each table's last-write signal and re-runs
+  the grouped query when either moves — so a pause or a stop written elsewhere reaches the list without a
+  refresh.
+
+`docs/TIME_TRACKING.md` holds the same account in full, including what is deliberately not wired yet.
+
 ## Backup and sync of the new data
 
 The rows Stage 2 added — repeat patterns, lead times, the planned window — are worth nothing if they
@@ -291,9 +329,16 @@ provide.
 
 - `docs/FIREBASE_SETUP.md` — enabling Google sign-in and cloud sync.
 - `docs/BACKUP_AND_SYNC.md` — the backup file format, import rules and how sync resolves conflicts.
+- `docs/TIME_TRACKING.md` — the tracking schema, the clock rules, the aggregation contract and what the
+  history screen is allowed to read.
 
 ## Known limitations
 
+- Measured work does not leave the device yet. `tracking_sessions`, `work_sessions` and
+  `work_interval_corrections` are in no backup file (the format is still `1.1`) and have no Firestore
+  collection, path or security rule, so a history built on one phone is not on another and an export does
+  not carry it. It stays out of the file rather than in it as an unreviewed shape: carrying the tracking
+  tables through backup and sync is a later stage's work.
 - Cloud sync and Google sign-in are untested against a live Firebase project: no project
   configuration is committed, by design. The code paths degrade to local-only when the placeholders
   in `gradle.properties` are unset, and the local paths are what the test suite covers. The same
