@@ -170,6 +170,8 @@ class SettingsFragment : Fragment() {
                     summary.taskCount,
                     summary.categoryCount,
                     summary.groupCount,
+                    summary.seriesCount,
+                    summary.reminderCount,
                     summary.archivedCount,
                     created
                 )

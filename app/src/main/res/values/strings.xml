@@ -175,11 +175,11 @@
     <string name="sync_status_format">Sync status: %1$s</string>
     <string name="version_format">Version %1$s</string>
     <string name="import_preview_title">Backup contents</string>
-    <string name="import_preview_summary">Tasks: %1$d, categories: %2$d, topics: %3$d, archived: %4$d, created: %5$s</string>
+    <string name="import_preview_summary">Tasks: %1$d, categories: %2$d, topics: %3$d, repeating series: %4$d, reminders: %5$d, archived: %6$d, created: %7$s</string>
     <string name="import_mode_merge">Merge with existing data</string>
     <string name="import_mode_replace">Replace all data</string>
     <string name="import_replace_confirm_title">Replace all data?</string>
-    <string name="import_replace_confirm_message">Current tasks, categories and topics will be removed and replaced by the backup. A safety copy is written before replacing.</string>
+    <string name="import_replace_confirm_message">Current tasks, categories, topics, repeating series and reminders will be removed and replaced by the backup. A safety copy is written before replacing.</string>
     <string name="import_success">Backup imported successfully</string>
     <string name="export_success">Backup exported successfully</string>
     <string name="error_backup_invalid">This file is not a valid Task Planner backup</string>

@@ -8,6 +8,7 @@ import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -70,25 +71,41 @@ class ReminderRepository @Inject constructor(
      * count back from, and the editor has to say that instead of accepting chips that would never ring.
      */
     suspend fun applyReminders(task: Task, offsets: List<Int>?): Boolean {
-        val dueAt = task.dueDate ?: run {
+        val subject = task.withIdentity()
+        val dueAt = subject.dueDate ?: run {
             // The deadline went away, so the lead times measured from it have no meaning left.
-            retireTasks(listOf(task.uuid))
+            retireTasks(listOf(subject.uuid))
             return false
         }
         val now = System.currentTimeMillis()
-        val live = reminderDao.getLiveForTask(task.uuid)
+        val live = reminderDao.getLiveForTask(subject.uuid)
 
         val kept = if (offsets == null) {
             live.map { it.offsetMinutes }
         } else {
             val desired = offsets.map { it.coerceAtLeast(0) }.distinct()
-            live.map { it.offsetMinutes }.filter { it !in desired }.forEach { retireOffset(task.uuid, it) }
+            live.map { it.offsetMinutes }.filter { it !in desired }.forEach { retireOffset(subject.uuid, it) }
             desired
         }
         // Only the lead times the user kept are written, so a row retired a moment ago can never be
         // put back on the clock by the same save.
-        kept.forEach { upsert(task, dueAt, it, now) }
+        kept.forEach { upsert(subject, dueAt, it, now) }
         return true
+    }
+
+    /**
+     * Gives a task the stable identity its lead times are keyed on.
+     *
+     * A reminder names its task by uuid, and a row that predates uuids has none. Writing the lead time
+     * against a blank key would leave it firing on this device only — an export has to drop it, because
+     * the file's task carries a uuid the reminder does not name. So the row is given its identity at
+     * the first reminder, the same way an import or an account handover gives it.
+     */
+    private suspend fun Task.withIdentity(): Task {
+        if (uuid.isNotBlank()) return this
+        val identity = UUID.randomUUID().toString()
+        taskDao.setUuid(id, identity)
+        return copy(uuid = identity)
     }
 
     /**

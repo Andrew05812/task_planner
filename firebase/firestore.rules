@@ -36,6 +36,22 @@ service cloud.firestore {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && isIdempotent(['uuid', 'name', 'updated_at']);
       }
+
+      // A series travels with its cursor: which occurrence the pattern currently exposes is part of
+      // what the user configured, so anchor_at and cursor_at must be present in every write.
+      match /recurrence_rules/{ruleId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) &&
+          isIdempotent(['uuid', 'anchor_at', 'cursor_at', 'updated_at']);
+      }
+
+      // task_uuid is the only link a reminder has to its task; without it the document would be an
+      // alarm with nothing to wake the user for.
+      match /reminders/{reminderId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) &&
+          isIdempotent(['uuid', 'task_uuid', 'offset_minutes', 'updated_at']);
+      }
     }
 
     // Default deny for everything outside the users/{uid} layout above.

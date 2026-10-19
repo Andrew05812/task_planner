@@ -17,8 +17,11 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.RecurrenceDao
+import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.UserDao
+import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.User
 import com.taskplanner.data.repository.SessionRepository
 import dagger.Lazy
@@ -46,6 +49,8 @@ class AuthRepository @Inject constructor(
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
     private val groupDao: GroupDao,
+    private val recurrenceDao: RecurrenceDao,
+    private val reminderDao: ReminderDao,
     private val database: AppDatabase
 ) {
 
@@ -153,8 +158,33 @@ class AuthRepository @Inject constructor(
             database.withTransaction {
                 val mergedCategories = attachCategories(sourceUserId, targetUser.id)
                 attachGroups(sourceUserId, targetUser.id)
+                // Before the tasks, so an instance the account already knows arrives together with
+                // the pattern that produced it rather than as an orphan row.
+                attachRules(sourceUserId, targetUser.id)
                 attachTasks(sourceUserId, targetUser.id, mergedCategories)
+                attachReminders(sourceUserId, targetUser.id)
             }
+        }
+    }
+
+    /**
+     * Series move as they are: [RecurrenceRule.uuid] is the primary key, so no rule of the signed-in
+     * account can already hold this identity, and the row only needs a new owner. The cursor goes
+     * with it, which is what keeps a moved series from repeating instances the user finished.
+     */
+    private suspend fun attachRules(sourceUserId: Long, targetUserId: Long) {
+        recurrenceDao.getAllRowsOnce(sourceUserId).forEach { source ->
+            recurrenceDao.upsertRule(source.copy(userId = targetUserId))
+        }
+    }
+
+    /**
+     * Lead times move the same way: the (task, offset) unique index means the account cannot already
+     * hold the same reminder, so there is nothing to merge and the alarm keeps its own slot.
+     */
+    private suspend fun attachReminders(sourceUserId: Long, targetUserId: Long) {
+        reminderDao.getAllRowsOnce(sourceUserId).forEach { source ->
+            reminderDao.update(source.copy(userId = targetUserId))
         }
     }
 
