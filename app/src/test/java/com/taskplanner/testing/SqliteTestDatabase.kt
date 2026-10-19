@@ -37,18 +37,29 @@ class SqliteTestDatabase private constructor(
         connection.createStatement().use { it.execute(sql) }
     }
 
-    fun rows(sql: String): List<List<String?>> {
-        return connection.createStatement().use { statement ->
-            statement.executeQuery(sql).use { result ->
-                val columns = result.metaData.columnCount
-                val out = ArrayList<List<String?>>()
-                while (result.next()) {
-                    out += (1..columns).map { index -> result.getString(index) }
-                }
-                out
-            }
+    fun rows(sql: String): List<List<String?>> =
+        connection.createStatement().use { collect(it.executeQuery(sql)) }
+
+    /**
+     * The same read with bound arguments, so a test can run a statement with placeholders instead of
+     * pasting values into it — which is how the DAO's own query reaches SQLite.
+     */
+    fun rows(sql: String, args: List<Any>): List<List<String?>> =
+        connection.prepareStatement(sql).use { statement ->
+            args.forEachIndexed { index, value -> statement.setObject(index + 1, value) }
+            collect(statement.executeQuery())
         }
-    }
+
+    /** Reads a result set to the end; the statement that produced it must stay open until this returns. */
+    private fun collect(result: java.sql.ResultSet): List<List<String?>> =
+        result.use {
+            val columns = it.metaData.columnCount
+            val out = ArrayList<List<String?>>()
+            while (it.next()) {
+                out += (1..columns).map { index -> it.getString(index) }
+            }
+            out
+        }
 
     fun firstCell(sql: String): String? = rows(sql).firstOrNull()?.firstOrNull()
 
