@@ -291,6 +291,22 @@ class ChartViewDrawTest {
     }
 
     @Test
+    fun `a grid taken away leaves no squares behind`() {
+        val grid = HeatmapView(themed)
+        grid.setGrid(twoWeekGrid())
+        draw(grid, width = 100, height = 400)
+
+        grid.setGrid(null)
+        val cleared = draw(grid, width = 100, height = 400)
+
+        assertEquals(
+            "the marks of a grid that is gone must not stay on the screen",
+            0,
+            cleared.roundRectPaintHistoryCount
+        )
+    }
+
+    @Test
     fun `weeks are columns and days are rows`() {
         val grid = HeatmapView(themed)
         grid.setGrid(twoWeekGrid())
