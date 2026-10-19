@@ -254,6 +254,24 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // When a task is planned to start, when it is planned to end, and how long the user
+            // thinks it takes. All three are nullable, so every existing row keeps the meaning it
+            // had: it is scheduled by its deadline alone, and nothing is invented for it. ALTER
+            // TABLE ADD COLUMN touches no row at all — no rewrite, no default that could overwrite
+            // a value the user did not give.
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `start_time` INTEGER")
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `end_time` INTEGER")
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `estimated_minutes` INTEGER")
+            // The calendar's one query per window: a profile's tasks ordered by deadline.
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tasks_user_id_due_date` " +
+                    "ON `tasks` (`user_id`, `due_date`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -262,6 +280,7 @@ object AppMigrations {
         MIGRATION_5_6,
         MIGRATION_6_7,
         MIGRATION_7_8,
-        MIGRATION_8_9
+        MIGRATION_8_9,
+        MIGRATION_9_10
     )
 }

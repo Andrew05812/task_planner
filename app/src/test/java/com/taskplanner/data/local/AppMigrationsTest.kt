@@ -225,12 +225,76 @@ class AppMigrationsTest {
     fun `migrations are idempotently registered for every retained version pair`() {
         val pairs = AppMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9),
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10),
             pairs
         )
     }
 
     private val latestVersion: Int = AppMigrations.ALL.maxOf { it.endVersion }
+
+    @Test
+    fun `migration 9 to 10 adds the planned times without touching a single stored value`() {
+        val db = open(9)
+        val before = counts(db)
+        val beforeValues = db.rows("SELECT id, title, due_date FROM tasks ORDER BY id")
+        db.migrate(AppMigrations.MIGRATION_9_10)
+        builder.assertMatchesSchema(db, 10, "MIGRATION_9_10")
+
+        assertEquals(before, counts(db))
+        assertEquals("adding the calendar columns rewrites no row", beforeValues,
+            db.rows("SELECT id, title, due_date FROM tasks ORDER BY id"))
+        // A task from before the calendar existed is scheduled by its deadline alone, which is
+        // exactly what three nulls mean; inventing a start or a length here would be a lie about
+        // data the user never gave.
+        assertEquals(
+            listOf(null to null to null),
+            db.rows(
+                "SELECT start_time, end_time, estimated_minutes FROM tasks " +
+                    "WHERE id = ${Seeder.TODO_TASK_ID}"
+            ).map { it[0] to it[1] to it[2] }
+        )
+    }
+
+    @Test
+    fun `migration 9 to 10 lets an upgraded task carry a start an end and an estimate`() {
+        val db = open(9)
+        db.migrate(AppMigrations.MIGRATION_9_10)
+
+        db.exec(
+            "UPDATE tasks SET start_time = 1700000000000, end_time = 1700001800000, " +
+                "estimated_minutes = 30 WHERE id = ${Seeder.TODO_TASK_ID}"
+        )
+
+        assertEquals(
+            listOf("1700000000000", "1700001800000", "30"),
+            db.rows(
+                "SELECT start_time, end_time, estimated_minutes FROM tasks " +
+                    "WHERE id = ${Seeder.TODO_TASK_ID}"
+            ).single()
+        )
+        // The new columns are nullable, so the state the user came from stays writable.
+        db.exec(
+            "INSERT INTO tasks (title, description, priority, status, user_id, `order`, created_at, updated_at) " +
+                "VALUES ('no times', '', 'MEDIUM', 'TODO', ${Seeder.USER_ID}, 0, 1, 1)"
+        )
+        assertEquals(3L, db.firstLong("SELECT COUNT(*) FROM tasks"))
+    }
+
+    @Test
+    fun `migration 9 to 10 creates the index the calendar window query reads through`() {
+        val db = open(9)
+        val before = db.rows("PRAGMA index_list('tasks')").size
+        db.migrate(AppMigrations.MIGRATION_9_10)
+
+        val indexes = db.rows("PRAGMA index_list('tasks')")
+        assertEquals("one index is added, none is lost", before + 1, indexes.size)
+        val window = db.rows("PRAGMA index_info('index_tasks_user_id_due_date')").map { it[2] }
+        assertEquals(
+            "the calendar filters by profile and sorts by deadline",
+            listOf("user_id", "due_date"),
+            window
+        )
+    }
 
     @Test
     fun `migration 7 to 8 leaves existing tasks without a series`() {
