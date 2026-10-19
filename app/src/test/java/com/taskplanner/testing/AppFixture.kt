@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.room.Room
 import com.taskplanner.data.auth.AuthRepository
 import com.taskplanner.data.backup.BackupRepository
+import com.taskplanner.data.calendar.CalendarRepository
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
@@ -95,6 +96,8 @@ class AppFixture(private val context: Context) : AutoCloseable {
         TaskRepository(taskDao, sessionRepository, recurrenceRepository, reminderRepository)
     val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
     val groupRepository = GroupRepository(groupDao, sessionRepository)
+    val calendarRepository =
+        CalendarRepository(taskDao, categoryDao, sessionRepository, reminderRepository)
     val backupRepository = BackupRepository(
         context, database, taskDao, categoryDao, groupDao, sessionRepository
     )
@@ -143,9 +146,10 @@ class AppFixture(private val context: Context) : AutoCloseable {
         )
     )
 
-    suspend fun addCategory(userId: Long, name: String): Long = categoryDao.insertCategory(
-        Category(name = name, color = -16711936, icon = "ic_tag", userId = userId)
-    )
+    suspend fun addCategory(userId: Long, name: String, color: Int = -16711936): Long =
+        categoryDao.insertCategory(
+            Category(name = name, color = color, icon = "ic_tag", userId = userId)
+        )
 
     suspend fun addGroup(userId: Long, name: String): TaskGroup =
         TaskGroup(uuid = "group-$name", userId = userId, name = name).also { groupDao.upsertGroup(it) }
