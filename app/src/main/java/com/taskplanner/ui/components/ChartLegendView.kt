@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.text.TextUtils
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -29,17 +30,42 @@ class ChartLegendView @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
     /**
-     * One row: the colour the chart paints with, the name the account gives it, and the figure beside it.
+     * One row: the colour the chart paints with, the name the account gives it, the figure beside it, and
+     * the screen a tap on it opens.
      *
      * [detail] is what the reader compares across rows — a count, a duration, a share — and it is text the
      * caller formatted, because "2 hours" is the screen's language rather than this view's.
+     *
+     * [onClick] is null for the rows that are only a key to the chart. A row that cannot go anywhere is
+     * drawn without a press effect, because a ripple that leads nowhere teaches the reader that nothing on
+     * this screen can be trusted.
      */
-    data class Entry(val label: CharSequence, val detail: CharSequence?, val color: Int)
+    data class Entry(
+        val label: CharSequence,
+        val detail: CharSequence?,
+        val color: Int,
+        val onClick: (() -> Unit)? = null
+    )
 
     private val chipSize = resources.getDimensionPixelSize(R.dimen.chart_legend_chip_size)
     private val chipRadius = resources.getDimension(R.dimen.chart_heatmap_corner)
     private val chipOffset = resources.getDimensionPixelSize(R.dimen.spacing_xs)
     private val rowGap = resources.getDimensionPixelSize(R.dimen.spacing_small)
+
+    /**
+     * The press feedback a tappable row wears, resolved once from the theme rather than per row.
+     *
+     * It is a resource id and not a drawable because two rows given the same [Drawable] instance share its
+     * state, and a ripple that starts in one row would finish in the other.
+     */
+    private val selectableBackground: Int by lazy {
+        val out = TypedValue()
+        if (context.theme.resolveAttribute(android.R.attr.selectableItemBackground, out, true)) {
+            out.resourceId
+        } else {
+            0
+        }
+    }
 
     init {
         orientation = VERTICAL
@@ -65,6 +91,14 @@ class ChartLegendView @JvmOverloads constructor(
 
     private fun rowOf(entry: Entry): View {
         val row = LinearLayout(context).apply { orientation = HORIZONTAL }
+        // A row the caller can be tapped into is made clickable here rather than by whoever reads the
+        // legend: the knowledge of whether this entry goes somewhere lives in the entry itself.
+        val onClick = entry.onClick
+        if (onClick != null) {
+            row.isClickable = true
+            if (selectableBackground != 0) row.setBackgroundResource(selectableBackground)
+            row.setOnClickListener { onClick() }
+        }
         row.addView(
             ChipView(context, entry.color, chipRadius),
             LayoutParams(chipSize, chipSize).apply {

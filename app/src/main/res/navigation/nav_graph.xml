@@ -47,10 +47,20 @@
             app:destination="@id/navigation_category_detail" />
     </fragment>
 
+    <!-- What the measurements add up to. A category row and a task row are both a way into the list behind
+         them: the dashboard is the screen that says where the time went, and the reader's next question is
+         "show me that one". -->
     <fragment
         android:id="@+id/navigation_statistics"
         android:name="com.taskplanner.ui.statistics.StatisticsFragment"
-        android:label="@string/title_statistics" />
+        android:label="@string/title_statistics">
+        <action
+            android:id="@+id/action_statistics_to_category_tasks"
+            app:destination="@id/categoryTasksFragment" />
+        <action
+            android:id="@+id/action_statistics_to_task_detail"
+            app:destination="@id/navigation_task_detail" />
+    </fragment>
 
     <fragment
         android:id="@+id/navigation_profile"

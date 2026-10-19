@@ -44,6 +44,9 @@ class HeatmapView @JvmOverloads constructor(
 
     private var grid: HeatmapGrid? = null
 
+    /** The grid the screen last asked for, or null when it asked for nothing to be painted. */
+    val currentGrid: HeatmapGrid? get() = grid
+
     /**
      * Reused for every square, because a grid of a few hundred of them is not worth a few hundred
      * allocations on a drawing pass.

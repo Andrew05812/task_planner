@@ -39,6 +39,9 @@ class BarChartView @JvmOverloads constructor(
 
     private var values: List<Long> = emptyList()
 
+    /** The columns the screen last asked for, oldest first — the same read-only seam [setValues] writes. */
+    val currentValues: List<Long> get() = values
+
     /**
      * Reused for every mark, because a drawing pass that allocates makes the screen it paints on stutter.
      */

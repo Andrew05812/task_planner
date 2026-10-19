@@ -2,6 +2,7 @@ package com.taskplanner.data.statistics
 
 import com.taskplanner.data.model.DailyCompletionCount
 import com.taskplanner.data.model.DailyWorkSummary
+import com.taskplanner.data.model.TaskHealthCounts
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
@@ -39,6 +40,38 @@ data class TrendDay(
     val seconds: Long,
     val completions: Int
 )
+
+/** Which way a figure moved against the same figure of the period before it. */
+enum class ChangeDirection { UP, DOWN, FLAT }
+
+/**
+ * One period's figure beside the same figure of the period that came before it.
+ *
+ * The percentage is a `Double?` and not a `Double` because of the one case that has no percentage: a
+ * period that follows an empty one. "Twice as much as nothing" and "an infinite increase" are both said
+ * by no figure, and a chart that printed 100% or 0% there would be reporting a change the base cannot
+ * support — which is the mistake this whole type exists to prevent.
+ */
+data class FigureChange(
+    val current: Long,
+    val previous: Long,
+    val direction: ChangeDirection,
+    /** [current] over [previous] minus one, or null when [previous] has nothing to divide by. */
+    val fraction: Double?
+)
+
+/**
+ * The states a health panel divides its open tasks into, in the order its bar shows them.
+ *
+ * Four of these are what SQLite counts directly; [DUE_LATER] is what is left of the open rows once the
+ * late, today and coming-week buckets have taken theirs, and it exists precisely because a bar needs a
+ * part for a task due next month. [WITHOUT_DEADLINE] is a task that is neither late nor on time, and is
+ * shown as its own part rather than being counted as either.
+ */
+enum class HealthBucket { OVERDUE, DUE_TODAY, DUE_THIS_WEEK, DUE_LATER, WITHOUT_DEADLINE }
+
+/** One bucket of the health panel and the open tasks it holds. */
+data class HealthBucketCount(val bucket: HealthBucket, val count: Int)
 
 /**
  * The arithmetic between an aggregate and a picture.
@@ -105,6 +138,49 @@ object DashboardMath {
         val firstCell = thisWeekStart - (weeks - 1).toLong() * 7L
         return firstCell until firstCell + weeks.toLong() * 7L
     }
+
+    /**
+     * The window of the same length that ends the day before [days] begins.
+     *
+     * A period's own range is a whole calendar unit — a week is seven days and a month is the month, not
+     * the month so far — so for a day and a week this lands exactly on the period a reader would name: the
+     * day before today, the week before this one. For a month it lands on the same *number* of days
+     * before, which is not the whole of the month before when the two months differ in length. That is the
+     * point: a percentage between a thirty-day month and a thirty-one-day month would be measuring the
+     * calendar as much as the work, and the one thing a comparison has to be before its percentage means
+     * anything is two windows of the same size. The two share no day and no millisecond.
+     */
+    fun preceding(days: LongRange): LongRange {
+        val length = days.last - days.first + 1L
+        return (days.first - length) until days.first
+    }
+
+    /**
+     * One figure read against the same figure of the window before it.
+     *
+     * Two cases have no percentage, and printing one would be the dashboard's most convincing kind of lie:
+     *
+     *  * **An empty period before a full one.** Any increase over zero is an infinite one; the honest
+     *    statement is that there is no base, not that the account grew by a figure the arithmetic cannot
+     *    produce.
+     *  * **Zero before zero.** Two periods with nothing in them did not stay the same — there was nothing
+     *    to stay. The direction is flat and the fraction is null, and the screen leaves the line out
+     *    rather than reporting a comparison of two absences.
+     *
+     * A fall to zero *does* have a figure: nothing measured this period against something measured before
+     * it is a hundred percent down, which is the whole of the truth rather than part of it.
+     */
+    fun change(current: Long, previous: Long): FigureChange = FigureChange(
+        current = current,
+        previous = previous,
+        direction = when {
+            current > previous -> ChangeDirection.UP
+            current < previous -> ChangeDirection.DOWN
+            else -> ChangeDirection.FLAT
+        },
+        fraction = if (previous <= 0L) null
+        else (current - previous).toDouble() / previous.toDouble()
+    )
 
     /**
      * The activity grid: [weeks] whole weeks ending with the one that holds [today].
@@ -206,6 +282,30 @@ object DashboardMath {
      */
     fun completionRate(completed: Int, total: Int): Float? =
         if (total <= 0) null else completed.toFloat() / total.toFloat()
+
+    /**
+     * The open tasks sorted into the five parts of one health bar.
+     *
+     * Four of the five are counted by SQLite; [HealthBucket.DUE_LATER] is the remainder, and it is derived
+     * here rather than asked for because the question it answers — what is open but not due in the coming
+     * week — is exactly the difference between the panel's own total and the buckets it lists. The
+     * remainder is floored at zero: a database that somehow reports more in its buckets than in its count
+     * should produce a short bar, not a negative part that steals width from the ones beside it.
+     *
+     * `in progress` and `stale` are deliberately absent. Both cut across the deadline buckets — a task can
+     * be late and being worked on at once — and a bar whose parts overlap would add up to more than the
+     * whole it claims to divide. The screen shows those two as figures of their own instead.
+     */
+    fun healthBuckets(counts: TaskHealthCounts): List<HealthBucketCount> {
+        val named = counts.overdue + counts.dueToday + counts.dueThisWeek + counts.withoutDeadline
+        return listOf(
+            HealthBucketCount(HealthBucket.OVERDUE, counts.overdue),
+            HealthBucketCount(HealthBucket.DUE_TODAY, counts.dueToday),
+            HealthBucketCount(HealthBucket.DUE_THIS_WEEK, counts.dueThisWeek),
+            HealthBucketCount(HealthBucket.DUE_LATER, (counts.open - named).coerceAtLeast(0)),
+            HealthBucketCount(HealthBucket.WITHOUT_DEADLINE, counts.withoutDeadline)
+        )
+    }
 
     /** `ceil` without pulling in `kotlin.math` for one call in a pure object. */
     private fun Double.ceilToInt(): Int {

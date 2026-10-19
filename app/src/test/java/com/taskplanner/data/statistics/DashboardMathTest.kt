@@ -2,6 +2,7 @@ package com.taskplanner.data.statistics
 
 import com.taskplanner.data.model.DailyCompletionCount
 import com.taskplanner.data.model.DailyWorkSummary
+import com.taskplanner.data.model.TaskHealthCounts
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
@@ -18,6 +19,11 @@ import org.junit.Test
  * shaded for a day that has not happened, a gap filled with a zero nobody measured. None of that can be
  * seen by asking the database, because the database answered correctly — so these tests call the
  * functions directly, with days and instants written out by hand.
+ *
+ * The health bar is the same failure wearing a different shape, so its cases are here too: the five parts
+ * have to fill the panel's own open total exactly, come back in the order the canvas paints them, stay
+ * whole when the aggregate contradicts itself, and leave out the two figures — `in progress` and `stale` —
+ * that cut across the deadline parts instead of dividing them.
  */
 class DashboardMathTest {
 
@@ -248,5 +254,242 @@ class DashboardMathTest {
         assertFalse(lived.last().isFuture)
         assertEquals(1, lived.last().completions)
         assertEquals(900L, lived[1].seconds)
+    }
+
+    // ---------------------------------------------------------------- the health bar's own arithmetic
+
+    /** The four deadline parts SQLite counts, with the two crossing figures left at zero. */
+    private fun openCounts(
+        overdue: Int,
+        dueToday: Int,
+        dueThisWeek: Int,
+        withoutDeadline: Int,
+        open: Int
+    ) = TaskHealthCounts(
+        overdue = overdue,
+        dueToday = dueToday,
+        dueThisWeek = dueThisWeek,
+        withoutDeadline = withoutDeadline,
+        inProgress = 0,
+        stale = 0,
+        open = open
+    )
+
+    private fun List<HealthBucketCount>.countOf(bucket: HealthBucket): Int =
+        single { it.bucket == bucket }.count
+
+    @Test
+    fun `the health bar's parts fill the open tasks it divides`() {
+        val counts = TaskHealthCounts(
+            overdue = 3, dueToday = 2, dueThisWeek = 4, withoutDeadline = 5,
+            inProgress = 1, stale = 2, open = 20
+        )
+
+        val buckets = DashboardMath.healthBuckets(counts)
+
+        assertEquals(
+            "a bar whose parts do not add up to its own whole either draws tasks that are not there or " +
+                "hides ones that are, and the reader cannot tell which",
+            counts.open,
+            buckets.sumOf { it.count }
+        )
+        assertEquals(
+            "the six open tasks no named part claimed are the part drawn as due later",
+            6,
+            buckets.countOf(HealthBucket.DUE_LATER)
+        )
+    }
+
+    @Test
+    fun `the due later part is derived because nothing in the aggregate asks for it`() {
+        val counts = openCounts(
+            overdue = 1, dueToday = 2, dueThisWeek = 3, withoutDeadline = 4, open = 15
+        )
+
+        val later = DashboardMath.healthBuckets(counts).countOf(HealthBucket.DUE_LATER)
+
+        assertEquals(
+            "the question it answers is the difference between the panel's total and the parts it lists",
+            15 - (1 + 2 + 3 + 4),
+            later
+        )
+
+        val moreOpen = DashboardMath.healthBuckets(counts.copy(open = 30))
+
+        assertEquals(
+            "the same four counted parts under a bigger total answer with a bigger remainder",
+            20,
+            moreOpen.countOf(HealthBucket.DUE_LATER)
+        )
+        assertEquals(
+            "and no other part moves when only the total does",
+            listOf(1, 2, 3, 4),
+            moreOpen.filter { it.bucket != HealthBucket.DUE_LATER }.map { it.count }
+        )
+    }
+
+    @Test
+    fun `an aggregate that lies about its total gives a short bar and never a negative part`() {
+        // The counts come off one scan, so this should not happen — which is exactly why the arithmetic
+        // has to answer sanely when it does: a negative segment is drawn by taking width away from the
+        // parts beside it, so one lying figure would misdraw the four honest ones.
+        val corrupt = TaskHealthCounts(
+            overdue = 10, dueToday = 10, dueThisWeek = 10, withoutDeadline = 10,
+            inProgress = 0, stale = 0, open = 15
+        )
+
+        val buckets = DashboardMath.healthBuckets(corrupt)
+
+        buckets.forEach {
+            assertTrue(
+                "${it.bucket} is drawn as a width, and a negative width is not a width",
+                it.count >= 0
+            )
+        }
+        assertEquals(
+            "the remainder stops at nothing rather than going below it",
+            0,
+            buckets.countOf(HealthBucket.DUE_LATER)
+        )
+        assertEquals(
+            "the bar is short by five and nothing else moved",
+            listOf(10, 10, 10, 0, 10),
+            buckets.map { it.count }
+        )
+        assertEquals(
+            "the boundary the floor exists at: parts that fill the total exactly leave nothing, which is zero",
+            0,
+            DashboardMath.healthBuckets(
+                openCounts(overdue = 10, dueToday = 10, dueThisWeek = 10, withoutDeadline = 10, open = 40)
+            ).countOf(HealthBucket.DUE_LATER)
+        )
+    }
+
+    @Test
+    fun `the health parts come back in the order the bar paints them`() {
+        val buckets = DashboardMath.healthBuckets(
+            openCounts(overdue = 1, dueToday = 1, dueThisWeek = 1, withoutDeadline = 1, open = 4)
+        )
+
+        assertEquals(
+            "the renderer hands this list straight to the canvas, so its order is the order of the segments",
+            listOf(
+                HealthBucket.OVERDUE,
+                HealthBucket.DUE_TODAY,
+                HealthBucket.DUE_THIS_WEEK,
+                HealthBucket.DUE_LATER,
+                HealthBucket.WITHOUT_DEADLINE
+            ),
+            buckets.map { it.bucket }
+        )
+        assertEquals(
+            "every state the panel divides its open tasks into has a part, so a legend cannot name one " +
+                "the bar left out",
+            HealthBucket.values().toList(),
+            buckets.map { it.bucket }
+        )
+    }
+
+    @Test
+    fun `in progress and stale are figures beside the bar and never parts of it`() {
+        val counts = TaskHealthCounts(
+            overdue = 2, dueToday = 1, dueThisWeek = 1, withoutDeadline = 1,
+            inProgress = 500, stale = 999, open = 9
+        )
+
+        val buckets = DashboardMath.healthBuckets(counts)
+
+        assertEquals(
+            "a task can be late and being worked on at the same time, so a part for either would be the " +
+                "same task drawn twice and the bar would add up to more than the whole it divides",
+            counts.open,
+            buckets.sumOf { it.count }
+        )
+        assertEquals(
+            "however large the two crossed figures are, they reach none of the parts: the four counted " +
+                "buckets keep their own figures and the rest of the open tasks is the derived one",
+            listOf(2, 1, 1, 4, 1),
+            buckets.map { it.count }
+        )
+        assertTrue(
+            "the screen prints them as figures of their own, so nothing of them belongs in the bar",
+            buckets.none { it.count == counts.inProgress || it.count == counts.stale }
+        )
+    }
+
+    @Test
+    fun `the window before a period is as long as the period and shares no day with it`() {
+        val monday = LocalDate.of(2026, 6, 1).toEpochDay()
+        val week = monday until monday + 7L
+
+        val before = DashboardMath.preceding(week)
+
+        assertEquals("the same length", week.count(), before.count())
+        assertEquals("ending the day before the period starts", monday - 1L, before.last)
+        assertTrue("and sharing no day with it", before.last < week.first)
+        // A week that begins on Monday the 1st is preceded by the week that begins on Monday the 25th —
+        // the window the user would call last week, not a rolling seven days that ends mid-week.
+        assertEquals(LocalDate.of(2026, 5, 25), LocalDate.ofEpochDay(before.first))
+        assertEquals(LocalDate.of(2026, 5, 31), LocalDate.ofEpochDay(before.last))
+
+        // A single day's window precedes into the single day before it: the case the screen uses for
+        // today, and the one a shift by length could most easily land wrong.
+        val today = LocalDate.of(2026, 6, 3).toEpochDay()
+        val oneDay = DashboardMath.preceding(today until today + 1L)
+        assertEquals(1, oneDay.count())
+        assertEquals(LocalDate.of(2026, 6, 2), LocalDate.ofEpochDay(oneDay.first))
+    }
+
+    @Test
+    fun `a change over no base keeps its direction and gives up its percentage`() {
+        val firstWeek = DashboardMath.change(current = 3_600L, previous = 0L)
+
+        assertEquals(ChangeDirection.UP, firstWeek.direction)
+        assertNull(
+            "any increase over nothing is an infinite one, and infinity is not a percentage",
+            firstWeek.fraction
+        )
+        assertEquals("the figures themselves survive the missing ratio", 3_600L, firstWeek.current)
+        assertEquals(0L, firstWeek.previous)
+
+        val secondWeek = DashboardMath.change(current = 3_600L, previous = 1_800L)
+        assertEquals(
+            "twice the period before is a hundred percent over it — the change, not the ratio",
+            1.0,
+            requireNotNull(secondWeek.fraction),
+            1e-9
+        )
+    }
+
+    @Test
+    fun `nothing measured twice is not a comparison and nothing falling to nothing is`() {
+        val bothEmpty = DashboardMath.change(current = 0L, previous = 0L)
+        assertEquals(ChangeDirection.FLAT, bothEmpty.direction)
+        assertNull("two absences have no change to report", bothEmpty.fraction)
+
+        val stopped = DashboardMath.change(current = 0L, previous = 1_800L)
+        assertEquals(ChangeDirection.DOWN, stopped.direction)
+        assertEquals(
+            "a fall to zero over a base that existed is the whole of the change, and says so",
+            -1.0,
+            requireNotNull(stopped.fraction),
+            1e-9
+        )
+    }
+
+    @Test
+    fun `a change too small to show as a percent is still the direction it is`() {
+        val barely = DashboardMath.change(current = 5_401L, previous = 5_400L)
+
+        assertEquals(ChangeDirection.UP, barely.direction)
+        assertTrue(
+            "one second in five thousand rounds to no percent at all, which is exactly why the screen has " +
+                "words for it rather than a number",
+            requireNotNull(barely.fraction) < 0.005
+        )
+
+        val same = DashboardMath.change(current = 5_400L, previous = 5_400L)
+        assertEquals(ChangeDirection.FLAT, same.direction)
+        assertEquals("an unchanged figure over a base is zero, not no figure", 0.0, requireNotNull(same.fraction), 1e-9)
     }
 }

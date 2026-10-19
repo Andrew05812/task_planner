@@ -111,16 +111,10 @@
     <string name="hint_name">Name</string>
     <string name="hint_email">Email</string>
 
-    <string name="task_completion_rate">Task Completion Rate</string>
-    <string name="tasks_by_category">Tasks by Category</string>
-
     <plurals name="task_count">
         <item quantity="one">%d task</item>
         <item quantity="other">%d tasks</item>
     </plurals>
-
-    <string name="completion_details">%1$d из %2$d задач выполнено</string>
-    <string name="category_stat_format">%1$s: %2$s задач (%3$s)</string>
 
     <string name="sort_by_date">Sort by Date</string>
     <string name="sort_by_priority">Sort by Priority</string>
@@ -443,4 +437,70 @@
     <string name="reminder_body_due_format">Due: %1$s</string>
     <string name="reminder_body_category_format">Category: %1$s</string>
     <string name="reminder_deadline_format">%1$s, %2$s</string>
+
+    <!-- The dashboard: one period's figures, drawn rather than listed. -->
+    <string name="dashboard_trend_title">Days of the period</string>
+    <string name="dashboard_trend_work">Time measured each day</string>
+    <string name="dashboard_trend_completions">Tasks finished each day</string>
+    <string name="dashboard_trend_empty">Nothing was measured or finished in this period.</string>
+    <string name="dashboard_grid_title">Activity</string>
+    <string name="dashboard_grid_quiet">A day with nothing measured</string>
+    <string name="dashboard_grid_busy">The busiest day</string>
+    <string name="dashboard_grid_busiest">The busiest day of the grid: %1$s</string>
+    <string name="dashboard_health_title_format">Task health · %1$s</string>
+    <string name="health_overdue">Late</string>
+    <string name="health_due_today">Due today</string>
+    <string name="health_due_week">Due this week</string>
+    <string name="health_due_later">Due later</string>
+    <string name="health_without_deadline">No date</string>
+    <string name="dashboard_categories_title">Where the time went</string>
+    <string name="dashboard_category_none">No category</string>
+    <string name="dashboard_top_tasks_title">Busiest tasks</string>
+    <string name="dashboard_top_tasks_empty">No work was measured on any task in this period.</string>
+    <!-- A task deleted physically keeps the stretches measured on it, so the busiest list can name a row
+         that no longer exists. Saying so is truer than printing a blank line or an id. -->
+    <string name="dashboard_task_gone">A task that is no longer here</string>
+    <string name="dashboard_task_meta">%1$s · %2$s</string>
+    <string name="dashboard_headline_meta">%1$s · %2$s · %3$s</string>
+    <string name="dashboard_rate_unknown">Nothing has been finished yet, so there is no share to show.</string>
+    <string name="dashboard_rate">%1$s of this account is finished</string>
+    <string name="dashboard_in_progress">%1$d of them are being worked on</string>
+    <string name="dashboard_stale">%1$d have gone untouched for two weeks</string>
+
+    <!-- Period comparison, against the window of the same length that ends the day before this one
+         starts. A percentage is printed only when the period before has something to be a share of: an
+         increase over no base is not a percentage of anything, and the line says what happened instead of
+         dividing by it. Two empty periods have no line at all — an absence is not compared to an absence. -->
+    <string name="dashboard_change_up">measured work up %1$s against the period before</string>
+    <string name="dashboard_change_down">measured work down %1$s against the period before</string>
+    <string name="dashboard_change_flat">measured work the same as the period before</string>
+    <string name="dashboard_change_slightly_up">measured work a little over the period before</string>
+    <string name="dashboard_change_slightly_down">measured work a little under the period before</string>
+    <string name="dashboard_change_from_nothing">the period before this one measured nothing at all</string>
+    <string name="dashboard_completions_against">%1$d finished, against %2$d the period before</string>
+
+    <plurals name="dashboard_finished">
+        <item quantity="one">%1$d task finished</item>
+        <item quantity="other">%1$d tasks finished</item>
+    </plurals>
+
+    <plurals name="dashboard_added">
+        <item quantity="one">%1$d task added</item>
+        <item quantity="other">%1$d tasks added</item>
+    </plurals>
+
+    <plurals name="dashboard_streak">
+        <item quantity="one">%1$d day in a row</item>
+        <item quantity="other">%1$d days in a row</item>
+    </plurals>
+
+    <plurals name="dashboard_open">
+        <item quantity="one">%1$d task is open</item>
+        <item quantity="other">%1$d tasks are open</item>
+    </plurals>
+
+    <plurals name="dashboard_rate_tasks">
+        <item quantity="one">%1$d of %2$d task</item>
+        <item quantity="other">%1$d of %2$d tasks</item>
+    </plurals>
 </resources>

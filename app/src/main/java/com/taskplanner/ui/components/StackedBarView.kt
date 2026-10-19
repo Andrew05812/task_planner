@@ -40,6 +40,17 @@ class StackedBarView @JvmOverloads constructor(
     private var values: List<Long> = emptyList()
     private var colors: IntArray = IntArray(0)
 
+    /**
+     * What the screen last asked to be drawn, in the order it asked for it.
+     *
+     * A read-only seam rather than a test that photographs the canvas: the promise worth keeping is that the
+     * bar and the legend beside it were handed the same list, and that is a fact about what arrived here.
+     */
+    val currentValues: List<Long> get() = values
+
+    /** The colour each part is painted with, index for index with [currentValues]. */
+    val currentColors: IntArray get() = colors
+
     private val barHeight = resources.getDimension(R.dimen.chart_proportion_bar_height)
 
     /**

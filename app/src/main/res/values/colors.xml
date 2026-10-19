@@ -43,6 +43,12 @@
     <color name="chart_bar">@color/primary</color>
     <color name="chart_axis">#33757575</color>
     <color name="chart_track">#1F757575</color>
+    <!-- The completions bar sits under the work bar and says something else about the same days, so it
+         borrows the green the list already marks a finished task with instead of a second accent. -->
+    <color name="chart_completions">@color/status_done</color>
+    <!-- Work with no category is not a category, and giving it the accent would let it read as the
+         default one. It takes the grey the health panel uses for "nothing to hang this on". -->
+    <color name="chart_category_none">#FF9E9E9E</color>
     <color name="chart_heatmap_none">#14757575</color>
     <color name="chart_heatmap_1">#4D6750A4</color>
     <color name="chart_heatmap_2">#806750A4</color>
@@ -53,6 +59,9 @@
     <color name="health_overdue">@color/error</color>
     <color name="health_due_today">#FFF57C00</color>
     <color name="health_due_week">#FF00897B</color>
+    <!-- The bucket SQLite does not count, only the remainder of: open, dated, and far enough off that the
+         week's colours have nothing to say about it. Cool, so the bar reads as heating toward today. -->
+    <color name="health_due_later">#FF42A5F5</color>
     <color name="health_without_deadline">#FF9E9E9E</color>
     <color name="health_in_progress">@color/status_in_progress</color>
     <color name="health_stale">#FF7E57C2</color>

@@ -98,11 +98,20 @@ interface WorkStatisticsDao {
     suspend fun workByTask(userId: Long, fromDay: Long, toDay: Long, limit: Int): List<TaskWorkSummary>
 
     /**
-     * Time per category inside a period. A task with no category, and one whose category was deleted,
-     * both group under a null name, which the screen labels explicitly instead of dropping the minutes.
+     * Time per category inside a period.
+     *
+     * Only work whose task carries no category at all — or whose category row is gone — groups under a null
+     * name, which the screen labels explicitly instead of dropping the minutes. A category that was deleted
+     * but is still stored keeps naming the bucket its work was measured into: the minutes really did go to
+     * it, and a chart that re-labelled them as unclassified whenever a category was hidden would be a picture
+     * that rewrites the past.
+     *
+     * `MAX(c.color)` is the colour rather than a bare `c.color` because the row is grouped: every row of the
+     * group carries the same category's colour, and SQLite wants the column named in an aggregate before it
+     * will put it in the result.
      */
     @Query(
-        "SELECT c.id AS categoryId, MAX(c.name) AS categoryName, " +
+        "SELECT c.id AS categoryId, MAX(c.name) AS categoryName, MAX(c.color) AS color, " +
             "COALESCE(SUM(w.duration_seconds), 0) AS seconds, COUNT(w.id) AS intervals " +
             "FROM work_sessions w " +
             "LEFT JOIN tasks t ON t.id = w.task_id " +

@@ -15,6 +15,7 @@ import com.taskplanner.data.statistics.HeatmapCell
 import com.taskplanner.data.statistics.HeatmapGrid
 import kotlin.math.max
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -441,6 +442,28 @@ class ChartViewDrawTest {
 
         assertEquals(0, legend.childCount)
         assertTrue(legend.entries.isEmpty())
+    }
+
+    @Test
+    fun `only a row that was given somewhere to go can be tapped`() {
+        val opened = mutableListOf<String>()
+        val legend = ChartLegendView(themed)
+        legend.setEntries(
+            listOf(
+                ChartLegendView.Entry("Home", "2 h", Color.RED, onClick = { opened.add("Home") }),
+                ChartLegendView.Entry("No category", "1 h", Color.GRAY)
+            )
+        )
+
+        val row = legend.getChildAt(0)
+        assertTrue("a row with a destination asks to be tapped", row.isClickable)
+        row.performClick()
+        assertEquals(listOf("Home"), opened)
+
+        assertFalse(
+            "a row that is only a key to the chart does not press",
+            legend.getChildAt(1).isClickable
+        )
     }
 
     // endregion

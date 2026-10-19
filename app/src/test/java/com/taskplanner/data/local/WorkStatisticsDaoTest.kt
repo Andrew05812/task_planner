@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -47,6 +48,11 @@ import org.robolectric.RobolectricTestRunner
  * a screen that shows one number cannot afford to walk the account. These run on the JVM's SQLite under
  * Robolectric, which is the same engine family as the device but not the device; §11's benchmark file
  * keeps that distinction in its own report.
+ *
+ * The per-category rows are read for more than their totals, so the colour that travels with them is
+ * cross-checked here too: it has to be the one stored on that category's own row, it has to survive being
+ * grouped, and it has to be missing — null, not zero — exactly when there is no category row to read it
+ * from, because a chart that paints "no category" in a real shade would be inventing a category.
  */
 @RunWith(RobolectricTestRunner::class)
 class WorkStatisticsDaoTest {
@@ -906,5 +912,115 @@ class WorkStatisticsDaoTest {
             while (rows.moveToNext()) out.add(rows.getString(index))
             out
         }
+    }
+
+    // ------------------------------------------------------- the colour that travels with a category total
+
+    /** Two ARGB ints that differ in every channel, so a bucket that borrowed its neighbour's colour shows. */
+    private val workColour: Int = 0xFF1B5E20.toInt()
+    private val homeColour: Int = 0xFFB71C1C.toInt()
+
+    /** A colour that is an ordinary value and looks, to a sloppy test for "no colour", like nothing. */
+    private val zeroColour: Int = 0
+
+    /** Puts [colour] on the stored category row of that name, the way the category editor does. */
+    private suspend fun storeColour(name: String, colour: Int) {
+        val category = fixture.categoryDao.getAllCategoriesOnce(userId).single { it.name == name }
+        fixture.categoryDao.updateCategory(category.copy(color = colour))
+    }
+
+    @Test
+    fun `each category bucket carries the colour stored on its own category row`() = runTest {
+        seed()
+        // The fixture seeds both categories with the same default colour, which would let a query that
+        // painted everything from one row pass; two explicit colours make a mix-up visible.
+        storeColour("Work", workColour)
+        storeColour("Home", homeColour)
+
+        val buckets = fixture.workStatisticsDao.workByCategory(userId, day0, day2 + 1)
+
+        assertEquals(
+            "each bucket carries its own category's colour, not the one the grouping happened to read first",
+            mapOf("Work" to workColour, "Home" to homeColour),
+            buckets.filter { it.categoryName != null }.associate { it.categoryName!! to it.color }
+        )
+        val work = buckets.single { it.categoryName == "Work" }
+        assertEquals(
+            "the colour the aggregate answers with is the colour the stored row carries",
+            fixture.categoryDao.getCategoryForUser(userId, work.categoryId!!)!!.color,
+            work.color
+        )
+        assertEquals(
+            "and reading the colour along with the total changed the total not at all",
+            closedInRange(day0, day2 + 1).filter { it.taskId == report.id }.sumOf { it.durationSeconds!! },
+            work.seconds
+        )
+    }
+
+    @Test
+    fun `the ungrouped bucket has no name and no colour because it has no category row`() = runTest {
+        seed()
+        storeColour("Work", workColour)
+        storeColour("Home", homeColour)
+        // A category deleted for good: the task still points at its id, so those rows fall out of the join
+        // and land in the same bucket as the task nobody ever classified.
+        val home = fixture.categoryDao.getAllCategoriesOnce(userId).single { it.name == "Home" }
+        fixture.categoryDao.deleteCategory(home)
+
+        val buckets = fixture.workStatisticsDao.workByCategory(userId, day0, day2 + 1)
+        val ungrouped = buckets.single { it.categoryName == null }
+
+        assertNull(
+            "a bucket with no category row has no colour to report either, so the screen can tell " +
+                "nothing classified from a colour it somehow lost",
+            ungrouped.color
+        )
+        assertNull("and it carries no category id either", ungrouped.categoryId)
+        assertEquals(
+            "the never-classified task and the task whose category is gone are one bucket, not lost",
+            closedInRange(day0, day2 + 1)
+                .filter { it.taskId == unclassified.id || it.taskId == plants.id }
+                .sumOf { it.durationSeconds!! },
+            ungrouped.seconds
+        )
+        assertEquals(
+            "the work that still has a category keeps both of its own fields",
+            workColour,
+            buckets.single { it.categoryName == "Work" }.color
+        )
+        assertEquals(2, buckets.size)
+    }
+
+    @Test
+    fun `a category that stores zero or a negative colour keeps that exact value`() = runTest {
+        seed()
+        // An ARGB int is data, not a flag: zero is a colour of its own, and a negative one is what nearly
+        // every opaque shade reads as because the alpha channel sets the sign bit. A mapping that treated
+        // either as absent would repaint a real category in the neutral shade.
+        storeColour("Work", zeroColour)
+        storeColour("Home", homeColour)
+
+        val buckets = fixture.workStatisticsDao.workByCategory(userId, day0, day2 + 1)
+
+        assertEquals(
+            "zero round-trips as zero and the negative value round-trips as itself",
+            mapOf("Work" to zeroColour, "Home" to homeColour),
+            buckets.filter { it.categoryName != null }.associate { it.categoryName!! to it.color }
+        )
+        buckets.filter { it.categoryName != null }.forEach { bucket ->
+            assertEquals(
+                "${bucket.categoryName}: the grouped figure is the stored row's own, read back separately",
+                fixture.categoryDao.getCategoryForUser(userId, bucket.categoryId!!)!!.color,
+                bucket.color
+            )
+        }
+        assertNotNull(
+            "a category that exists always answers with its colour, even when the colour is zero",
+            buckets.single { it.categoryName == "Work" }.color
+        )
+        assertNull(
+            "and the ungrouped bucket is the only one that reports null",
+            buckets.single { it.categoryName == null }.color
+        )
     }
 }

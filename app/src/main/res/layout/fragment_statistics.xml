@@ -1,106 +1,395 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- The dashboard: one period, and every figure the account produced inside it.
+     Its own file because nothing else on the screen has this shape — the history screen lists
+     measurements and the archive lists tasks; this one draws them. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/contentGroup"
+    <HorizontalScrollView
+        android:id="@+id/statisticsPeriodScroll"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone">
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/statisticsPeriodChips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            app:selectionRequired="true"
+            app:singleLine="true"
+            app:singleSelection="true" />
+    </HorizontalScrollView>
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/dashboardScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/spacing_large"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/statisticsPeriodScroll">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="@dimen/spacing_normal"
+            android:paddingEnd="@dimen/spacing_normal">
 
+            <!-- The headline: what was measured, and what the period did about it. -->
             <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="4dp">
+                android:layout_marginTop="@dimen/spacing_small">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/spacing_normal">
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/task_completion_rate"
-                        android:textAppearance="?attr/textAppearanceHeadline6" />
-
-                    <TextView
-                        android:id="@+id/completionRateText"
+                        android:id="@+id/dashboardHeadline"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:textAppearance="?attr/textAppearanceHeadline3"
-                        android:textColor="@color/material_dynamic_primary50" />
+                        android:textAppearance="?attr/textAppearanceHeadline5"
+                        tools:text="5 h 20 min" />
 
                     <TextView
-                        android:id="@+id/completionDetailsText"
+                        android:id="@+id/dashboardHeadlineDetails"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:textAppearance="?attr/textAppearanceBody1" />
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        tools:text="12 stretches · 4 sessions · this week" />
 
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:cardElevation="4dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    <!-- Against the window of the same length that ends the day before this one starts.
+                         Hidden rather than zeroed when the period before measured nothing: an increase
+                         over no base has no percentage, and the card says so in words instead. -->
+                    <TextView
+                        android:id="@+id/dashboardWorkChange"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        tools:text="up 18% against the period before" />
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:id="@+id/dashboardCompletionsChange"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/tasks_by_category"
-                        android:textAppearance="?attr/textAppearanceHeadline6" />
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        tools:text="6 finished where 4 were the period before" />
 
                     <LinearLayout
-                        android:id="@+id/categoryContainer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:orientation="vertical" />
+                        android:layout_marginTop="@dimen/spacing_normal"
+                        android:orientation="horizontal">
 
+                        <TextView
+                            android:id="@+id/dashboardFinished"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:textAppearance="?attr/textAppearanceBody1"
+                            tools:text="7 finished" />
+
+                        <TextView
+                            android:id="@+id/dashboardAdded"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:textAppearance="?attr/textAppearanceBody1"
+                            tools:text="3 added" />
+
+                        <TextView
+                            android:id="@+id/dashboardStreak"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:textAppearance="?attr/textAppearanceBody1"
+                            tools:text="4 day streak" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/dashboardRate"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:textAppearance="?attr/textAppearanceSubtitle1"
+                        tools:text="62% of this account finished" />
+
+                    <TextView
+                        android:id="@+id/dashboardRateDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        tools:text="13 of 21 tasks" />
                 </LinearLayout>
-
             </com.google.android.material.card.MaterialCardView>
 
-        </LinearLayout>
+            <!-- The trend: the days of the period that produced something. -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_normal">
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_normal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dashboard_trend_title"
+                        android:textAppearance="?attr/textAppearanceSubtitle1" />
+
+                    <TextView
+                        android:id="@+id/trendWorkCaption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:text="@string/dashboard_trend_work"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <com.taskplanner.ui.components.BarChartView
+                        android:id="@+id/trendWorkChart"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/chart_bar_height"
+                        android:layout_marginTop="@dimen/spacing_xs" />
+
+                    <TextView
+                        android:id="@+id/trendCompletionsCaption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:text="@string/dashboard_trend_completions"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <com.taskplanner.ui.components.BarChartView
+                        android:id="@+id/trendCompletionsChart"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/chart_bar_height"
+                        android:layout_marginTop="@dimen/spacing_xs" />
+
+                    <TextView
+                        android:id="@+id/trendEmpty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:text="@string/dashboard_trend_empty"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- The activity grid: whole weeks, oldest column on the left. -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_normal">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_normal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dashboard_grid_title"
+                        android:textAppearance="?attr/textAppearanceSubtitle1" />
+
+                    <HorizontalScrollView
+                        android:id="@+id/activityGridScroll"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:scrollbars="none">
+
+                        <com.taskplanner.ui.components.HeatmapView
+                            android:id="@+id/activityGrid"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </HorizontalScrollView>
+
+                    <com.taskplanner.ui.components.ChartLegendView
+                        android:id="@+id/activityGridLegend"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small" />
+
+                    <TextView
+                        android:id="@+id/activityGridBusiest"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        tools:text="busiest day 2 h 5 min" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Task health: the open tasks, divided by when they are due. -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_normal">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_normal">
+
+                    <TextView
+                        android:id="@+id/healthTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceSubtitle1"
+                        tools:text="Task health · 7 tasks are open" />
+
+                    <com.taskplanner.ui.components.StackedBarView
+                        android:id="@+id/healthBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small" />
+
+                    <com.taskplanner.ui.components.ChartLegendView
+                        android:id="@+id/healthLegend"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small" />
+
+                    <TextView
+                        android:id="@+id/healthInProgress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        tools:text="2 being worked on" />
+
+                    <TextView
+                        android:id="@+id/healthStale"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        tools:text="5 untouched for two weeks" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Where the measured time went. -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_normal">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_normal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dashboard_categories_title"
+                        android:textAppearance="?attr/textAppearanceSubtitle1" />
+
+                    <com.taskplanner.ui.components.StackedBarView
+                        android:id="@+id/categoryBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small" />
+
+                    <com.taskplanner.ui.components.ChartLegendView
+                        android:id="@+id/categoryLegend"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- The busiest tasks of the period, listed rather than drawn: a name is not a colour. -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_normal">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_normal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dashboard_top_tasks_title"
+                        android:textAppearance="?attr/textAppearanceSubtitle1" />
+
+                    <LinearLayout
+                        android:id="@+id/topTasksContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:orientation="vertical" />
+
+                    <TextView
+                        android:id="@+id/topTasksEmpty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:text="@string/dashboard_top_tasks_empty"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
     <ProgressBar
-        android:id="@+id/progressBar"
+        android:id="@+id/dashboardProgress"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:visibility="gone" />
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/emptyView"
-        android:layout_width="wrap_content"
+        android:id="@+id/dashboardEmpty"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        android:gravity="center"
+        android:padding="@dimen/spacing_large"
         android:text="@string/empty_statistics"
         android:textAppearance="?attr/textAppearanceBody1"
-        android:visibility="gone" />
-
-</FrameLayout> 
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/statisticsPeriodScroll" />
+</androidx.constraintlayout.widget.ConstraintLayout>

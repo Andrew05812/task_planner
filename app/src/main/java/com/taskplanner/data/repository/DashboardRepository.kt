@@ -12,6 +12,7 @@ import com.taskplanner.data.model.WorkPeriodSummary
 import com.taskplanner.data.model.isCompletedSpelling
 import com.taskplanner.data.tracking.TimeBase
 import com.taskplanner.data.statistics.DashboardMath
+import com.taskplanner.data.statistics.FigureChange
 import com.taskplanner.data.statistics.HeatmapGrid
 import com.taskplanner.data.statistics.TrendDay
 import java.time.DayOfWeek
@@ -49,6 +50,21 @@ data class DashboardRequest(
 }
 
 /**
+ * The two figures the dashboard compares, read for the window immediately before the one shown.
+ *
+ * The comparison is a second read rather than a reshuffling of the first because the two windows are
+ * genuinely different rows: the period before today has its own work and its own finishes, and neither of
+ * them belongs in the figures above. It costs two more aggregates over the same indexed columns and loads
+ * no rows, which is what lets a screen say "against the week before" and stay a screen that never walks
+ * the account. Tasks *created* in the window before is deliberately absent: it is the one figure here that
+ * no card compares, and reading it would be paying for a number nobody is shown.
+ */
+data class PreviousPeriod(
+    val measuredSeconds: Long,
+    val completed: Int
+)
+
+/**
  * Every figure one visit to the dashboard shows, read in one pass.
  *
  * The numbers are the repository's, meaning SQLite produced them: [measured] is a `SUM` over closed
@@ -74,7 +90,9 @@ data class DashboardSnapshot(
     val categories: List<CategoryWorkSummary>,
     val topTasks: List<TaskWorkSummary>,
     /** Days of measured work running up to today. */
-    val streakDays: Int
+    val streakDays: Int,
+    /** The window of the same length immediately before [request]'s period. */
+    val previous: PreviousPeriod
 ) {
     /** Rows that are finished, whichever spelling of finished the row carries. */
     val completedEver: Int = statusCounts.filter { isCompletedSpelling(it.status) }.sumOf { it.count }
@@ -84,6 +102,12 @@ data class DashboardSnapshot(
 
     /** Share of the account finished, or null when the account has nothing to divide. */
     val completionRate: Float? = DashboardMath.completionRate(completedEver, totalTasks)
+
+    /** The period's measured time against the same figure of the window before it. */
+    val workChange: FigureChange = DashboardMath.change(measured.seconds, previous.measuredSeconds)
+
+    /** The period's completions against the same figure of the window before it. */
+    val completionsChange: FigureChange = DashboardMath.change(completed.toLong(), previous.completed.toLong())
 
     /**
      * Whether the screen has anything to draw.
@@ -153,6 +177,16 @@ class DashboardRepository @Inject constructor(
             )
         )
 
+        // The comparison is read over the window of the same length that ends the day before this one
+        // starts. For a day and for a week that window is exactly the period the user would name —
+        // yesterday, last week — and for a month it is deliberately not: April has thirty days and May has
+        // thirty-one, so a percentage between two whole months would partly measure the calendar rather
+        // than the work. Shifting by length keeps the two windows the same size, which is the one thing a
+        // comparison has to be before its percentage can mean anything.
+        val previousWindow = statisticsRepository.window(
+            DashboardMath.preceding(request.period.dayRange(request.onDay)), request.zone
+        )
+
         // The streak is read over the grid rather than over the period: a run of days is exactly the
         // thing a month's totals cannot show.
         val workedDaily = statisticsRepository.dailySeries(heatmapWindow)
@@ -177,7 +211,13 @@ class DashboardRepository @Inject constructor(
             statusCounts = taskStatisticsDao.statusCounts(userId),
             categories = statisticsRepository.byCategory(window),
             topTasks = statisticsRepository.byTask(window, TOP_TASK_LIMIT),
-            streakDays = DashboardMath.streak(workedDaily, request.onDay)
+            streakDays = DashboardMath.streak(workedDaily, request.onDay),
+            previous = PreviousPeriod(
+                measuredSeconds = statisticsRepository.summary(previousWindow)?.seconds ?: 0L,
+                // A count rather than the instants the current period is folded from: nothing here needs
+                // to know which day a previous finish fell on, only how many there were.
+                completed = statisticsRepository.completedTaskCount(previousWindow)
+            )
         )
     }
 

@@ -25,12 +25,21 @@ data class TaskWorkSummary(
     val intervals: Int
 )
 
-/** Work measured against a category inside a period; a null name means "no category". */
+/**
+ * Work measured against a category inside a period; a null name means "no category".
+ *
+ * [color] travels with the total because the dashboard paints the category's own colour rather than one it
+ * picked for the occasion: a user who made "Home" green sees green in the chart, and a chart that coloured
+ * the same category differently from the list beside it would be two screens describing one thing in two
+ * languages. The ungrouped bucket has no category row to borrow from, so it comes back null and the screen
+ * gives it the neutral shade.
+ */
 data class CategoryWorkSummary(
     val categoryId: Long?,
     val categoryName: String?,
     val seconds: Long,
-    val intervals: Int
+    val intervals: Int,
+    val color: Int? = null
 )
 
 /** One bucket of the trend: a local day and what was measured on it. */
