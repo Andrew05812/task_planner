@@ -11,7 +11,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 364 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 405 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -59,14 +59,18 @@ waking up to an empty list.
   by category, an overdue and overload signal per day, overlapping tasks laid side by side instead of
   hidden, and drag-and-drop that moves a task to another day, re-arms its reminders and queues the
   change for sync (see *Calendar* below).
-- **Backup**: versioned JSON exported and imported through the Storage Access Framework, so the app
-  never asks for a broad storage permission. Import previews what is in the file first, then either
-  merges by stable uuid or replaces, keeping a safety copy in app-private storage before a replace.
+- **Backup**: versioned JSON (`1.1`) exported and imported through the Storage Access Framework, so
+  the app never asks for a broad storage permission. The file carries tasks with their planned window,
+  categories, topics, repeat patterns and lead times. Import previews what is in the file first, then
+  either merges by stable uuid or replaces, keeping a safety copy in app-private storage before a
+  replace, and puts the restored patterns and alarms back to work once the write has committed.
 - **Accounts**: Google Credential Manager + Firebase Auth. The Firebase UID, never the e-mail, is
   the identity anchor. Signing out ends the session and deletes no data. A local profile can be
   moved onto a Google account explicitly, from Settings.
 - **Sync**: an offline queue of pending writes with stable uuids, timestamps, tombstones and sync
-  states, pushed and pulled by WorkManager when a network is available.
+  states, pushed and pulled by WorkManager when a network is available. One document per entity in
+  `users/{uid}/{tasks|categories|groups|recurrence_rules|reminders}/{uuid}`, so a series and the
+  lead times set on a task reach the other device too.
 
 ## Recurring tasks
 
@@ -186,6 +190,42 @@ nine, for an hour and a half" is a plan the user described, and a deadline alone
   already open. The three view levels share one anchor and one aggregation, so switching from month to
   week to day cannot change which tasks a day contains — only how many days are on screen.
 
+## Backup and sync of the new data
+
+The rows Stage 2 added — repeat patterns, lead times, the planned window — are worth nothing if they
+live on one device only, so they now travel the two ways the app moves data.
+
+- **The file grows to `1.1`** (`BackupModels.kt`): `data` gains `recurrenceRules` and `reminders`, and
+  a task carries `start_time`, `end_time` and `estimated_minutes` with it. The new arrays default to
+  empty, so a `1.0` backup made before this version still reads and still imports; a newer minor
+  version or a different major is refused rather than guessed at. The preview line counts series and
+  lead times next to tasks, categories, topics and archived rows, and the replace confirmation names
+  them, because "this will remove your reminders" should not be something the user learns afterwards.
+- **A reminder is imported by the pair it is built from** — its task and its lead time — not by the
+  uuid in the file: the pair is what the unique index stores, so replaying the same backup twice
+  cannot produce two alarms for one minute. A series link survives only when the pattern is in the
+  file and belongs to this profile, so a restored task cannot point at somebody else's schedule; a
+  task of a pattern that is absent comes back as a single occurrence instead of being deleted with it.
+- **Validation refuses what could not work**: a reminder whose task is not in the file (it could
+  never fire — the query that notifies joins its task), and two reminders for the same minute of one
+  task. Everything runs in one transaction, and after it commits the open instances are materialised
+  and the lead times re-armed; those two steps arm alarms and post notifications, so they stay
+  outside the transaction rather than holding it open.
+- **A destructive replace clears only the profile being replaced**: patterns and lead times of other
+  profiles on the device are left alone, in the same way tasks and topics already were.
+- **Sync grows to five collections** (`users/{uid}/recurrence_rules|reminders/{uuid}` besides the
+  three that existed). A document's shape and its merge rules now live apart from the Firestore layer
+  (`SyncedRule`, `SyncedReminder`, `SyncAppliers`) precisely because no test here can reach the cloud:
+  the cursor a series has reached, the minute a lead time was armed for and the tombstone of a
+  cancelled warning are ordinary code over a real Room database, and that is what is covered.
+- **A pull applies categories, topics, patterns, tasks and reminders in that order**, so a series
+  instance finds the pattern it belongs to and a lead time finds the task it warns for. A series
+  deleted on one device is deleted on the other, and never resurrected by an older document; a
+  reminder already shown keeps that fact, so pulling it does not put a passed minute back on the clock.
+- **The local → Google handover moves the new rows by ownership**, not by copying: a pattern's uuid
+  and a reminder's uuid are their tables' primary keys, so one row can only have one owner and the
+  links from instances to their series and from lead times to their tasks need no repair.
+
 ## Testing approach
 
 Persistence is never mocked. `AppFixture` builds an in-memory Room database with the production
@@ -206,9 +246,11 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 | `LegacyDbRescuerTest` | rescue selection, WAL sidecars, never overwriting or consuming the original |
 | `DataSafetyTest` | the production `DatabaseModule` wiring: private location, rescue + migration end to end, restart, refusal of an unknown schema |
 | `SessionRepositoryTest` | session survives restart, no fixed-user fallback, concurrent profile switches, switching keeps what a profile owns |
-| `LocalDataMigrationTest` | the local → Google handover: moves rows, keeps links, dedups by uuid, refuses the wrong target |
-| `BackupRepositoryTest` | export/import, version and relation validation, merge, replace, tombstone revival |
-| `SyncRepositoryTest` | offline queue, uuid assignment, push/pull dedup |
+| `LocalDataMigrationTest` | the local → Google handover: moves rows, keeps links, dedups by uuid, moves patterns and lead times, refuses the wrong target |
+| `BackupRepositoryTest` | export/import, version and relation validation, merge, replace, tombstone revival, patterns and lead times restored and re-armed, `1.0` files still read, per-profile isolation |
+| `SyncRepositoryTest` | offline queue, uuid assignment, push/pull dedup, a series and its reminders stay queued while the cloud is disabled |
+| `SyncAppliersTest` | what a pulled document does to this device's database: unsent local edits survive a newer copy, the cursor a pull brings is the one the next instance continues from, remote deletions stick, another profile's rows are never rewritten |
+| `SyncDocumentFormatTest` | the shape of a cloud document: the planned window and the series link inside it, round trips both ways, the local-only fields that must never appear, and a document with no usable identity refused |
 | `RecurrenceCalculatorTest` | month ends, leap days, weekday blocks, DST shifts, zone independence, year rollover, monotonic long runs |
 | `RecurrenceRepositoryTest` | one open instance per series, idempotent repair, catch-up after a week away, pause / finish / delete, per-profile isolation |
 | `TasksRecurrenceTest` | the editor's repeat plan end to end: starting a series, "only this task" versus "this and following", refused date clashes, series controls |
@@ -247,17 +289,23 @@ provide.
 
 - Cloud sync and Google sign-in are untested against a live Firebase project: no project
   configuration is committed, by design. The code paths degrade to local-only when the placeholders
-  in `gradle.properties` are unset, and the local paths are what the test suite covers.
+  in `gradle.properties` are unset, and the local paths are what the test suite covers. The same
+  caution applies to `firebase/firestore.rules`: it has not been deployed or evaluated by the rules
+  emulator either, so the required-field checks it adds for the two new collections are reviewed by
+  reading, not executed.
 - Conflict resolution is rule-based, not a merge: a local row with unsynced edits is never
   overwritten by the incoming copy, a deletion marker beats an older remote update, and a remote
   copy that is not newer than the local one is ignored. Two devices that edited the same field
   concurrently are not merged field by field — the row that still has local edits is pushed last and
   wins upstream.
 - On-device (Espresso) tests compile but have not been executed as part of this work.
-- Recurrence is local-only so far. Instances travel as ordinary tasks, but the series rule itself is
-  not in the backup file and not pushed to Firestore yet, so a second device or a restored backup
-  gets the tasks that were already produced and not the schedule that makes more of them. Export,
-  import and sync of `recurrence_rules` are the next step.
+- A `1.0` backup restores no repeat patterns, no lead times and no planned window, because a file
+  written before format `1.1` never contained them. Nothing is invented to fill the gap: the restore
+  says so in its own counts, and the user's data from that version keeps only what was in it.
+- A lead time written against a task with no uuid is left out of an export rather than guessed at:
+  the pair it is keyed on names no task the file carries. Such a row only exists in a database old
+  enough to predate stable identities; storing a lead time now gives the task its identity first, so
+  a reminder created by a current build always travels.
 - The background recurrence worker is exercised on a device only: the JVM test process has no
   initialized `WorkManager`, so its `Application`-level scheduling is not reachable from a unit test.
   The work it performs — `ensureOpenInstances()` — is fully covered by the repository and UI suites.
@@ -265,14 +313,6 @@ provide.
   for* (`rescheduleAll`, `deliverDue`, the button handlers) is covered against the real alarm and
   notification shadows, but the `WorkManager` schedule and the Hilt entry point that `onReceive` uses
   need a device.
-- Reminders are local so far. A row carries a sync state and a tombstone, and a sync pull rebuilds the
-  alarms from whatever the other device left in the database, but reminders are not in the backup file
-  and have no Firestore documents yet, so a second device gets the tasks and not the lead times set on
-  them. Export, import and cloud documents for `reminders` come with the integration stage, together
-  with the same step for `recurrence_rules`.
-- The calendar's plan fields are local so far. `start_time`, `end_time` and `estimated_minutes` are not
-  in the backup file and have no Firestore documents yet, so a second device gets the task and not the
-  plan set on it. That step belongs to the same integration work as `recurrence_rules` and `reminders`.
 - Drag and drop is covered below the framework: the tests exercise the clip codec, the day cell's and
   the controller's handling of a drop, and everything `moveToDay` does to the row. The JVM test process
   does not dispatch the `DragEvent` phases an actual finger produces, so a real touch-drag on a device
