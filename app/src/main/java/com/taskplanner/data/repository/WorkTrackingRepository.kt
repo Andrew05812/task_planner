@@ -67,7 +67,14 @@ class WorkTrackingRepository @Inject constructor(
     private val trackingSessionDao: TrackingSessionDao,
     private val workSessionDao: WorkSessionDao,
     private val sessionRepository: SessionRepository,
-    private val timeBase: TimeBase
+    private val timeBase: TimeBase,
+    /**
+     * Captured when this process first needed it — the one point where the two clocks are known to
+     * agree. An interval that started before it, across a reboot, has no monotonic reading and is
+     * measured by the wall clock alone. Shared with the statistics repository so the number a screen
+     * shows while a stretch runs is arbitrated the same way as the number stored when it ends.
+     */
+    private val monotonic: MonotonicReference
 ) {
 
     /**
@@ -76,13 +83,6 @@ class WorkTrackingRepository @Inject constructor(
      * retried transaction, a row that arrived from sync.
      */
     private val trackingMutex = Mutex()
-
-    /**
-     * Captured when this process built the repository — the one point where the two clocks are known
-     * to agree. An interval that started before it, across a reboot, has no monotonic reading, and is
-     * measured by the wall clock alone.
-     */
-    private val monotonic = MonotonicReference(timeBase)
 
     /** The profile's running session — what the global indicator reads and nothing else. */
     fun observeRunningSession(): Flow<TrackingSession?> =

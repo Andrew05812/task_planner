@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.taskplanner.data.tracking.AndroidTimeBase
+import com.taskplanner.data.tracking.MonotonicReference
 import com.taskplanner.data.tracking.TimeBase
 import dagger.Module
 import dagger.Provides
@@ -43,6 +44,16 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTimeBase(): TimeBase = AndroidTimeBase()
+
+    /**
+     * One wall-to-monotonic mapping for the process: the figure a screen shows while a stretch runs and
+     * the figure stored when it ends have to disagree in the same way, not each against its own
+     * snapshot of the clock.
+     */
+    @Provides
+    @Singleton
+    fun provideMonotonicReference(timeBase: TimeBase): MonotonicReference =
+        MonotonicReference(timeBase)
 
     /**
      * Only reachable when CloudConfig.isConfigured; guarded call sites keep the

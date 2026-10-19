@@ -33,7 +33,9 @@ import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
+import com.taskplanner.data.repository.WorkStatisticsRepository
 import com.taskplanner.data.repository.WorkTrackingRepository
+import com.taskplanner.data.tracking.MonotonicReference
 import com.taskplanner.data.sync.SyncAppliers
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -104,17 +106,25 @@ class AppFixture(private val context: Context) : AutoCloseable {
      */
     val timeBase = FakeTimeBase(wall = System.currentTimeMillis(), monotonic = 0L)
 
+    /** Shared by the tracker and the statistics reader, the way the process shares one. */
+    val monotonicReference = MonotonicReference(timeBase)
+
     val trackingSessionDao: TrackingSessionDao = database.trackingSessionDao()
     val workSessionDao: WorkSessionDao = database.workSessionDao()
     val workStatisticsDao: WorkStatisticsDao = database.workStatisticsDao()
 
     val workTrackingRepository = WorkTrackingRepository(
-        database, trackingSessionDao, workSessionDao, sessionRepository, timeBase
+        database, trackingSessionDao, workSessionDao, sessionRepository, timeBase, monotonicReference
     )
 
     /** The same storage seen by a second process: what a restart or a re-sign-in reads. */
     fun newWorkTrackingRepository(): WorkTrackingRepository = WorkTrackingRepository(
-        database, trackingSessionDao, workSessionDao, sessionRepository, timeBase
+        database, trackingSessionDao, workSessionDao, sessionRepository, timeBase,
+        MonotonicReference(timeBase)
+    )
+
+    val workStatisticsRepository = WorkStatisticsRepository(
+        workStatisticsDao, workSessionDao, sessionRepository, timeBase, monotonicReference
     )
 
     val taskRepository = TaskRepository(
