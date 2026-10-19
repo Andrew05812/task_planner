@@ -358,6 +358,59 @@
     <string name="work_conflict_cancel">Keep measuring the other task</string>
     <string name="work_closed_on_complete">Task finished. The stretch being measured was closed and its time saved; time spent paused was not counted.</string>
 
+    <!-- Work history: the list, its period filters, and hand-entered adjustments to it -->
+    <string name="action_work_history">Work history</string>
+    <string name="history_title">Work history</string>
+    <string name="history_period_today">Today</string>
+    <string name="history_period_yesterday">Yesterday</string>
+    <string name="history_period_this_week">This week</string>
+    <string name="history_period_last_week">Last week</string>
+    <string name="history_period_this_month">This month</string>
+    <string name="history_period_last_month">Last month</string>
+    <string name="history_period_custom">Choose dates</string>
+    <string name="history_summary">%1$s measured · %2$d stretches · %3$d sessions</string>
+    <string name="history_range_format">%1$s – %2$s</string>
+    <string name="history_in_progress">Still being measured</string>
+    <string name="history_meta_format">%1$s · %2$d stretches</string>
+    <string name="history_manual_format">%1$d entered by hand</string>
+    <string name="history_empty">Nothing was measured in this period.</string>
+    <string name="history_sort_title">Order by</string>
+    <string name="history_sort_date">Newest first</string>
+    <string name="history_sort_duration">Longest first</string>
+    <string name="history_sort_task">Task name</string>
+    <string name="history_edit_interval">Correct this stretch</string>
+    <string name="history_delete_interval">Throw this stretch away</string>
+    <string name="history_correct_title">Correct this stretch</string>
+    <string name="history_add_title">Enter time by hand</string>
+    <string name="history_start_hint">Starts (yyyy-MM-dd HH:mm)</string>
+    <string name="history_end_hint">Ends (yyyy-MM-dd HH:mm)</string>
+    <string name="history_reason_hint">Why it changed (optional)</string>
+    <string name="history_previous_corrections">What this stretch said before: %1$s</string>
+    <string name="history_interval_was_format">%1$s – %2$s</string>
+    <string name="history_no_corrections">This stretch has never been corrected.</string>
+    <string name="history_from_hint">From (yyyy-MM-dd)</string>
+    <string name="history_to_hint">To (yyyy-MM-dd)</string>
+    <string name="history_apply">Apply</string>
+    <string name="history_bad_instant">Write the instant as yyyy-MM-dd HH:mm, for example 2026-06-18 09:00.</string>
+    <string name="history_bad_range">A stretch cannot end at or before it starts.</string>
+    <string name="history_bad_dates">The last day cannot fall before the first.</string>
+    <string name="history_corrected">The stretch was corrected. What it said before is kept.</string>
+    <string name="history_recorded">The time you entered is in the history, marked as entered by hand.</string>
+    <string name="history_removed">The stretch is out of history. Its record stays in the database.</string>
+    <string name="history_still_measured">This stretch is still being measured. Stop the timer before changing it.</string>
+    <string name="history_not_found">This measurement is no longer in the history.</string>
+    <string name="history_no_profile">No profile is signed in, so there is no history to write to.</string>
+    <string name="history_conflict_title">This stretch is already measured</string>
+    <string name="history_conflict_message">Nothing was changed: the time you named is already covered by the measurements listed here. Correct one of them instead, or name a different stretch.</string>
+    <string name="history_delete_confirm_title">Throw this stretch away?</string>
+    <string name="history_delete_confirm_message">It leaves the history list. The row and the record of its corrections stay in the database, so a later restore or another device can still see what was measured.</string>
+    <string name="history_delete_confirm_yes">Take it out</string>
+
+    <plurals name="history_conflict_count">
+        <item quantity="one">%1$d measurement already covers it</item>
+        <item quantity="other">%1$d measurements already cover it</item>
+    </plurals>
+
     <plurals name="reminder_count">
         <item quantity="one">%1$d reminder set</item>
         <item quantity="other">%1$d reminders set</item>

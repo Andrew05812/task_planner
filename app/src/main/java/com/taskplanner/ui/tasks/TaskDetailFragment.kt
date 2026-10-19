@@ -36,6 +36,7 @@ import com.taskplanner.data.repository.WorkStatisticsRepository
 import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.databinding.FragmentTaskDetailBinding
 import com.taskplanner.databinding.ItemWorkIntervalBinding
+import com.taskplanner.ui.util.WorkAdjustmentUi
 import com.taskplanner.ui.util.WorkConflictDialog
 import com.taskplanner.ui.util.WorkTimeFormat
 import dagger.hilt.android.AndroidEntryPoint
@@ -641,6 +642,30 @@ class TaskDetailFragment : Fragment() {
             workPauseButton.setOnClickListener { workSubject()?.let { viewModel.toggleWork(it) } }
             workResumeButton.setOnClickListener { workSubject()?.let { viewModel.toggleWork(it) } }
             workStopButton.setOnClickListener { workSubject()?.let { viewModel.stopWork(it) } }
+            workAddButton.setOnClickListener { askForManualWork() }
+        }
+    }
+
+    /**
+     * Time the user says they worked here without the timer measuring it.
+     *
+     * The form asks for two instants and nothing else: no reason is wanted, because an entered stretch has
+     * no earlier figure to explain, and it is marked as hand-entered by the row itself rather than by a
+     * note. What the history already holds decides whether the entry can be written, and the answer — including
+     * the measurements it would overlap — goes back to the screen that asked.
+     */
+    private fun askForManualWork() {
+        val task = workSubject() ?: return
+        WorkAdjustmentUi.showIntervalForm(
+            anchor = this,
+            titleRes = R.string.history_add_title,
+            start = null,
+            end = null,
+            reasonVisible = false
+        ) { startedAt, endedAt, _ ->
+            viewModel.recordManualWork(task, startedAt, endedAt) { result ->
+                WorkAdjustmentUi.report(this, result, R.string.history_recorded)
+            }
         }
     }
 

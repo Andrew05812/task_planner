@@ -15,7 +15,19 @@
         <action
             android:id="@+id/action_tasks_to_archive"
             app:destination="@id/navigation_archive" />
+        <action
+            android:id="@+id/action_tasks_to_work_history"
+            app:destination="@id/navigation_work_history" />
     </fragment>
+
+    <!-- What the measurements add up to, and the place a closed one can be corrected. Its own
+         destination rather than a block on the task screen: the history is the account of the whole
+         profile, and a task screen only ever shows the part of it that belongs to one task. -->
+    <fragment
+        android:id="@+id/navigation_work_history"
+        android:name="com.taskplanner.ui.work.WorkHistoryFragment"
+        android:label="@string/history_title"
+        tools:layout="@layout/fragment_work_history" />
 
     <fragment
         android:id="@+id/navigation_calendar"

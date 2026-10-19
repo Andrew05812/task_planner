@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One tracking session as the history list shows it: what was worked on, how much of it is a finished
+     measurement, and — once opened — the stretches that make it up. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/historyRowRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="10dp">
+
+    <TextView
+        android:id="@+id/historyTaskTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="?attr/textAppearanceSubtitle1"
+        tools:text="Write the report" />
+
+    <TextView
+        android:id="@+id/historyWhen"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceCaption"
+        tools:text="18 Jun, 09:00 · 2 stretches · 1 entered by hand" />
+
+    <TextView
+        android:id="@+id/historyTotal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceBody2"
+        tools:text="1 h 15 min" />
+
+    <TextView
+        android:id="@+id/historyRunning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/history_in_progress"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/historyIntervals"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingTop="6dp" />
+</LinearLayout>

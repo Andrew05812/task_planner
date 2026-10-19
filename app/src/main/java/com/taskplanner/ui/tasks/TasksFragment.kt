@@ -99,6 +99,12 @@ class TasksFragment : Fragment() {
                             )
                             true
                         }
+                        R.id.action_work_history -> {
+                            findNavController().navigate(
+                                TasksFragmentDirections.actionTasksToWorkHistory()
+                            )
+                            true
+                        }
                         else -> false
                     }
             },

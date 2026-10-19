@@ -89,15 +89,21 @@ interface WorkSessionDao {
     )
     suspend fun getIntervalsOf(sessionUuid: String): List<WorkSession>
 
+    /**
+     * The stretches of one logical session, as the history screen shows them.
+     *
+     * Scoped to the profile as well as to the session: after an import two profiles can hold rows under
+     * the same uuid, and the screen that expands one of them has no business reading the other's.
+     */
     @Query(
         "SELECT uuid AS uuid, started_at AS startedAt, ended_at AS endedAt, " +
             "duration_seconds AS durationSeconds, source AS source, " +
             "clock_anomaly AS clockAnomaly, local_day AS localDay, " +
             "utc_offset_minutes AS utcOffsetMinutes " +
-            "FROM work_sessions WHERE tracking_session_uuid = :sessionUuid AND is_deleted = 0 " +
-            "ORDER BY started_at ASC, id ASC"
+            "FROM work_sessions WHERE tracking_session_uuid = :sessionUuid AND user_id = :userId " +
+            "AND is_deleted = 0 ORDER BY started_at ASC, id ASC"
     )
-    suspend fun getIntervalRowsOf(sessionUuid: String): List<WorkIntervalRow>
+    suspend fun getIntervalRowsOf(sessionUuid: String, userId: Long): List<WorkIntervalRow>
 
     /**
      * The stretches last measured on one task, newest first, for the task screen's history.
@@ -132,13 +138,18 @@ interface WorkSessionDao {
      * What already occupies a stretch of time for this profile — the check behind §13's rule that a
      * manual interval which overlaps another one is shown as a conflict, not saved quietly.
      *
-     * An interval with no end overlaps every window that reaches into the future it is still running
-     * into, so it is asked about separately rather than compared against an `ended_at` it does not have.
+     * The two shapes of overlap are asked about separately rather than with one `BETWEEN`: a closed
+     * interval occupies the stretch it names, while an open one occupies its start and every instant
+     * after it, so it conflicts with a window that reaches past that start and with none that ends
+     * before it. Folding the open case into `ended_at IS NULL` alone would report every entry as
+     * conflicting with a running timer, including last week's.
+     *
      * [excludeUuid] leaves the row being corrected out of its own conflict list.
      */
     @Query(
         "SELECT * FROM work_sessions WHERE user_id = :userId AND is_deleted = 0 AND uuid != :excludeUuid " +
-            "AND (ended_at IS NULL OR (started_at < :endExclusive AND ended_at > :startInclusive)) " +
+            "AND started_at < :endExclusive " +
+            "AND (ended_at IS NULL OR ended_at > :startInclusive) " +
             "ORDER BY started_at ASC"
     )
     suspend fun findOverlapping(
@@ -182,11 +193,34 @@ interface WorkSessionDao {
         userId: Long, from: Long, to: Long, now: Long, taskId: Long, categoryId: Long
     ): List<WorkHistoryRow>
 
+    /**
+     * The moment this profile last touched a measurement, or 0 when it has none.
+     *
+     * The history list is a `GROUP BY` over two tables, so Room cannot infer one Flow from the rows it
+     * selects and the screen needs a signal to re-run it on. This is that signal: a scalar the
+     * invalidation tracker can answer cheaply, so a write anywhere in the history re-runs the grouped
+     * query once instead of the list loading intervals to notice a change.
+     */
+    @Query(
+        "SELECT COALESCE(MAX(updated_at), 0) FROM work_sessions " +
+            "WHERE user_id = :userId AND is_deleted = 0"
+    )
+    fun observeChanges(userId: Long): Flow<Long>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertCorrection(correction: WorkIntervalCorrection): Long
 
-    @Query("SELECT * FROM work_interval_corrections WHERE interval_uuid = :intervalUuid ORDER BY created_at ASC")
-    suspend fun getCorrectionsOf(intervalUuid: String): List<WorkIntervalCorrection>
+    /**
+     * What one interval was told before, oldest change first.
+     *
+     * Scoped to the profile for the same reason the expansion above is: the uuid of a row is not a
+     * permission to read another profile's account of it.
+     */
+    @Query(
+        "SELECT * FROM work_interval_corrections WHERE interval_uuid = :intervalUuid " +
+            "AND user_id = :userId ORDER BY created_at ASC"
+    )
+    suspend fun getCorrectionsOf(intervalUuid: String, userId: Long): List<WorkIntervalCorrection>
 
     @Query("SELECT * FROM work_interval_corrections WHERE user_id = :userId")
     suspend fun getCorrectionsForUser(userId: Long): List<WorkIntervalCorrection>

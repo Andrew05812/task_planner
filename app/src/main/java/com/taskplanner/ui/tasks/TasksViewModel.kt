@@ -8,6 +8,7 @@ import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.repository.AdjustmentResult
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.RecurrenceRepository
@@ -463,6 +464,29 @@ class TasksViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 workTrackingRepository.stop(task)
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
+    /**
+     * Records time the user says they worked on [task] without the timer measuring it.
+     *
+     * The request goes to the tracking repository rather than to the task row, because whether the stretch
+     * can be written is a question about the history: an interval that ends before it starts measures
+     * nothing, and one whose time is already occupied by other measurements has to be shown to the user
+     * before it is saved. The answer is handed back for the screen to say.
+     */
+    fun recordManualWork(
+        task: Task,
+        startedAt: Long,
+        endedAt: Long,
+        onResult: (AdjustmentResult) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                onResult(workTrackingRepository.recordManualInterval(task, startedAt, endedAt))
             } catch (e: Exception) {
                 setError(e)
             }

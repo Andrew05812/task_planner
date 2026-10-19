@@ -8,6 +8,7 @@ import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TrackingSession
 import com.taskplanner.data.model.TrackingState
 import com.taskplanner.data.model.SyncState
+import com.taskplanner.data.model.WorkIntervalCorrection
 import com.taskplanner.data.model.WorkSession
 import com.taskplanner.data.model.WorkSource
 import com.taskplanner.data.tracking.ConflictResolution
@@ -47,8 +48,42 @@ enum class TrackingOutcome {
     NO_PROFILE,
 }
 
+/** Why an interval the user asked for was not written. */
+enum class AdjustmentRejection {
+    NO_PROFILE,
+
+    /** An interval that ends before it starts is not a measurement of anything. */
+    START_NOT_BEFORE_END,
+
+    /** The stretch is still being measured; the correction waits until it is closed. */
+    STILL_BEING_MEASURED,
+
+    /** The row the request named is not in this profile's history. */
+    NOT_FOUND,
+}
+
 /**
- * The tracker's only writer: it turns the state machine's decision into rows, in one transaction.
+ * What a manual interval or a correction ended up doing.
+ *
+ * A sealed type rather than a null or a boolean because the screen has three genuinely different answers
+ * to give and each needs different words: a write landed, a write is impossible, or the stretch the user
+ * described is already occupied by measurements they have to look at first. [Overlapping] is the §13
+ * rule made explicit — a conflicting entry is shown as a conflict and never saved quietly.
+ */
+sealed class AdjustmentResult {
+
+    /** The uuid of the interval that is now in history. */
+    data class Accepted(val intervalUuid: String) : AdjustmentResult()
+
+    data class Rejected(val reason: AdjustmentRejection) : AdjustmentResult()
+
+    /** The intervals that already cover the requested stretch; nothing was written. */
+    data class Overlapping(val intervals: List<WorkSession>) : AdjustmentResult()
+}
+
+/**
+ * The only writer of work history: it turns the state machine's decision into rows, in one transaction,
+ * and it writes the entries and corrections the user asks for without a timer.
  *
  * Nothing here remembers a timer. Every request re-reads the stored session and the stored open
  * interval before deciding, which is what makes the feature survive the cases a ViewModel cannot: the
@@ -59,6 +94,10 @@ enum class TrackingOutcome {
  *
  * The pause is never a row, and stopping a paused session closes the session alone, so no statistic is
  * ever built on time nobody worked.
+ *
+ * Manual work enters as a session and one closed interval rather than as an interval on its own, and a
+ * correction appends a record of what was changed instead of erasing it: both keep the history the
+ * screens read honest about which figure was measured and which was declared afterwards.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -163,6 +202,188 @@ class WorkTrackingRepository @Inject constructor(
     /** The intervals of one session, oldest first — the detail screen's history block. */
     suspend fun intervalsOf(sessionUuid: String): List<WorkSession> =
         workSessionDao.getIntervalsOf(sessionUuid)
+
+    /**
+     * Records work the user says they did without the timer measuring it.
+     *
+     * The entry becomes a session and one closed interval with [WorkSource.MANUAL], rather than a bare
+     * interval row: the history screen lists sessions, so an interval with no session under it would be
+     * invisible in the very list the entry was made for. The session opens and closes at the instants
+     * the user named, and no pause is invented around it.
+     *
+     * Two things are refused rather than repaired. An interval that ends at or before its start measures
+     * nothing, and clamping it to zero would record work that did not happen. An entry whose stretch is
+     * already occupied by other measurements comes back as [AdjustmentResult.Overlapping] with those rows
+     * attached — a second account of the same half hour would inflate every total built on this table,
+     * and only the user can say which of the two is theirs.
+     */
+    suspend fun recordManualInterval(
+        task: Task,
+        startedAt: Long,
+        endedAt: Long
+    ): AdjustmentResult = adjustment { userId ->
+        if (endedAt <= startedAt) {
+            return@adjustment AdjustmentResult.Rejected(AdjustmentRejection.START_NOT_BEFORE_END)
+        }
+        val overlapping = workSessionDao.findOverlapping(userId, startedAt, endedAt, NO_UUID)
+        if (overlapping.isNotEmpty()) {
+            return@adjustment AdjustmentResult.Overlapping(overlapping)
+        }
+        val now = timeBase.wallMillis()
+        val sessionUuid = UUID.randomUUID().toString()
+        val intervalUuid = UUID.randomUUID().toString()
+        database.withTransaction {
+            trackingSessionDao.insert(
+                TrackingSession(
+                    uuid = sessionUuid,
+                    userId = userId,
+                    taskId = task.id,
+                    taskUuid = task.uuid,
+                    taskTitle = task.title,
+                    state = TrackingState.COMPLETED,
+                    startedAt = startedAt,
+                    stoppedAt = endedAt,
+                    zoneId = ZoneId.systemDefault().id,
+                    runningMarker = null,
+                    syncState = SyncState.PENDING,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+            workSessionDao.insert(
+                WorkSession(
+                    uuid = intervalUuid,
+                    userId = userId,
+                    trackingSessionUuid = sessionUuid,
+                    taskId = task.id,
+                    taskUuid = task.uuid,
+                    startedAt = startedAt,
+                    endedAt = endedAt,
+                    durationSeconds = (endedAt - startedAt) / 1000L,
+                    localDay = WorkTimeMath.epochDayOf(startedAt),
+                    utcOffsetMinutes = WorkTimeMath.utcOffsetMinutesOf(startedAt),
+                    source = WorkSource.MANUAL,
+                    openMarker = null,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+        }
+        AdjustmentResult.Accepted(intervalUuid)
+    }
+
+    /**
+     * Changes what a closed interval says, and keeps what it said before.
+     *
+     * The row is updated because the user's corrected account is the figure every total should use from
+     * now on. The correction row is appended because that is the only place the distinction between "this
+     * was measured" and "this is what the user now believes" survives; a rewrite without it would make the
+     * history untraceable, and §3.2 forbids it.
+     *
+     * The day the interval is filed under follows the corrected start, since the point of a correction is
+     * that the work happened elsewhere in time. What the stretch was measured *with* is left alone: a
+     * recorded clock anomaly is a fact about the measurement, and the user's opinion about the numbers
+     * does not undo it.
+     */
+    suspend fun correctInterval(
+        intervalUuid: String,
+        startedAt: Long,
+        endedAt: Long,
+        reason: String?
+    ): AdjustmentResult = adjustment { userId ->
+        val existing = ownInterval(userId, intervalUuid)
+            ?: return@adjustment AdjustmentResult.Rejected(AdjustmentRejection.NOT_FOUND)
+        if (existing.isOpen) {
+            return@adjustment AdjustmentResult.Rejected(AdjustmentRejection.STILL_BEING_MEASURED)
+        }
+        if (endedAt <= startedAt) {
+            return@adjustment AdjustmentResult.Rejected(AdjustmentRejection.START_NOT_BEFORE_END)
+        }
+        val overlapping = workSessionDao.findOverlapping(userId, startedAt, endedAt, intervalUuid)
+        if (overlapping.isNotEmpty()) {
+            return@adjustment AdjustmentResult.Overlapping(overlapping)
+        }
+        val now = timeBase.wallMillis()
+        database.withTransaction {
+            workSessionDao.insertCorrection(
+                WorkIntervalCorrection(
+                    uuid = UUID.randomUUID().toString(),
+                    intervalUuid = intervalUuid,
+                    userId = userId,
+                    oldStartedAt = existing.startedAt,
+                    oldEndedAt = existing.endedAt,
+                    newStartedAt = startedAt,
+                    newEndedAt = endedAt,
+                    reason = reason?.takeIf { it.isNotBlank() },
+                    syncState = SyncState.PENDING,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+            workSessionDao.update(
+                existing.copy(
+                    startedAt = startedAt,
+                    endedAt = endedAt,
+                    durationSeconds = (endedAt - startedAt) / 1000L,
+                    localDay = WorkTimeMath.epochDayOf(startedAt),
+                    utcOffsetMinutes = WorkTimeMath.utcOffsetMinutesOf(startedAt),
+                    syncState = SyncState.PENDING,
+                    updatedAt = now
+                )
+            )
+        }
+        AdjustmentResult.Accepted(intervalUuid)
+    }
+
+    /**
+     * Throws an interval away.
+     *
+     * Softly, and only when it is closed: the row and its correction history stay in the database, because
+     * an interval the user later restores or syncs to another device has to carry the same account, and
+     * the append-only rule cannot survive a delete that erases what was corrected. An open row is not the
+     * user's to throw away while it is being measured — it is the timer, and Stop is the way to end it.
+     */
+    suspend fun removeInterval(intervalUuid: String): AdjustmentResult = adjustment { userId ->
+        val existing = ownInterval(userId, intervalUuid)
+            ?: return@adjustment AdjustmentResult.Rejected(AdjustmentRejection.NOT_FOUND)
+        if (existing.isOpen) {
+            return@adjustment AdjustmentResult.Rejected(AdjustmentRejection.STILL_BEING_MEASURED)
+        }
+        database.withTransaction {
+            workSessionDao.softDelete(existing.uuid, timeBase.wallMillis())
+        }
+        AdjustmentResult.Accepted(existing.uuid)
+    }
+
+    /**
+     * The shape every adjustment follows: take the profile, then the lock, then read what the history
+     * already says before writing.
+     *
+     * The same lock the tracker uses, because an adjustment and a Start are writers on the same rows: a
+     * manual entry that lands while an interval is being closed has to be checked against the state the
+     * close leaves behind, not against the state before it.
+     */
+    private suspend fun adjustment(
+        block: suspend (userId: Long) -> AdjustmentResult
+    ): AdjustmentResult = trackingMutex.withLock {
+        val userId = sessionRepository.currentUserId()
+            ?: return@withLock AdjustmentResult.Rejected(AdjustmentRejection.NO_PROFILE)
+        block(userId)
+    }
+
+    /**
+     * The interval [intervalUuid] names, when this profile may change it, and null when it may not.
+     *
+     * Two profiles can hold the same uuid after an import, and the one that does not own the row has no
+     * business editing it — that is §16's isolation, asked here rather than trusted of the screen that
+     * happens to hold the uuid. A row that was thrown away is no longer part of the history the user is
+     * reading either. Whether what comes back is still being measured is the caller's to answer, since it
+     * reports that case differently from a row that is not there.
+     */
+    private suspend fun ownInterval(userId: Long, intervalUuid: String): WorkSession? {
+        val existing = workSessionDao.getByUuid(intervalUuid) ?: return null
+        return existing.takeIf { it.userId == userId && !it.isDeleted }
+    }
 
     /**
      * Reads the stored tracking after a start-up and releases a slot that holds nothing.
@@ -321,5 +542,16 @@ class WorkTrackingRepository @Inject constructor(
         effect.state == TrackingState.COMPLETED -> TrackingOutcome.STOPPED
         effect.beginsNewSession -> TrackingOutcome.STARTED
         else -> TrackingOutcome.RESUMED
+    }
+
+    companion object {
+        /**
+         * The exclude value that excludes nothing.
+         *
+         * The overlap query leaves the row being corrected out by its uuid, and every stored row has a
+         * generated one, so an empty uuid leaves the whole history in the comparison — which is what a
+         * brand new manual entry needs.
+         */
+        private const val NO_UUID = ""
     }
 }

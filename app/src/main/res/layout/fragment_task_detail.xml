@@ -311,6 +311,16 @@
                     android:layout_height="wrap_content"
                     android:text="@string/work_stop"
                     android:visibility="gone" />
+
+                <!-- Work the timer did not measure. Its own button rather than a menu item, because the
+                     only thing that makes an entered stretch trustworthy is that the user can see it is
+                     theirs and not a measurement. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/workAddButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/history_add_title" />
             </LinearLayout>
 
             <TextView

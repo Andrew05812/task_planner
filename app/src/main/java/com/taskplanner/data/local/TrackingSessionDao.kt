@@ -98,6 +98,19 @@ interface TrackingSessionDao {
     @Query("UPDATE tracking_sessions SET sync_state = :state WHERE uuid = :uuid")
     suspend fun setSyncState(uuid: String, state: String)
 
+    /**
+     * The moment this profile last changed a session, or 0 when it has none.
+     *
+     * Pausing, stopping and correcting a session change nothing about the intervals, so the interval
+     * signal alone would leave the history list showing a session that is no longer running. The
+     * history screen watches both.
+     */
+    @Query(
+        "SELECT COALESCE(MAX(updated_at), 0) FROM tracking_sessions " +
+            "WHERE user_id = :userId AND is_deleted = 0"
+    )
+    fun observeChanges(userId: Long): Flow<Long>
+
     @Query(
         "UPDATE tracking_sessions SET is_deleted = 1, deleted_at = :now, running_marker = NULL, " +
             "sync_state = 'DELETING' WHERE uuid = :uuid"

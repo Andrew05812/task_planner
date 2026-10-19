@@ -10,6 +10,8 @@ import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskTotalSeconds
 import com.taskplanner.data.model.TaskWorkSummary
 import com.taskplanner.data.model.TrackingSession
+import com.taskplanner.data.model.WorkHistoryRow
+import com.taskplanner.data.model.WorkIntervalCorrection
 import com.taskplanner.data.model.WorkIntervalRow
 import com.taskplanner.data.model.WorkPeriodSummary
 import com.taskplanner.data.model.WorkSession
@@ -47,6 +49,19 @@ enum class WorkPeriod {
         THIS_MONTH -> WorkTimeMath.monthDayRange(onDay)
         LAST_MONTH -> WorkTimeMath.monthDayRange(onDay.withDayOfMonth(1).minusMonths(1))
     }
+}
+
+/**
+ * The order the history screen can put its list in.
+ *
+ * One named sort per statement in `WorkSessionDao` rather than a column name interpolated into the SQL:
+ * the screen changes what it orders by, and each ordering still has to be a query that can be planned,
+ * measured and read at the database level.
+ */
+enum class HistorySort {
+    DATE,
+    DURATION,
+    TASK
 }
 
 /**
@@ -142,6 +157,71 @@ class WorkStatisticsRepository @Inject constructor(
     suspend fun completedTaskCount(window: WorkWindow): Int =
         userIdOrNull()?.let { statisticsDao.completedTasksInPeriod(it, window.fromMillis, window.toMillis) }
             ?: 0
+
+    /**
+     * The history list for one window, ordered by [sort], optionally narrowed to a task or a category.
+     *
+     * One grouped query answers the whole screen — the sessions, their totals, their interval counts and
+     * how much of each was typed in afterwards — because §10 is precisely the rule that a list built by
+     * walking intervals in Kotlin would break. `null` ids mean "do not filter".
+     */
+    suspend fun history(
+        window: WorkWindow,
+        sort: HistorySort,
+        taskId: Long? = null,
+        categoryId: Long? = null
+    ): List<WorkHistoryRow> {
+        val userId = sessionRepository.currentUserId() ?: return emptyList()
+        val task = taskId ?: NO_FILTER
+        val category = categoryId ?: NO_FILTER
+        val now = timeBase.wallMillis()
+        return when (sort) {
+            HistorySort.DATE ->
+                workSessionDao.historyByDate(userId, window.fromMillis, window.toMillis, now, task, category)
+            HistorySort.DURATION ->
+                workSessionDao.historyByDuration(userId, window.fromMillis, window.toMillis, now, task, category)
+            HistorySort.TASK ->
+                workSessionDao.historyByTask(userId, window.fromMillis, window.toMillis, now, task, category)
+        }
+    }
+
+    /**
+     * The same list as a Flow that re-runs when the history changes.
+     *
+     * The list is a `GROUP BY` across both tracking tables, so Room cannot derive a Flow from its own
+     * result and the screen would otherwise need a timer to notice a write. Instead it watches the two
+     * change signals — the last write to an interval and the last write to a session — and re-runs the
+     * grouped query when either moves. A pause or a stop therefore reaches the list without any row of
+     * history being loaded first.
+     */
+    fun observeHistory(
+        window: WorkWindow,
+        sort: HistorySort,
+        taskId: Long? = null,
+        categoryId: Long? = null
+    ): Flow<List<WorkHistoryRow>> = sessionRepository.currentUser.flatMapLatest { user ->
+        if (user == null) flowOf(emptyList()) else combine(
+            workSessionDao.observeChanges(user.id),
+            trackingSessionDao.observeChanges(user.id)
+        ) { intervals, sessions -> intervals + sessions }.map {
+            history(window, sort, taskId, categoryId)
+        }
+    }
+
+    /**
+     * The stretches that make one history entry up, oldest first.
+     *
+     * Read when the user expands a row rather than with the list: the list shows one row per session and
+     * would have to load every interval of the period to be able to expand any of them, which is the
+     * aggregate-without-an-index §10 forbids. Both this read and the one below are asked of the current
+     * profile, because after an import a uuid is not enough to say whose rows they are.
+     */
+    suspend fun intervalsOf(sessionUuid: String): List<WorkIntervalRow> =
+        userIdOrNull()?.let { workSessionDao.getIntervalRowsOf(sessionUuid, it) } ?: emptyList()
+
+    /** What an interval was before the user corrected it, oldest correction first. */
+    suspend fun correctionsOf(intervalUuid: String): List<WorkIntervalCorrection> =
+        userIdOrNull()?.let { workSessionDao.getCorrectionsOf(intervalUuid, it) } ?: emptyList()
 
     /**
      * What has been spent on [task], and what is still being spent on it right now.
@@ -312,6 +392,13 @@ class WorkStatisticsRepository @Inject constructor(
     companion object {
         /** Stretches the task screen lists before sending the user to the history. */
         const val RECENT_INTERVAL_LIMIT = 12
+
+        /**
+         * The value the history query reads as "no task filter" / "no category filter". A prepared
+         * statement cannot leave a bound parameter out, so the DAO spells the absence out; 0 is a real
+         * row id on some accounts, hence a value no row can have.
+         */
+        private const val NO_FILTER = -1L
 
         /** Days of per-task trend the task screen keeps in view, enough to cover a weekend's work. */
         private const val TREND_BACKFILL_DAYS = 30L
