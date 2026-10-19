@@ -184,13 +184,13 @@ interface TaskDao {
 
     @Query(
         "UPDATE tasks SET archived = 1, archived_at = :now, status = 'COMPLETED', " +
-            "updated_at = :now, sync_state = 'PENDING' WHERE id = :taskId"
+            "completed_at = :now, updated_at = :now, sync_state = 'PENDING' WHERE id = :taskId"
     )
     suspend fun archiveTask(taskId: Long, now: Long = System.currentTimeMillis())
 
     @Query(
         "UPDATE tasks SET archived = 0, archived_at = NULL, status = 'TODO', " +
-            "updated_at = :now, sync_state = 'PENDING' WHERE id = :taskId"
+            "completed_at = NULL, updated_at = :now, sync_state = 'PENDING' WHERE id = :taskId"
     )
     suspend fun restoreTask(taskId: Long, now: Long = System.currentTimeMillis())
 

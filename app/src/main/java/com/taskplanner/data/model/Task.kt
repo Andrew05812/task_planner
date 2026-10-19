@@ -116,6 +116,20 @@ data class Task(
     @ColumnInfo(name = "started_at")
     val startedAt: Long? = null,
 
+    /**
+     * When this task was completed, or null if it never has been.
+     *
+     * Different from every other instant on the row: `started_at` is when the user said they were
+     * starting, `updated_at` is when any field last changed, `archived_at` is when the row left the
+     * active list, and the measured work is in `work_sessions` — none of those is a completion. Written
+     * by the transition into COMPLETED and cleared when the task is taken back out of it, so it always
+     * describes the current completion rather than an arbitrary later edit. Repeat completions overwrite
+     * it, which is safe because it is not where the history lives: the work the user actually spent
+     * stays in the interval rows no matter how often the task is opened and closed again.
+     */
+    @ColumnInfo(name = "completed_at")
+    val completedAt: Long? = null,
+
     @ColumnInfo(name = "user_id")
     val userId: Long,
 

@@ -225,7 +225,7 @@ class AppMigrationsTest {
     fun `migrations are idempotently registered for every retained version pair`() {
         val pairs = AppMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11),
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11, 11 to 12),
             pairs
         )
     }
@@ -269,6 +269,183 @@ class AppMigrationsTest {
     }
 
     private val latestVersion: Int = AppMigrations.ALL.maxOf { it.endVersion }
+
+    @Test
+    fun `migration 11 to 12 adds completed_at without touching a stored value`() {
+        val db = open(11)
+        val before = counts(db)
+        val beforeValues = db.rows(
+            "SELECT id, title, status, started_at, archived_at, updated_at FROM tasks ORDER BY id"
+        )
+        db.migrate(AppMigrations.MIGRATION_11_12)
+        builder.assertMatchesSchema(db, 12, "MIGRATION_11_12")
+
+        assertEquals("adding a column moves no row", before, counts(db))
+        assertEquals(beforeValues, db.rows(
+            "SELECT id, title, status, started_at, archived_at, updated_at FROM tasks ORDER BY id"
+        ))
+        // A task an older build finished was completed — but when exactly was never recorded, and
+        // filling the gap from updated_at or archived_at would put a guessed instant into the column
+        // whose only purpose is to be believed.
+        assertEquals(
+            listOf(null, null),
+            db.rows("SELECT completed_at FROM tasks ORDER BY id").map { it[0] }
+        )
+        // The column is nullable, so the states a task can already be in stay writable.
+        db.exec(
+            "INSERT INTO tasks (title, description, priority, status, user_id, `order`, created_at, " +
+                "updated_at) VALUES ('later', '', 'MEDIUM', 'TODO', ${Seeder.USER_ID}, 0, 1, 1)"
+        )
+        assertEquals(3L, db.firstLong("SELECT COUNT(*) FROM tasks"))
+    }
+
+    @Test
+    fun `migration 11 to 12 creates the work tables with the links the history needs`() {
+        val db = open(11)
+        db.migrate(AppMigrations.MIGRATION_11_12)
+
+        assertTrue(
+            "sessions, intervals and their correction audit, and nothing else",
+            db.tableNames().containsAll(setOf("tracking_sessions", "work_sessions", "work_interval_corrections"))
+        )
+        assertEquals(
+            "one measured interval per profile can be open at a time",
+            listOf("user_id", "open_marker"),
+            db.rows("PRAGMA index_info('index_work_sessions_user_id_open_marker')").map { it[2] }
+        )
+        assertEquals(
+            "and one session per profile can be running at a time",
+            listOf("running_marker"),
+            db.rows("PRAGMA index_info('index_tracking_sessions_running_marker')").map { it[2] }
+        )
+        assertTrue(
+            "the unique index on the marker is what makes those two database rules, not UI courtesy",
+            db.rows("PRAGMA index_list('work_sessions')").any { it[2] == "1" && it[1] == "index_work_sessions_user_id_open_marker" }
+        )
+        assertEquals(
+            "work history belongs to a profile; dropping the profile drops it, dropping a task does not",
+            listOf("users"),
+            db.rows("PRAGMA foreign_key_list('work_sessions')").map { it[2] }.distinct()
+        )
+        assertEquals(
+            "nothing points at tasks, so no ON DELETE CASCADE can take a measurement with it",
+            emptyList<String>(),
+            db.rows("PRAGMA foreign_key_list('work_sessions')")
+                .map { it[2]!! }.filter { it == "tasks" }
+        )
+    }
+
+    @Test
+    fun `migration 11 to 12 rejects a second open interval for the same profile at the database level`() {
+        val db = open(12)
+        db.exec(session("s1"))
+        db.exec(interval("s1", "i1", openMarker = "s1"))
+
+        // Not "the second tap found nothing running" — the write itself is refused, which is the only
+        // thing that also covers a second screen, a replayed import and two threads at once.
+        val rejected = runCatching { db.exec(interval("s1", "i2", openMarker = "s1")) }
+        assertTrue("a second open interval must not be insertable", rejected.isFailure)
+        assertTrue(
+            "and it fails on the constraint, not on something incidental",
+            rejected.exceptionOrNull()?.message?.contains("UNIQUE") == true
+        )
+        assertEquals(1L, db.firstLong("SELECT COUNT(*) FROM work_sessions WHERE open_marker IS NOT NULL"))
+
+        // Another profile keeps its own timer: the marker is unique per profile, not per device.
+        val other = Seeder.USER_ID + 1
+        db.exec(otherUser(other))
+        db.exec(session("s2", userId = other))
+        assertEquals(
+            "a second profile must not be locked out by the first one's timer",
+            0,
+            runCatching { db.exec(interval("s2", "i3", openMarker = "s2", userId = other)) }
+                .fold({ 0 }, { 1 })
+        )
+
+        // Closing the first interval frees the slot, and closed rows never collide however many the
+        // user accumulates — SQLite keeps NULLs distinct inside a unique index.
+        db.exec("UPDATE work_sessions SET open_marker = NULL WHERE uuid = 'i1'")
+        db.exec(interval("s1", "i4", openMarker = "s1"))
+        db.exec(interval("s4", "i5", openMarker = null))
+        db.exec(interval("s4", "i6", openMarker = null))
+        assertEquals(3L, db.firstLong("SELECT COUNT(*) FROM work_sessions WHERE open_marker IS NULL"))
+    }
+
+    @Test
+    fun `migration 11 to 12 keeps measured time after the task it was measured on is gone`() {
+        val db = open(12)
+        db.exec(session("s1", taskId = Seeder.TODO_TASK_ID))
+        db.exec(interval("s1", "i1", openMarker = null, taskId = Seeder.TODO_TASK_ID))
+        db.exec("UPDATE work_sessions SET ended_at = 2, duration_seconds = 60 WHERE uuid = 'i1'")
+
+        db.exec("DELETE FROM tasks WHERE id = ${Seeder.TODO_TASK_ID}")
+
+        assertEquals(
+            "the interval outlives the card it was started from",
+            1L,
+            db.firstLong("SELECT COUNT(*) FROM work_sessions")
+        )
+        assertEquals(
+            "and the history still says what it was work on, from the title the session saved",
+            "Buy milk",
+            db.firstCell("SELECT task_title FROM tracking_sessions WHERE uuid = 's1'")
+        )
+    }
+
+    @Test
+    fun `a schema built by the migration stores one session as two intervals and sums them`() {
+        val db = open(11)
+        db.migrate(AppMigrations.MIGRATION_11_12)
+
+        // Start 09:00, pause 09:30, resume 10:00, stop 10:45: the break in between is not a row, and
+        // the total the screens show is the sum of the two that are.
+        db.exec(session("s1"))
+        db.exec(interval("s1", "i1", openMarker = "s1", startedAt = 0L))
+        db.exec("UPDATE work_sessions SET ended_at = 1800, duration_seconds = 1800, open_marker = NULL WHERE uuid = 'i1'")
+        db.exec(interval("s1", "i2", openMarker = "s1", startedAt = 3600L))
+        db.exec("UPDATE work_sessions SET ended_at = 6300, duration_seconds = 2700, open_marker = NULL WHERE uuid = 'i2'")
+
+        assertEquals(
+            "75 measured minutes, with the 30-minute pause counted out",
+            4500L,
+            db.firstLong(
+                "SELECT COALESCE(SUM(duration_seconds), 0) FROM work_sessions " +
+                    "WHERE tracking_session_uuid = 's1' AND ended_at IS NOT NULL"
+            )
+        )
+        assertEquals(
+            "the gap is not a row",
+            2L,
+            db.firstLong("SELECT COUNT(*) FROM work_sessions")
+        )
+        assertEquals(
+            "and nothing is left open",
+            0L,
+            db.firstLong("SELECT COUNT(*) FROM work_sessions WHERE open_marker IS NOT NULL")
+        )
+    }
+
+    private fun otherUser(id: Long) =
+        "INSERT INTO users (id, email, name, avatar_color, avatar_initial, is_current, last_used, " +
+            "created_at, updated_at) VALUES ($id, 'other@example.com', 'Other', -1, 'O', 0, 1, 1, 1)"
+
+    private fun session(uuid: String, taskId: Long = Seeder.TODO_TASK_ID, userId: Long = Seeder.USER_ID) =
+        "INSERT INTO tracking_sessions (uuid, user_id, task_id, task_uuid, task_title, state, " +
+            "started_at, zone_id, running_marker, created_at, updated_at) VALUES " +
+            "('$uuid', $userId, $taskId, 'task-uuid-$taskId', 'Buy milk', 'RUNNING', 1, 'Europe/Berlin', " +
+            "'$userId', 1, 1)"
+
+    private fun interval(
+        sessionUuid: String,
+        uuid: String,
+        openMarker: String?,
+        taskId: Long = Seeder.TODO_TASK_ID,
+        userId: Long = Seeder.USER_ID,
+        startedAt: Long = 1L
+    ) = "INSERT INTO work_sessions (uuid, user_id, tracking_session_uuid, task_id, task_uuid, started_at, " +
+        "local_day, utc_offset_minutes, source, open_marker, created_at, updated_at) VALUES " +
+        "('$uuid', $userId, '$sessionUuid', $taskId, 'task-uuid-$taskId', $startedAt, 20000, 60, 'TRACKER', " +
+        (if (openMarker == null) "NULL" else "'$openMarker'") + ", 1, 1)"
 
     @Test
     fun `migration 9 to 10 adds the planned times without touching a single stored value`() {

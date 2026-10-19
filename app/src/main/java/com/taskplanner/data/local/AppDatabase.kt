@@ -8,7 +8,10 @@ import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
+import com.taskplanner.data.model.TrackingSession
 import com.taskplanner.data.model.User
+import com.taskplanner.data.model.WorkIntervalCorrection
+import com.taskplanner.data.model.WorkSession
 
 @Database(
     entities = [
@@ -17,9 +20,12 @@ import com.taskplanner.data.model.User
         User::class,
         TaskGroup::class,
         RecurrenceRule::class,
-        Reminder::class
+        Reminder::class,
+        TrackingSession::class,
+        WorkSession::class,
+        WorkIntervalCorrection::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -30,6 +36,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun groupDao(): GroupDao
     abstract fun recurrenceDao(): RecurrenceDao
     abstract fun reminderDao(): ReminderDao
+    abstract fun trackingSessionDao(): TrackingSessionDao
+    abstract fun workSessionDao(): WorkSessionDao
+    abstract fun workStatisticsDao(): WorkStatisticsDao
 
     companion object {
         const val NAME = "taskplanner.db"
