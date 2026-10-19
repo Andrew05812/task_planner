@@ -2,6 +2,7 @@ package com.taskplanner.data.auth
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.User
@@ -63,6 +64,35 @@ class LocalDataMigrationTest {
         assertEquals("Home", linkedCategory!!.name)
         val movedGroup = fixture.groupDao.getGroupByUuid(group.uuid)
         assertEquals(account.id, movedGroup?.userId)
+    }
+
+    @Test
+    fun `a repeating series and its lead times move onto the account too`() = runTest {
+        val taskId = fixture.addTask(local.id, "Water the plants", dueAt = System.currentTimeMillis() + 6 * 3_600_000L)
+        val series = fixture.recurrenceRepository.startSeries(
+            fixture.taskDao.getTaskById(taskId)!!, RepeatUnit.WEEK, weekDays = listOf(2, 5)
+        )
+        assertNotNull(series)
+        fixture.reminderRepository.applyReminders(fixture.taskDao.getTaskById(taskId)!!, listOf(15, 60))
+
+        val account = signInAsGoogleAccount()
+        fixture.authRepository.attachLocalDataToAccount(local.id, account)
+
+        val movedRule = fixture.recurrenceDao.getAllRowsOnce(account.id).single()
+        assertEquals(series!!.uuid, movedRule.uuid)
+        assertEquals(account.id, movedRule.userId)
+        assertEquals("the pattern must not restart where it began", series.cursorAt, movedRule.cursorAt)
+        assertEquals(emptyList<String>(), fixture.recurrenceDao.getAllRowsOnce(local.id).map { it.uuid })
+
+        val movedReminders = fixture.reminderDao.getAllRowsOnce(account.id)
+        assertEquals(setOf(15, 60), movedReminders.map { it.offsetMinutes }.toSet())
+        assertTrue("every lead time must belong to the account now", movedReminders.all { it.userId == account.id })
+        assertEquals(
+            "a reminder must still name the task it warns for",
+            fixture.taskDao.getAllRowsOnce(account.id).map { it.uuid }.toSet(),
+            movedReminders.map { it.taskUuid }.toSet()
+        )
+        assertEquals(emptyList<String>(), fixture.reminderDao.getAllRowsOnce(local.id).map { it.uuid })
     }
 
     @Test

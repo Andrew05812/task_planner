@@ -30,6 +30,7 @@ import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
+import com.taskplanner.data.sync.SyncAppliers
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -99,7 +100,8 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val calendarRepository =
         CalendarRepository(taskDao, categoryDao, sessionRepository, reminderRepository)
     val backupRepository = BackupRepository(
-        context, database, taskDao, categoryDao, groupDao, sessionRepository
+        context, database, taskDao, categoryDao, groupDao, recurrenceDao, reminderDao,
+        sessionRepository, recurrenceRepository, reminderRepository
     )
     // Firebase is never contacted in these tests: only the local half of AuthRepository runs.
     val authRepository = AuthRepository(
@@ -110,8 +112,12 @@ class AppFixture(private val context: Context) : AutoCloseable {
         taskDao,
         categoryDao,
         groupDao,
+        recurrenceDao,
+        reminderDao,
         database
     )
+    /** The cloud-side merge rules, wired to this device's database: what a pull hands to Room. */
+    val syncAppliers = SyncAppliers(taskDao, categoryDao, groupDao, recurrenceDao, reminderDao)
 
     /** Signs in a local profile the way the profile screen does. */
     suspend fun signIn(name: String = "Test User", email: String = "test@example.com"): User =
