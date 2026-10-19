@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One day of the month or week grid. Every part of it is optional: an empty day is drawn as a quiet
+    cell rather than a missing one, and a crowded day says so with its own badge instead of pushing
+    its contents off the 45dp column a narrow phone gives it.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/calendar_cell_bg"
+    android:orientation="vertical"
+    android:padding="2dp">
+
+    <TextView
+        android:id="@+id/cellDayNumber"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        tools:text="14" />
+
+    <TextView
+        android:id="@+id/cellMonthLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/material_grey_600"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:text="Mar"
+        tools:visibility="visible" />
+
+    <!-- The task chips go here, in the order the day's column reads them. -->
+    <LinearLayout
+        android:id="@+id/cellTasks"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/cellMore"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/material_grey_600"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:text="+3 more"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/cellNote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/material_grey_600"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:text="2 overdue · 1 without a category"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/cellFullDay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/calendar_badge_bg"
+        android:paddingHorizontal="2dp"
+        android:text="@string/calendar_full_day"
+        android:textColor="@color/on_error"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:visibility="visible" />
+
+</LinearLayout>

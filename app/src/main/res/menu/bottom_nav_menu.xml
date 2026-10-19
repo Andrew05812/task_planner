@@ -6,6 +6,11 @@
         android:title="@string/title_tasks" />
 
     <item
+        android:id="@+id/navigation_calendar"
+        android:icon="@drawable/ic_calendar"
+        android:title="@string/title_calendar" />
+
+    <item
         android:id="@+id/navigation_categories"
         android:icon="@drawable/ic_category"
         android:title="@string/title_categories" />

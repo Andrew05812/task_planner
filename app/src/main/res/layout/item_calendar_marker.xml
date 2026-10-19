@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A task the user never gave a length: a rule at its minute and its name beside it. It is drawn this
+    way so the column cannot be read as promising time the task does not have.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingVertical="1dp">
+
+    <View
+        android:id="@+id/markerLine"
+        android:layout_width="10dp"
+        android:layout_height="2dp"
+        android:layout_marginEnd="2dp"
+        android:background="@drawable/calendar_marker_bg" />
+
+    <TextView
+        android:id="@+id/markerTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/on_surface"
+        android:textSize="11sp"
+        tools:text="Pick up the parcel" />
+
+    <TextView
+        android:id="@+id/markerTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="2dp"
+        android:textColor="@color/on_surface"
+        android:textSize="11sp"
+        tools:text="17:30" />
+
+    <TextView
+        android:id="@+id/markerOverlap"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="2dp"
+        android:background="@drawable/calendar_badge_bg"
+        android:textColor="@color/on_error"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:text="2 at the same time"
+        tools:visibility="visible" />
+
+</LinearLayout>

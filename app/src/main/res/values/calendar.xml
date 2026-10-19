@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Everything the calendar screen says. Kept in its own file so the month, week and day views can be
+    changed without touching the task list's strings, and so a missing calendar label is obvious.
+-->
+<resources>
+
+    <!-- Where the screen is and which page it shows -->
+    <string name="title_calendar">Calendar</string>
+    <string name="calendar_mode_month">Month</string>
+    <string name="calendar_mode_week">Week</string>
+    <string name="calendar_mode_day">Day</string>
+    <string name="calendar_previous">Previous</string>
+    <string name="calendar_next">Next</string>
+    <string name="calendar_today">Today</string>
+
+    <!-- A month cell: the day's own contents -->
+    <string name="calendar_more_format">+%1$d more</string>
+    <string name="calendar_overdue_format">%1$d overdue</string>
+    <string name="calendar_unassigned_format">%1$d without a category</string>
+    <string name="calendar_full_day">Full day</string>
+
+    <!-- The day view: the column, the tasks with no time, and what the column adds up to -->
+    <string name="calendar_block_time_format">%1$s–%2$s</string>
+    <string name="calendar_week_format">%1$s – %2$s</string>
+    <string name="calendar_busy_format">%1$d min planned</string>
+    <string name="calendar_overlap_format">%1$d overlapping</string>
+    <string name="calendar_block_overlap_format">%1$d at the same time</string>
+    <string name="calendar_no_length_given">No length given</string>
+    <string name="calendar_no_time_given">No time given</string>
+    <string name="calendar_day_empty">Nothing at a set time</string>
+    <plurals name="calendar_task_count">
+        <item quantity="one">%1$d task</item>
+        <item quantity="other">%1$d tasks</item>
+    </plurals>
+
+    <!-- What a drag can end in -->
+    <string name="calendar_drag_refused">That task cannot move to this day</string>
+
+</resources>
