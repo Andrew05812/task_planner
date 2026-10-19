@@ -270,17 +270,31 @@ class TasksViewModelTest {
         val task = runBlocking { fixture.taskDao.getTaskById(id)!! }
 
         viewModel.startTask(task)
-        assertEquals(TaskStatus.IN_PROGRESS, statusOf(id))
+        awaitStatus(id, TaskStatus.IN_PROGRESS)
 
         viewModel.pauseTask(task)
-        assertEquals(TaskStatus.PAUSED, statusOf(id))
+        awaitStatus(id, TaskStatus.PAUSED)
 
         viewModel.resumeTask(task)
-        assertEquals(TaskStatus.IN_PROGRESS, statusOf(id))
+        awaitStatus(id, TaskStatus.IN_PROGRESS)
     }
 
     private fun statusOf(id: Long): TaskStatus? =
         runBlocking { fixture.taskDao.getTaskById(id) }?.status
+
+    /**
+     * The status a command left in the row, once it has had the chance to arrive.
+     *
+     * A lifecycle command is a `viewModelScope` write and Room answers on its own threads, so reading the
+     * row on the line after the call can return the status the *previous* command wrote — the test then
+     * fails on a machine that scheduled the write late, while the app behaved correctly. The wait is the
+     * one every other read in this file already uses; the assertion after it keeps the test naming the
+     * status it expected instead of merely noting that something changed.
+     */
+    private fun awaitStatus(id: Long, expected: TaskStatus) {
+        awaitUntil("the task to hold $expected") { statusOf(id) == expected }
+        assertEquals(expected, statusOf(id))
+    }
 
     @Test
     fun `a second profile starts with an empty list`() {
