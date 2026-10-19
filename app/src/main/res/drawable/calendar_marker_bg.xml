@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The rule a task with no length is drawn as. A marker has one minute of its own and a line that
+    says so, instead of a block whose height nobody planned.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/primary" />
+    <size android:height="2dp" />
+</shape>

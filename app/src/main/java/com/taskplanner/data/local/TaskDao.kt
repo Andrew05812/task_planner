@@ -53,6 +53,40 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :taskId AND is_deleted = 0")
     suspend fun getTaskById(taskId: Long): Task?
 
+    /**
+     * The tasks one calendar window has to draw, live: the flow re-emits after an edit, a drag and
+     * drop, a sync pull or a series producing its next instance, so the screen never reloads
+     * anything it did not ask for.
+     *
+     * The window is half-open, `[from, to)`, and a task belongs to it if *any* part of the task lands
+     * inside: NULL in these columns means "the user never entered that", so a task with only a
+     * deadline is matched by `due_date` alone, and a block that starts before the window and ends
+     * after it is matched by the last clause instead of vanishing from both neighbouring screens.
+     *
+     * Bounded on purpose: the calendar reads the rows it can draw rather than the whole profile, so a
+     * month view costs the same on a 10k-task account as on a 100-task one.
+     */
+    @Query(
+        "SELECT * FROM tasks WHERE user_id = :userId AND is_deleted = 0 AND archived = 0 AND ( " +
+            "(due_date IS NOT NULL AND due_date >= :from AND due_date < :to) OR " +
+            "(start_time IS NOT NULL AND start_time >= :from AND start_time < :to) OR " +
+            "(end_time IS NOT NULL AND end_time >= :from AND end_time < :to) OR " +
+            "(start_time IS NOT NULL AND end_time IS NOT NULL AND start_time < :from AND end_time >= :to) " +
+            ") ORDER BY COALESCE(start_time, due_date, end_time) ASC, id ASC"
+    )
+    fun observeWindow(userId: Long, from: Long, to: Long): Flow<List<Task>>
+
+    /** The same window read once, for callers that are computing rather than observing. */
+    @Query(
+        "SELECT * FROM tasks WHERE user_id = :userId AND is_deleted = 0 AND archived = 0 AND ( " +
+            "(due_date IS NOT NULL AND due_date >= :from AND due_date < :to) OR " +
+            "(start_time IS NOT NULL AND start_time >= :from AND start_time < :to) OR " +
+            "(end_time IS NOT NULL AND end_time >= :from AND end_time < :to) OR " +
+            "(start_time IS NOT NULL AND end_time IS NOT NULL AND start_time < :from AND end_time >= :to) " +
+            ") ORDER BY COALESCE(start_time, due_date, end_time) ASC, id ASC"
+    )
+    suspend fun getWindowOnce(userId: Long, from: Long, to: Long): List<Task>
+
     /** The rows behind a bulk action, before it happens: deleting tasks also has to tell reminders. */
     @Query("SELECT * FROM tasks WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<Long>): List<Task>

@@ -11,7 +11,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 235 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 364 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -31,7 +31,7 @@ On first start `LegacyDbRescuer` looks for a database in the old locations (`cac
 recently it was updated, and copies the richest one — together with its `-wal` and `-shm` sidecars —
 into the permanent location. Nothing is deleted: the legacy files stay where they were.
 
-Migrations run for every retained schema version (1 → 9) and are covered by tests that execute the
+Migrations run for every retained schema version (1 → 10) and are covered by tests that execute the
 production `Migration` objects against real SQLite files built from the exported schema JSON. There
 is deliberately **no** `fallbackToDestructiveMigration()`: if the app meets a schema it does not
 know, it refuses to open the database and the rows stay on disk untouched, instead of the user
@@ -55,6 +55,10 @@ waking up to an empty list.
   before, a day before, or any custom number of minutes — each delivered as its own notification with
   Complete, Snooze and Edit buttons, and armed as an alarm that survives a reboot, a clock change, a
   force-stop and a week with the phone switched off (see *Reminders* below).
+- **Calendar**: month, week and day views over the same data, with a day's tasks coloured and counted
+  by category, an overdue and overload signal per day, overlapping tasks laid side by side instead of
+  hidden, and drag-and-drop that moves a task to another day, re-arms its reminders and queues the
+  change for sync (see *Calendar* below).
 - **Backup**: versioned JSON exported and imported through the Storage Access Framework, so the app
   never asks for a broad storage permission. Import previews what is in the file first, then either
   merges by stable uuid or replaces, keeping a safety copy in app-private storage before a replace.
@@ -139,6 +143,49 @@ already wrote all land on one reminder instead of producing two notifications fo
   that task, so a second profile is never reminded of the first one's errands and a reminder whose
   task row has disappeared is never announced.
 
+## Calendar
+
+The calendar is a reading of the same `tasks` table, not a second store. Schema version 10 gave a
+task three nullable columns — `start_time`, `end_time`, `estimated_minutes` — because "on the 9th at
+nine, for an hour and a half" is a plan the user described, and a deadline alone is not.
+
+- **Where a task is placed** (`CalendarAggregator`): a task is filed under the first instant the user
+  actually gave — `start_time`, else the deadline, else the end. Each of those days is drawn from the
+  same anchor, so a block that begins yesterday and runs past midnight appears on both days, clamped
+  to each day's edge, and the two pieces still add up to the real duration.
+- **Nothing is given a length it was not given**: a deadline with a time of day is drawn as a marker
+  at that minute, not as an hour-wide block; a task whose day was picked without a time is listed
+  under *no time given* instead of being parked at midnight; a zero or negative estimate is not a
+  length. The only stretch a block may occupy is the one made of an end the user set, or of a positive
+  estimate counted from the start. `PlanNeedsInstant` refuses an estimate with no moment to belong to,
+  and `PlanConflict` refuses an end before its start, so the editor cannot store a block the calendar
+  would have to invent its way around.
+- **What a day says about itself**: per-day task counts, the categories present with their colours and
+  how many tasks each holds, tasks with no category, overdue (only ever counted from a deadline, and
+  never for a task already completed), planned minutes, and a *full day* signal. Overlaps are found by
+  minute arithmetic — two blocks collide when they share more than a boundary, so back-to-back
+  meetings are not a conflict, and two markers on the same minute are. Each pair is counted once. The
+  overload threshold (`BUSY_MINUTES_OVERLOAD`, `TASK_COUNT_OVERLOAD`) is a display heuristic, not a
+  fact about the data, and is named as one.
+- **One bounded read** (`TaskDao.observeWindow` / `CalendarRepository`): a month, a week and a day are
+  the same query over the days on screen, ordered by `COALESCE(start_time, due_date, end_time)` and
+  served through `index_tasks_user_id_due_date`. Nothing loads every task of every month: a ten-thousand
+  task account opens a month page as cheaply as a hundred-task one, and a signed-out profile gets an
+  empty grid rather than somebody else's plans.
+- **Drag and drop** (`CalendarRepository.moveToDay`): a drop lands on a month or week cell — the day
+  column is the day already being read, so it has no other day to hand a task to. The clip carries a
+  row id and nothing else, so a drop acts on the stored task, not on a copy made before the finger
+  lifted. The move keeps the wall-clock time of day — dragging across a spring-forward leaves a 09:00
+  task at 09:00, not at 08:00 or 10:00 — touches only the instants the task has, leaves the estimate
+  alone, re-points the lead times through the same `applyReminders` the editor uses so their alarms
+  move with it, marks the row `PENDING` for sync, and updates the row in place instead of planting a
+  duplicate. A drop of a task the profile cannot see, or of a task with no instant anywhere, is
+  refused and the screen says so.
+- **Refresh without reloading**: the grid and the day column are `Flow`s over the window query, so a
+  drag, an editor save, a sync pull or a series producing its next instance repaints the page that is
+  already open. The three view levels share one anchor and one aggregation, so switching from month to
+  week to day cannot change which tasks a day contains — only how many days are on screen.
+
 ## Testing approach
 
 Persistence is never mocked. `AppFixture` builds an in-memory Room database with the production
@@ -155,7 +202,7 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 
 | Suite | Covers |
 | --- | --- |
-| `AppMigrationsTest` | every 1 → 9 migration against real SQLite, compared with the exported schema |
+| `AppMigrationsTest` | every 1 → 10 migration against real SQLite, compared with the exported schema |
 | `LegacyDbRescuerTest` | rescue selection, WAL sidecars, never overwriting or consuming the original |
 | `DataSafetyTest` | the production `DatabaseModule` wiring: private location, rescue + migration end to end, restart, refusal of an unknown schema |
 | `SessionRepositoryTest` | session survives restart, no fixed-user fallback, concurrent profile switches, switching keeps what a profile owns |
@@ -175,6 +222,14 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 | `TasksReminderTest` | the editor's reminder plan end to end: chips stored, a lead time without a date refused, the bell state, the exact-alarm warning, and the alarms opening the list puts back |
 | `TaskCardReminderTest` | the bell badge on a list row, including the narrowest screen the app supports |
 | `ReminderPresetTest` | the chips and the single custom field translate to stored offsets and back |
+| `CalendarMathTest` | month and week grids as whole weeks, day windows across a DST jump, wall-clock preserving moves, the locale's first weekday |
+| `CalendarAggregatorTest` | which day a task belongs to, markers versus blocks, clamping across midnight, overlap arithmetic, per-day categories, overdue and the overload heuristic |
+| `CalendarRepositoryTest` | the window query reads exactly the days on screen, per-profile isolation, drag-and-drop keeping clock time and reminders, no duplicate rows, planned times written and refused, flows re-emitting after a write |
+| `TasksPlanTest` | the editor's plan rows end to end: a start and an end become that block, a deadline stays a point with no length, an estimate becomes its length, an impossible plan is refused without touching what was stored, clearing clears, and re-saving keeps what the user placed |
+| `CalendarViewModelTest` | a month page is whole weeks, a week page holds its seven days, paging each mode moves only its own page, zooming keeps the day being read, and a drag repaints the grid through the repository's flow rather than a reload |
+| `CalendarScreenTest` | cells coloured and counted by category, today and borrowed neighbour days, the full-day badge, a block drawn at its own minutes beside a task with no length, colliding tasks side by side, and every mode inside 320dp |
+| `CalendarDayLayoutTest` | the minute arithmetic behind the column: lane counts, offsets, heights, and a marker that owns no stretch of the day |
+| `CalendarDragTest` | the clip a drag carries: one task id in, nothing else accepted out |
 | `TaskDetailLayoutTest` | the editor inflates under the app's theme, keeps the recurrence detail collapsed, and lays out inside 320dp |
 | `TasksViewModelTest` | grouping, filters, search, sorting, selection, lifecycle, per-profile isolation |
 | `RoomHarnessSmokeTest` | the test harness itself really executes DAO SQL and emits flows |
@@ -215,6 +270,13 @@ provide.
   and have no Firestore documents yet, so a second device gets the tasks and not the lead times set on
   them. Export, import and cloud documents for `reminders` come with the integration stage, together
   with the same step for `recurrence_rules`.
+- The calendar's plan fields are local so far. `start_time`, `end_time` and `estimated_minutes` are not
+  in the backup file and have no Firestore documents yet, so a second device gets the task and not the
+  plan set on it. That step belongs to the same integration work as `recurrence_rules` and `reminders`.
+- Drag and drop is covered below the framework: the tests exercise the clip codec, the day cell's and
+  the controller's handling of a drop, and everything `moveToDay` does to the row. The JVM test process
+  does not dispatch the `DragEvent` phases an actual finger produces, so a real touch-drag on a device
+  has not been performed as part of this work.
 - Restoring an archived instance of a series from the archive leaves it open next to the instance the
   series produced afterwards. Nothing is lost and the schedule is unaffected; the older row simply
   becomes an ordinary task of that series.

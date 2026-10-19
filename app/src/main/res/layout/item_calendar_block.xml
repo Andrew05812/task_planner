@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A task with a length the user actually gave, drawn from its own start to its own end. The width
+    and the left offset are set in code, because they belong to whichever tasks share this hour.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/calendar_block_bg"
+    android:orientation="vertical"
+    android:padding="2dp">
+
+    <TextView
+        android:id="@+id/blockTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/on_surface"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        tools:text="Dentist" />
+
+    <TextView
+        android:id="@+id/blockTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/on_surface"
+        android:textSize="11sp"
+        tools:text="09:00–09:45" />
+
+    <TextView
+        android:id="@+id/blockOverlap"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/calendar_badge_bg"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/on_error"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:text="2 at the same time"
+        tools:visibility="visible" />
+
+</LinearLayout>

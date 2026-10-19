@@ -10,6 +10,9 @@ import kotlinx.parcelize.Parcelize
     tableName = "tasks",
     indices = [
         Index(value = ["user_id"]),
+        // The calendar reads one profile's tasks inside one window, ordered by deadline; without
+        // this the range query scans every row the user has.
+        Index(value = ["user_id", "due_date"]),
         Index(value = ["category_id"]),
         Index(value = ["group_id"]),
         // A series instance is identified by (series, scheduled instant), so materialising the
@@ -44,6 +47,32 @@ data class Task(
 
     @ColumnInfo(name = "due_date")
     val dueDate: Long? = null,
+
+    /**
+     * When the work is planned to begin, if the user said so.
+     *
+     * Null is the normal state, not a missing value: a task with a deadline but no stated beginning
+     * is scheduled *by its deadline*, and the calendar has to draw it that way. Nothing in this app
+     * infers a start from a deadline or a duration from a title, because a block the user never
+     * named would turn into an "overlapping meeting" or an "underestimated day" that they then have
+     * to decode.
+     */
+    @ColumnInfo(name = "start_time")
+    val startTime: Long? = null,
+
+    /** When the work is planned to be finished. Pairs with [startTime]; both null is the norm. */
+    @ColumnInfo(name = "end_time")
+    val endTime: Long? = null,
+
+    /**
+     * How long the user expects it to take, in minutes — independent of a stated start and end.
+     *
+     * A task can have an estimate before anyone knows when it will happen ("45 minutes, sometime
+     * this week"), which is exactly the case a block on a timeline cannot express. Kept as minutes
+     * rather than an instant so it survives being moved across a daylight-saving boundary.
+     */
+    @ColumnInfo(name = "estimated_minutes")
+    val estimatedMinutes: Int? = null,
 
     @ColumnInfo(name = "priority")
     val priority: Priority = Priority.MEDIUM,

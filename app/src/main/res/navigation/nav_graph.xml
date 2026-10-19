@@ -18,6 +18,15 @@
     </fragment>
 
     <fragment
+        android:id="@+id/navigation_calendar"
+        android:name="com.taskplanner.ui.calendar.CalendarFragment"
+        android:label="@string/title_calendar">
+        <action
+            android:id="@+id/action_calendar_to_task_detail"
+            app:destination="@id/navigation_task_detail" />
+    </fragment>
+
+    <fragment
         android:id="@+id/navigation_categories"
         android:name="com.taskplanner.ui.categories.CategoriesFragment"
         android:label="@string/title_categories">
