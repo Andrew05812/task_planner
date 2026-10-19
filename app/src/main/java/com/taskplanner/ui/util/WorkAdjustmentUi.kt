@@ -99,6 +99,14 @@ object WorkAdjustmentUi {
     private fun showConflict(anchor: Fragment, intervals: List<WorkSession>) {
         val context = anchor.requireContext()
         val body = StringBuilder()
+            .append(
+                context.resources.getQuantityString(
+                    R.plurals.history_conflict_count,
+                    intervals.size,
+                    intervals.size
+                )
+            )
+            .append("\n\n")
             .append(context.getString(R.string.history_conflict_message))
             .append("\n\n")
         intervals.forEach { interval ->
@@ -117,13 +125,7 @@ object WorkAdjustmentUi {
             body.append("\n")
         }
         MaterialAlertDialogBuilder(context)
-            .setTitle(
-                context.resources.getQuantityString(
-                    R.plurals.history_conflict_count,
-                    intervals.size,
-                    intervals.size
-                )
-            )
+            .setTitle(R.string.history_conflict_title)
             .setMessage(body.toString())
             .setNegativeButton(R.string.cancel, null)
             .show()

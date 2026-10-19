@@ -5,7 +5,6 @@ import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import android.text.InputType
 import android.util.TypedValue
 import androidx.core.view.isVisible
@@ -86,7 +85,7 @@ class WorkHistoryLayoutTest {
         assertEquals(
             "the empty state says what is missing rather than blaming the user",
             context.getString(R.string.history_empty),
-            (binding.historyEmpty as TextView).text.toString()
+            binding.historyEmpty.text.toString()
         )
     }
 
@@ -108,7 +107,7 @@ class WorkHistoryLayoutTest {
         )
         assertEquals(
             context.getString(R.string.history_in_progress),
-            (binding.historyRunning as TextView).text.toString()
+            binding.historyRunning.text.toString()
         )
         assertEquals(
             "the stretches arrive only when the entry is opened, so the row starts with none",

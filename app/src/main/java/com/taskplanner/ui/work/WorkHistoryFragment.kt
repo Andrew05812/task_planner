@@ -133,8 +133,8 @@ class WorkHistoryFragment : Fragment() {
     private fun setupChips() {
         val group = binding.historyPeriodChips
         periodChips = WorkPeriod.entries.map { period ->
-            buildChip(getString(period.labelRes()), period) to period
-        } + (buildChip(getString(R.string.history_period_custom), null) to null)
+            buildChip(getString(period.labelRes())) to period
+        } + (buildChip(getString(R.string.history_period_custom)) to null)
         group.removeAllViews()
         periodChips.forEach { (chip, _) -> group.addView(chip) }
         group.setOnCheckedStateChangeListener { _, checkedIds ->
@@ -148,7 +148,7 @@ class WorkHistoryFragment : Fragment() {
         }
     }
 
-    private fun buildChip(label: String, period: WorkPeriod?): Chip {
+    private fun buildChip(label: String): Chip {
         val chip = Chip(requireContext())
         // ChipGroup.check() works with view ids, and chips built here have none from XML.
         chip.id = View.generateViewId()
@@ -219,11 +219,13 @@ class WorkHistoryFragment : Fragment() {
     private fun renderHeader(state: WorkHistoryState) {
         val context = requireContext()
         val totals = state.totals
+        val intervals = totals?.intervals ?: 0
+        val sessions = totals?.sessions ?: 0
         binding.historySummary.text = getString(
             R.string.history_summary,
             WorkTimeFormat.compact(context, totals?.seconds ?: 0L),
-            totals?.intervals ?: 0,
-            totals?.sessions ?: 0
+            counted(context, R.plurals.history_stretch_count, intervals),
+            counted(context, R.plurals.history_session_count, sessions)
         )
         val days = state.visibleDays()
         binding.historyRange.text = getString(
@@ -348,11 +350,7 @@ private class WorkHistoryAdapter(
         val context = holder.itemView.context
         with(holder.binding) {
             historyTaskTitle.text = row.taskTitle
-            historyWhen.text = context.getString(
-                R.string.history_meta_format,
-                WorkInstantInput.format(row.startedAt),
-                row.intervals
-            ) + manualSuffix(context, row)
+            historyWhen.text = metaLine(context, row)
             historyTotal.text = WorkTimeFormat.compact(context, row.closedSeconds)
             historyRunning.isVisible = row.state == RUNNING_STATE
             historyIntervals.removeAllViews()
@@ -369,8 +367,27 @@ private class WorkHistoryAdapter(
         }
     }
 
-    private fun manualSuffix(context: Context, row: WorkHistoryRow): String =
-        if (row.manual == 0) "" else " · " + context.getString(R.string.history_manual_format, row.manual)
+    /**
+     * When a run began, how much of it is a finished measurement, and how much of that was typed in.
+     *
+     * The hand-entered count is a second sentence rather than a suffix glued on in Kotlin: which words a
+     * language needs after a count is the resource's decision, and a line assembled with "+" is one a
+     * translator cannot fix.
+     */
+    private fun metaLine(context: Context, row: WorkHistoryRow): String {
+        val began = WorkInstantInput.format(row.startedAt)
+        val stretches = counted(context, R.plurals.history_stretch_count, row.intervals)
+        return if (row.manual == 0) {
+            context.getString(R.string.history_meta_format, began, stretches)
+        } else {
+            context.getString(
+                R.string.history_meta_manual_format,
+                began,
+                stretches,
+                counted(context, R.plurals.history_manual_count, row.manual)
+            )
+        }
+    }
 
     private fun intervalLabel(context: Context, interval: WorkIntervalRow): String {
         val base = context.getString(
@@ -396,3 +413,10 @@ private class WorkHistoryAdapter(
         private const val RUNNING_STATE = "RUNNING"
     }
 }
+
+/**
+ * A count in the words the locale asks for, so a period of one stretch reads "1 stretch" and not
+ * "1 stretches" — the reason the figure is handed to a plurals resource instead of written into a sentence.
+ */
+private fun counted(context: Context, pluralRes: Int, count: Int): String =
+    context.resources.getQuantityString(pluralRes, count, count)

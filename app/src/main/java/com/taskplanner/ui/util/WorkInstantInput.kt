@@ -38,10 +38,6 @@ object WorkInstantInput {
     private val dayFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.ROOT)
         .withResolverStyle(ResolverStyle.STRICT)
 
-    /** A day the user reads rather than types, so the month name follows the device locale. */
-    private val longDayFormat: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault())
-
     /** The instant the text names, in [zone], or null when it names none. */
     fun parse(text: CharSequence?, zone: ZoneId = ZoneId.systemDefault()): Long? {
         val value = text?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
@@ -74,6 +70,13 @@ object WorkInstantInput {
     /** A local day in the form [parseDay] reads back. */
     fun formatDay(day: LocalDate): String = dayFormat.format(day)
 
-    /** A local day the way a period label reads, for a user who needs the month and year. */
-    fun formatDayLong(day: LocalDate): String = longDayFormat.format(day)
+    /**
+     * A local day the way a period label reads, for a user who needs the month and year.
+     *
+     * Built on every call rather than kept in a field: a device locale read once at class load keeps
+     * naming months in the language the device was in when the app started, and a period label that
+     * outlives a locale change is a label nobody asked for.
+     */
+    fun formatDayLong(day: LocalDate): String =
+        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()).format(day)
 }

@@ -368,11 +368,11 @@
     <string name="history_period_this_month">This month</string>
     <string name="history_period_last_month">Last month</string>
     <string name="history_period_custom">Choose dates</string>
-    <string name="history_summary">%1$s measured · %2$d stretches · %3$d sessions</string>
+    <string name="history_summary">%1$s measured · %2$s · %3$s</string>
     <string name="history_range_format">%1$s – %2$s</string>
     <string name="history_in_progress">Still being measured</string>
-    <string name="history_meta_format">%1$s · %2$d stretches</string>
-    <string name="history_manual_format">%1$d entered by hand</string>
+    <string name="history_meta_format">%1$s · %2$s</string>
+    <string name="history_meta_manual_format">%1$s · %2$s · %3$s</string>
     <string name="history_empty">Nothing was measured in this period.</string>
     <string name="history_sort_title">Order by</string>
     <string name="history_sort_date">Newest first</string>
@@ -387,7 +387,6 @@
     <string name="history_reason_hint">Why it changed (optional)</string>
     <string name="history_previous_corrections">What this stretch said before: %1$s</string>
     <string name="history_interval_was_format">%1$s – %2$s</string>
-    <string name="history_no_corrections">This stretch has never been corrected.</string>
     <string name="history_from_hint">From (yyyy-MM-dd)</string>
     <string name="history_to_hint">To (yyyy-MM-dd)</string>
     <string name="history_apply">Apply</string>
@@ -403,12 +402,30 @@
     <string name="history_conflict_title">This stretch is already measured</string>
     <string name="history_conflict_message">Nothing was changed: the time you named is already covered by the measurements listed here. Correct one of them instead, or name a different stretch.</string>
     <string name="history_delete_confirm_title">Throw this stretch away?</string>
-    <string name="history_delete_confirm_message">It leaves the history list. The row and the record of its corrections stay in the database, so a later restore or another device can still see what was measured.</string>
+    <string name="history_delete_confirm_message">It leaves the history list. The row and the record of its corrections stay in this device\'s database, so what was measured is still there if it has to be shown again.</string>
     <string name="history_delete_confirm_yes">Take it out</string>
 
     <plurals name="history_conflict_count">
         <item quantity="one">%1$d measurement already covers it</item>
         <item quantity="other">%1$d measurements already cover it</item>
+    </plurals>
+
+    <!-- The counted words of the history header and its rows. A period of one stretch must read
+         "1 stretch", and a sentence assembled in Kotlin from "1" + "stretches" is the shape that gets
+         that wrong and cannot be translated. -->
+    <plurals name="history_stretch_count">
+        <item quantity="one">%1$d stretch</item>
+        <item quantity="other">%1$d stretches</item>
+    </plurals>
+
+    <plurals name="history_session_count">
+        <item quantity="one">%1$d session</item>
+        <item quantity="other">%1$d sessions</item>
+    </plurals>
+
+    <plurals name="history_manual_count">
+        <item quantity="one">%1$d entered by hand</item>
+        <item quantity="other">%1$d entered by hand</item>
     </plurals>
 
     <plurals name="reminder_count">

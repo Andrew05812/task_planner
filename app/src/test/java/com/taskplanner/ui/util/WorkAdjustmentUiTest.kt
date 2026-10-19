@@ -22,6 +22,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -74,6 +75,9 @@ class WorkAdjustmentUiTest {
         activity.setContentView(host)
         anchor = AnchorFragment()
         activity.supportFragmentManager.beginTransaction().add(host.id, anchor, "anchor").commitNow()
+        // A notice asserted later in the test is only worth anything if it is this test's own, so the
+        // manager starts each test empty rather than still holding one an earlier test showed.
+        dismissNotices()
     }
 
     private val zone: ZoneId get() = ZoneId.systemDefault()
@@ -201,7 +205,16 @@ class WorkAdjustmentUiTest {
         }
     }
 
+    /**
+     * Takes every notice back off the screen, including the one the notice manager still holds.
+     *
+     * A Snackbar is not shown by its own view: a process-wide manager keeps one as "the notice on screen",
+     * and a paused Robolectric looper never runs the timeout that ends it. Removing the view alone would
+     * therefore leave the manager queueing this test's notice behind one nobody can see, which reads as the
+     * screen having said nothing. The clock is moved past the longest notice first, then the views go.
+     */
     private fun dismissNotices() {
+        shadowOf(Looper.getMainLooper()).idleFor(NOTICE_SETTLE_MS, TimeUnit.MILLISECONDS)
         val container = activity.findViewById<ViewGroup>(android.R.id.content)
         for (index in container.childCount - 1 downTo 0) {
             if (container.getChildAt(index) !== host) container.removeViewAt(index)
@@ -362,8 +375,10 @@ class WorkAdjustmentUiTest {
         )
         assertTrue("and the typed-in one says it was typed in", spoken.contains("entered by hand"))
         assertTrue(
-            "the title counts them rather than describing the first",
-            spoken.contains(activity.resources.getQuantityString(R.plurals.history_conflict_count, 2, 2))
+            "the count of blocking measurements and the reason the write stopped are both said — a dialog " +
+                "that only lists rows leaves the user guessing whether something already went through",
+            spoken.contains(activity.resources.getQuantityString(R.plurals.history_conflict_count, 2, 2)) &&
+                spoken.contains(activity.getString(R.string.history_conflict_title))
         )
         assertEquals(
             "the one word the app offers for a conflict is the way out of it",
@@ -437,5 +452,8 @@ class WorkAdjustmentUiTest {
 
     private companion object {
         private const val MILLIS_PER_DAY = 86_400_000L
+
+        /** Past a LENGTH_LONG notice and its animation, so the notice manager has let go of it. */
+        private const val NOTICE_SETTLE_MS = 10_000L
     }
 }
