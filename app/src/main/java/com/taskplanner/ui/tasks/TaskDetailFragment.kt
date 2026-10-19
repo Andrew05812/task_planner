@@ -26,6 +26,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RecurrenceRule
+import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.databinding.FragmentTaskDetailBinding
 import dagger.hilt.android.AndroidEntryPoint
@@ -46,6 +47,18 @@ class TaskDetailFragment : Fragment() {
 
     /** Whether the user chose a time of day; without one the deadline is the start of the day. */
     private var timeChosen = false
+
+    /**
+     * When the user says the task happens, as opposed to when it is due. Both are optional and stay
+     * null when untouched: a task with no plan line is drawn on its deadline alone, and no minute is
+     * ever put on it by this editor.
+     */
+    private var startCalendar: Calendar? = null
+    private var endCalendar: Calendar? = null
+
+    /** Whether each plan minute was picked, so "starts on the 3rd" is not shown as "starts at midnight". */
+    private var startTimeChosen = false
+    private var endTimeChosen = false
 
     /** The series of the task on screen, kept so the repeat section can describe what it changes. */
     private var series: RecurrenceRule? = null
@@ -96,6 +109,7 @@ class TaskDetailFragment : Fragment() {
     private fun setupUI() {
         setupDatePicker()
         setupTimePicker()
+        setupPlan()
         setupPrioritySpinner()
         setupStatusSpinner()
         setupCategorySpinner()
@@ -167,6 +181,180 @@ class TaskDetailFragment : Fragment() {
         )
         binding.taskDueTime.isEnabled = calendar != null
         refreshReminderUi()
+    }
+
+    // ---------------------------------------------------------------- plan times
+
+    /**
+     * The plan rows: when the task happens, as opposed to when it is due.
+     *
+     * Each row is the same two halves the deadline uses, because a day and a minute are one instant,
+     * and every one of them is optional. The clear button exists because "the plan was taken away" and
+     * "there never was a plan" have to be writable states, not accidents of an empty text field.
+     */
+    private fun setupPlan() {
+        binding.planStartDate.setOnClickListener {
+            pickPlanDay(startCalendar) { calendar ->
+                startCalendar = calendar
+                // "Starts on the 3rd" is the beginning of the 3rd — a day the user chose, not a
+                // midnight the editor made up.
+                startTimeChosen = isTimed(calendar)
+                renderPlanFields()
+            }
+        }
+        binding.planStartTime.setOnClickListener {
+            pickPlanTime(startCalendar) { calendar ->
+                startCalendar = calendar
+                startTimeChosen = true
+                renderPlanFields()
+            }
+        }
+        binding.planEndDate.setOnClickListener {
+            pickPlanDay(endCalendar) { calendar ->
+                endCalendar = calendar
+                endTimeChosen = isTimed(calendar)
+                renderPlanFields()
+            }
+        }
+        binding.planEndTime.setOnClickListener {
+            pickPlanTime(endCalendar) { calendar ->
+                endCalendar = calendar
+                endTimeChosen = true
+                renderPlanFields()
+            }
+        }
+        binding.planEstimateMinutes.doAfterTextChanged {
+            binding.planEstimateLayout.error = null
+            renderPlanFields()
+        }
+        binding.planClear.setOnClickListener {
+            startCalendar = null
+            endCalendar = null
+            startTimeChosen = false
+            endTimeChosen = false
+            binding.planEstimateMinutes.setText("")
+            renderPlanFields()
+        }
+        renderPlanFields()
+    }
+
+    private fun pickPlanDay(current: Calendar?, onPicked: (Calendar) -> Unit) {
+        val calendar = current ?: Calendar.getInstance()
+        DatePickerDialog(
+            requireContext(),
+            { _, year, month, dayOfMonth ->
+                calendar.set(Calendar.YEAR, year)
+                calendar.set(Calendar.MONTH, month)
+                calendar.set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                if (current == null) {
+                    calendar.set(Calendar.HOUR_OF_DAY, 0)
+                    calendar.set(Calendar.MINUTE, 0)
+                }
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                onPicked(calendar)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    private fun pickPlanTime(current: Calendar?, onPicked: (Calendar) -> Unit) {
+        val calendar = current ?: return
+        TimePickerDialog(
+            requireContext(),
+            { _, hourOfDay, minute ->
+                calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                calendar.set(Calendar.MINUTE, minute)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                onPicked(calendar)
+            },
+            calendar.get(Calendar.HOUR_OF_DAY),
+            calendar.get(Calendar.MINUTE),
+            DateFormat.is24HourFormat(requireContext())
+        ).show()
+    }
+
+    private fun isTimed(calendar: Calendar): Boolean =
+        calendar.get(Calendar.HOUR_OF_DAY) != 0 || calendar.get(Calendar.MINUTE) != 0
+
+    private fun renderPlanFields() {
+        val timeFormat = DateFormat.getTimeFormat(requireContext())
+        val start = startCalendar
+        val end = endCalendar
+
+        binding.planStartDate.setText(start?.let { dateFormat.format(it.time) } ?: "")
+        binding.planStartTime.setText(
+            when {
+                start == null -> ""
+                !startTimeChosen -> getString(R.string.plan_time_none)
+                else -> timeFormat.format(start.time)
+            }
+        )
+        binding.planStartTime.isEnabled = start != null
+
+        binding.planEndDate.setText(end?.let { dateFormat.format(it.time) } ?: "")
+        binding.planEndTime.setText(
+            when {
+                end == null -> ""
+                !endTimeChosen -> getString(R.string.plan_time_none)
+                else -> timeFormat.format(end.time)
+            }
+        )
+        binding.planEndTime.isEnabled = end != null
+
+        binding.planHint.text = describePlan()
+    }
+
+    /**
+     * What the calendar will be able to draw from these fields, and what it will not make up.
+     *
+     * The line says the truth about the empty states too: a task with only a deadline has no length,
+     * and saying so here is what keeps the user from looking for a duration the app never claimed.
+     */
+    private fun describePlan(): String {
+        val start = startCalendar
+        val end = endCalendar
+        val estimate = planEstimate()
+        if (start == null && end == null && estimate == null) {
+            return getString(R.string.plan_hint_none)
+        }
+        val due = dueCalendar
+        return when {
+            start != null && end != null -> getString(
+                R.string.plan_hint_block,
+                momentLabel(start),
+                momentLabel(end)
+            )
+            start != null && estimate != null -> getString(
+                R.string.plan_hint_estimate,
+                momentLabel(start),
+                estimate
+            )
+            start != null -> getString(R.string.plan_hint_marker, momentLabel(start))
+            due == null -> getString(R.string.error_plan_needs_instant)
+            else -> getString(R.string.plan_hint_from_deadline)
+        }
+    }
+
+    private fun momentLabel(calendar: Calendar): String =
+        "${dateFormat.format(calendar.time)} ${DateFormat.getTimeFormat(requireContext()).format(calendar.time)}"
+
+    /** The typed length, or null for "no length given". A blank field is not zero minutes. */
+    private fun planEstimate(): Int? =
+        binding.planEstimateMinutes.text?.toString()?.trim()?.toIntOrNull()
+
+    /**
+     * An estimate is a whole number of minutes or the save is refused. Text that is not a number stays
+     * in the field so the user can fix it, instead of becoming a task with no length.
+     */
+    private fun planValid(): Boolean {
+        val text = binding.planEstimateMinutes.text?.toString()?.trim().orEmpty()
+        if (text.isEmpty() || planEstimate() != null) return true
+        binding.planEstimateLayout.error = getString(R.string.error_plan_estimate_not_number)
+        return false
     }
 
     private fun setupPrioritySpinner() {
@@ -476,7 +664,7 @@ class TaskDetailFragment : Fragment() {
                     taskTitleLayout.error = getString(R.string.error_title_required)
                     return@setOnClickListener
                 }
-                if (!notificationPlanValid()) return@setOnClickListener
+                if (!notificationPlanValid() || !planValid()) return@setOnClickListener
 
                 viewModel.saveTask(
                     taskId = args.taskId,
@@ -488,7 +676,10 @@ class TaskDetailFragment : Fragment() {
                     categoryId = categoryId,
                     repeat = repeatPlan(),
                     // Always sent, so unchecking the last chip removes the reminder it stood for.
-                    reminders = selectedReminderOffsets()
+                    reminders = selectedReminderOffsets(),
+                    startTime = startCalendar?.time,
+                    endTime = endCalendar?.time,
+                    estimatedMinutes = planEstimate()
                 )
             }
 
@@ -526,6 +717,18 @@ class TaskDetailFragment : Fragment() {
                         setFieldsEnabled(true)
                         showSnackbar(getString(R.string.error_reminders_need_deadline))
                     }
+                    is TaskSaveState.PlanConflict -> {
+                        binding.saveTask.isEnabled = true
+                        binding.progressBar.isVisible = false
+                        setFieldsEnabled(true)
+                        showSnackbar(getString(R.string.error_plan_conflict))
+                    }
+                    is TaskSaveState.PlanNeedsInstant -> {
+                        binding.saveTask.isEnabled = true
+                        binding.progressBar.isVisible = false
+                        setFieldsEnabled(true)
+                        showSnackbar(getString(R.string.error_plan_needs_instant))
+                    }
                     is TaskSaveState.Error -> {
                         binding.saveTask.isEnabled = true
                         binding.progressBar.isVisible = false
@@ -550,6 +753,7 @@ class TaskDetailFragment : Fragment() {
                         taskTitle.setText(it.title)
                         taskDescription.setText(it.description)
                         it.dueDate?.let { millis -> loadDeadline(millis) }
+                        loadPlan(it)
                         taskPriority.setText(getString(getPriorityStringRes(it.priority)), false)
                         taskStatus.setText(getString(getStatusStringRes(it.status)), false)
                         it.categoryId?.let { categoryId ->
@@ -572,6 +776,31 @@ class TaskDetailFragment : Fragment() {
         timeChosen = calendar.get(Calendar.HOUR_OF_DAY) != 0 || calendar.get(Calendar.MINUTE) != 0
         dueCalendar = calendar
         renderDueFields()
+    }
+
+    /**
+     * Reads the stored plan back into the rows. Fields the task does not have stay empty: a task with
+     * no plan line must not look like one with a plan the user forgot about.
+     */
+    private fun loadPlan(task: Task) {
+        task.startTime?.let { millis ->
+            val calendar = Calendar.getInstance().apply { timeInMillis = millis }
+            startCalendar = calendar
+            startTimeChosen = isTimed(calendar)
+        } ?: run {
+            startCalendar = null
+            startTimeChosen = false
+        }
+        task.endTime?.let { millis ->
+            val calendar = Calendar.getInstance().apply { timeInMillis = millis }
+            endCalendar = calendar
+            endTimeChosen = isTimed(calendar)
+        } ?: run {
+            endCalendar = null
+            endTimeChosen = false
+        }
+        binding.planEstimateMinutes.setText(task.estimatedMinutes?.toString() ?: "")
+        renderPlanFields()
     }
 
     private fun observeReminders() {
@@ -604,6 +833,12 @@ class TaskDetailFragment : Fragment() {
         binding.taskDescription.isEnabled = enabled
         binding.taskDueDate.isEnabled = enabled
         binding.taskDueTime.isEnabled = enabled && dueCalendar != null
+        binding.planStartDate.isEnabled = enabled
+        binding.planStartTime.isEnabled = enabled && startCalendar != null
+        binding.planEndDate.isEnabled = enabled
+        binding.planEndTime.isEnabled = enabled && endCalendar != null
+        binding.planEstimateMinutes.isEnabled = enabled
+        binding.planClear.isEnabled = enabled
         binding.taskPriority.isEnabled = enabled
         binding.taskStatus.isEnabled = enabled
         binding.taskCategory.isEnabled = enabled

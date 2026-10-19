@@ -456,7 +456,11 @@ class TasksViewModel @Inject constructor(
         categoryId: Long? = null,
         groupId: String? = null,
         repeat: RepeatPlan = RepeatPlan(),
-        reminders: List<Int>? = null
+        reminders: List<Int>? = null,
+        /** When the user says the task starts. Null means it was never planned to a minute. */
+        startTime: Date? = null,
+        endTime: Date? = null,
+        estimatedMinutes: Int? = null
     ) {
         if (title.isBlank()) {
             _taskSaveState.value = TaskSaveState.Error("Title cannot be empty")
@@ -469,6 +473,14 @@ class TasksViewModel @Inject constructor(
             _taskSaveState.value = TaskSaveState.ReminderNeedsDeadline
             return
         }
+        if (startTime != null && endTime != null && endTime.time < startTime.time) {
+            _taskSaveState.value = TaskSaveState.PlanConflict
+            return
+        }
+        if (estimatedMinutes != null && estimatedMinutes > 0 && startTime == null && dueDate == null) {
+            _taskSaveState.value = TaskSaveState.PlanNeedsInstant
+            return
+        }
         viewModelScope.launch {
             _taskSaveState.value = TaskSaveState.Loading
             try {
@@ -479,6 +491,9 @@ class TasksViewModel @Inject constructor(
                     status = status,
                     priority = priority,
                     dueDate = dueDate?.time,
+                    startTime = startTime?.time,
+                    endTime = endTime?.time,
+                    estimatedMinutes = estimatedMinutes?.takeIf { it > 0 },
                     categoryId = categoryId,
                     groupId = groupId
                 )
@@ -668,6 +683,15 @@ sealed class TaskSaveState {
 
     /** Nothing was stored: the chosen lead times have no deadline to count back from. */
     object ReminderNeedsDeadline : TaskSaveState()
+
+    /**
+     * Nothing was stored: an estimate needs a moment to be measured from. A length without one would
+     * be a number with nothing to attach to, and the calendar would have to guess where to draw it.
+     */
+    object PlanNeedsInstant : TaskSaveState()
+
+    /** Nothing was stored: the planned end comes before the planned start. */
+    object PlanConflict : TaskSaveState()
 
     data class Error(val message: String) : TaskSaveState()
 }

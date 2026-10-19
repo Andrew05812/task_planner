@@ -301,6 +301,24 @@
     <string name="label_due_time">Due time</string>
     <string name="label_due_time_none">All day</string>
 
+    <!-- Plan: when the task actually happens, as opposed to when it is due -->
+    <string name="plan_section_title">Plan</string>
+    <string name="plan_start_date">Starts on</string>
+    <string name="plan_start_time">Start time</string>
+    <string name="plan_end_date">Ends on</string>
+    <string name="plan_end_time">End time</string>
+    <string name="plan_estimate">Estimated minutes</string>
+    <string name="plan_time_none">Not set</string>
+    <string name="plan_clear">Clear the plan times</string>
+    <string name="plan_hint_none">A task with no plan line sits on its due date alone, and nothing here invents a time for it.</string>
+    <string name="plan_hint_block">The calendar draws this task from %1$s to %2$s.</string>
+    <string name="plan_hint_estimate">The calendar draws this task from %1$s for %2$d minutes.</string>
+    <string name="plan_hint_marker">The calendar shows this task at %1$s: no length was given.</string>
+    <string name="plan_hint_from_deadline">The calendar measures this from the due date; set a start to place it yourself.</string>
+    <string name="error_plan_needs_instant">An estimate needs a start time or a due date: a length has to belong to a moment.</string>
+    <string name="error_plan_conflict">The plan ends before it starts.</string>
+    <string name="error_plan_estimate_not_number">Enter the estimate in whole minutes.</string>
+
     <plurals name="reminder_count">
         <item quantity="one">%1$d reminder set</item>
         <item quantity="other">%1$d reminders set</item>
