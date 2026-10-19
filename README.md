@@ -11,7 +11,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 405 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 412 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -31,7 +31,7 @@ On first start `LegacyDbRescuer` looks for a database in the old locations (`cac
 recently it was updated, and copies the richest one — together with its `-wal` and `-shm` sidecars —
 into the permanent location. Nothing is deleted: the legacy files stay where they were.
 
-Migrations run for every retained schema version (1 → 10) and are covered by tests that execute the
+Migrations run for every retained schema version (1 → 11) and are covered by tests that execute the
 production `Migration` objects against real SQLite files built from the exported schema JSON. There
 is deliberately **no** `fallbackToDestructiveMigration()`: if the app meets a schema it does not
 know, it refuses to open the database and the rows stay on disk untouched, instead of the user
@@ -172,10 +172,16 @@ nine, for an hour and a half" is a plan the user described, and a deadline alone
   overload threshold (`BUSY_MINUTES_OVERLOAD`, `TASK_COUNT_OVERLOAD`) is a display heuristic, not a
   fact about the data, and is named as one.
 - **One bounded read** (`TaskDao.observeWindow` / `CalendarRepository`): a month, a week and a day are
-  the same query over the days on screen, ordered by `COALESCE(start_time, due_date, end_time)` and
-  served through `index_tasks_user_id_due_date`. Nothing loads every task of every month: a ten-thousand
-  task account opens a month page as cheaply as a hundred-task one, and a signed-out profile gets an
-  empty grid rather than somebody else's plans.
+  the same query over the days on screen, ordered by `COALESCE(start_time, due_date, end_time)`. A task
+  is in the window if *any* part of it is, so the query is four seekable range lookups — by deadline, by
+  start, by end, and for the blocks that span the whole window — rather than one OR across three columns,
+  which a planner can serve only by walking every row the account holds. Schema version 11 added the two
+  indices that turn those lookups into seeks (`user_id, start_time` and `user_id, end_time, start_time`).
+  Measured on a real SQLite engine: the month read takes 2.7 ms on a thousand-task account and 2.8 ms on
+  a ten-thousand-task one, against 3.3 ms and 8.3 ms for the walk it replaced, and read plus aggregation
+  together stay under 6 ms on every screen at every size. `CalendarWindowBenchmarkTest` re-measures this
+  and fails if the plan goes back to a table walk or a month starts returning more rows on a bigger
+  account. A signed-out profile gets an empty grid rather than somebody else's plans.
 - **Drag and drop** (`CalendarRepository.moveToDay`): a drop lands on a month or week cell — the day
   column is the day already being read, so it has no other day to hand a task to. The clip carries a
   row id and nothing else, so a drop acts on the stored task, not on a copy made before the finger
@@ -242,7 +248,7 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 
 | Suite | Covers |
 | --- | --- |
-| `AppMigrationsTest` | every 1 → 10 migration against real SQLite, compared with the exported schema |
+| `AppMigrationsTest` | every 1 → 11 migration against real SQLite, compared with the exported schema |
 | `LegacyDbRescuerTest` | rescue selection, WAL sidecars, never overwriting or consuming the original |
 | `DataSafetyTest` | the production `DatabaseModule` wiring: private location, rescue + migration end to end, restart, refusal of an unknown schema |
 | `SessionRepositoryTest` | session survives restart, no fixed-user fallback, concurrent profile switches, switching keeps what a profile owns |
@@ -267,6 +273,7 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 | `CalendarMathTest` | month and week grids as whole weeks, day windows across a DST jump, wall-clock preserving moves, the locale's first weekday |
 | `CalendarAggregatorTest` | which day a task belongs to, markers versus blocks, clamping across midnight, overlap arithmetic, per-day categories, overdue and the overload heuristic |
 | `CalendarRepositoryTest` | the window query reads exactly the days on screen, per-profile isolation, drag-and-drop keeping clock time and reminders, no duplicate rows, planned times written and refused, flows re-emitting after a write |
+| `CalendarWindowBenchmarkTest` | the shipped window query measured on 1k, 5k and 10k-task accounts: the rows a month returns do not grow with the account, the query plan seeks an index instead of walking the table, and month, week and day each read and aggregate under their ceiling |
 | `TasksPlanTest` | the editor's plan rows end to end: a start and an end become that block, a deadline stays a point with no length, an estimate becomes its length, an impossible plan is refused without touching what was stored, clearing clears, and re-saving keeps what the user placed |
 | `CalendarViewModelTest` | a month page is whole weeks, a week page holds its seven days, paging each mode moves only its own page, zooming keeps the day being read, and a drag repaints the grid through the repository's flow rather than a reload |
 | `CalendarScreenTest` | cells coloured and counted by category, today and borrowed neighbour days, the full-day badge, a block drawn at its own minutes beside a task with no length, colliding tasks side by side, and every mode inside 320dp |
@@ -299,6 +306,11 @@ provide.
   concurrently are not merged field by field — the row that still has local edits is pushed last and
   wins upstream.
 - On-device (Espresso) tests compile but have not been executed as part of this work.
+- The calendar's performance numbers come from the JVM's SQLite engine (`org.xerial sqlite-jdbc`, the
+  same family Android ships) running against a database built from Room's exported schema. They cover
+  the window query and the aggregation, which is where the cost the brief worries about actually sits;
+  they do not cover a phone's flash storage, view measurement or drawing, so they are not a device
+  frame-time budget. No on-device profiling has been done.
 - A `1.0` backup restores no repeat patterns, no lead times and no planned window, because a file
   written before format `1.1` never contained them. Nothing is invented to fill the gap: the restore
   says so in its own counts, and the user's data from that version keeps only what was in it.

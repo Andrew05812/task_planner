@@ -225,9 +225,47 @@ class AppMigrationsTest {
     fun `migrations are idempotently registered for every retained version pair`() {
         val pairs = AppMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10),
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11),
             pairs
         )
+    }
+
+    @Test
+    fun `migration 10 to 11 adds only the indices the calendar window reads through`() {
+        val db = open(10)
+        val before = counts(db)
+        val beforeValues = db.rows(
+            "SELECT id, title, due_date, start_time, end_time FROM tasks ORDER BY id"
+        )
+        db.migrate(AppMigrations.MIGRATION_10_11)
+        builder.assertMatchesSchema(db, 11, "MIGRATION_10_11")
+
+        assertEquals("an index migration moves no row", before, counts(db))
+        assertEquals(
+            beforeValues,
+            db.rows("SELECT id, title, due_date, start_time, end_time FROM tasks ORDER BY id")
+        )
+        mapOf(
+            "index_tasks_user_id_start_time" to listOf("user_id", "start_time"),
+            "index_tasks_user_id_end_time_start_time" to listOf("user_id", "end_time", "start_time")
+        ).forEach { (index, columns) ->
+            assertEquals(
+                "$index has to answer the window's lookup for that column",
+                columns,
+                db.rows("PRAGMA index_info('$index')").map { it[2] }
+            )
+        }
+    }
+
+    @Test
+    fun `migration 10 to 11 applied to a database that already has the indices changes nothing`() {
+        val db = open(10)
+        db.migrate(AppMigrations.MIGRATION_10_11)
+        val indexes = db.rows("PRAGMA index_list('tasks')").size
+        db.migrate(AppMigrations.MIGRATION_10_11)
+
+        assertEquals(indexes, db.rows("PRAGMA index_list('tasks')").size)
+        builder.assertMatchesSchema(db, 11, "MIGRATION_10_11 applied twice")
     }
 
     private val latestVersion: Int = AppMigrations.ALL.maxOf { it.endVersion }

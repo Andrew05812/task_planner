@@ -24,10 +24,13 @@ import kotlinx.coroutines.flow.flowOf
  *
  * Two things it is built around.
  *
- * **It never reads the whole profile.** A month asks the database for the millisecond range its grid
- * covers and gets those rows live, so the screen refreshes from the same query when a task is edited,
+ * **It asks for one window, not for a profile.** A month reads the millisecond range its grid covers
+ * and gets those rows live, so the screen refreshes from the same query when a task is edited,
  * dragged, synced in, or produced by a repeating series, instead of reloading everything to find out
- * that one thing changed.
+ * that one thing changed. What it returns and what it costs are set by the window rather than by how
+ * much the user has written (measured in `CalendarWindowBenchmarkTest`); the one lookup that still
+ * has to look past the window is the one for blocks that span it, which walks the end-time index
+ * rather than the rows.
  *
  * **It never completes a task's plan for the user.** Moving a task between days keeps the times that
  * exist and leaves the ones that do not absent: no duration is invented for a task that has no

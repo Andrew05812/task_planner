@@ -19,7 +19,7 @@ import com.taskplanner.data.model.User
         RecurrenceRule::class,
         Reminder::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
