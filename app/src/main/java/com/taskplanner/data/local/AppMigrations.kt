@@ -272,6 +272,23 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Two indices and nothing else: no table is touched, no column is added, no row is
+            // rewritten. They exist because the calendar's window is bounded by three columns and
+            // SQLite can only seek one of them per lookup, so the read that used to walk a whole
+            // profile now walks the window instead. An existing database simply gains them.
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tasks_user_id_start_time` " +
+                    "ON `tasks` (`user_id`, `start_time`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tasks_user_id_end_time_start_time` " +
+                    "ON `tasks` (`user_id`, `end_time`, `start_time`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -281,6 +298,7 @@ object AppMigrations {
         MIGRATION_6_7,
         MIGRATION_7_8,
         MIGRATION_8_9,
-        MIGRATION_9_10
+        MIGRATION_9_10,
+        MIGRATION_10_11
     )
 }
