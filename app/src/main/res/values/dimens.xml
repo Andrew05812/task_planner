@@ -20,4 +20,16 @@
     <dimen name="fab_margin">16dp</dimen>
 
     <dimen name="color_chip_size">48dp</dimen>
+
+    <!-- Dashboard charts -->
+    <dimen name="chart_bar_height">140dp</dimen>
+    <dimen name="chart_bar_corner">3dp</dimen>
+    <dimen name="chart_axis_thickness">1dp</dimen>
+    <dimen name="chart_proportion_bar_height">14dp</dimen>
+    <dimen name="chart_heatmap_spacing">3dp</dimen>
+    <dimen name="chart_heatmap_corner">2dp</dimen>
+    <!-- Below this a square of the grid is smaller than the gap beside it, and a chart made of gaps is
+         not a chart: the weeks ask for room to scroll instead. -->
+    <dimen name="chart_heatmap_cell_minimum">9dp</dimen>
+    <dimen name="chart_legend_chip_size">12dp</dimen>
 </resources> 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Text appearances the dashboard's charts use for the words they build in code.
+         They are styles rather than attributes set one by one because a legend row built by a view has no
+         XML to carry `?attr/textAppearanceBodyMedium`, and a hard-coded size and colour would stop matching
+         the rest of the screen the moment the theme is read dark. -->
+    <style name="TextAppearance.TaskPlanner.ChartLegend" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="TextAppearance.TaskPlanner.ChartLegendDetail" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:gravity">end</item>
+    </style>
+</resources>
