@@ -28,6 +28,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,6 +78,21 @@ class WorkAdjustmentUiTest {
         activity.supportFragmentManager.beginTransaction().add(host.id, anchor, "anchor").commitNow()
         // A notice asserted later in the test is only worth anything if it is this test's own, so the
         // manager starts each test empty rather than still holding one an earlier test showed.
+        dismissNotices()
+    }
+
+    /**
+     * Puts this test's notices away before its window goes with them.
+     *
+     * This belongs here and not only in the next test's setup because the notice manager only lets go of a
+     * notice through its exit animation, and that animation needs a view which is still attached. A notice
+     * left up when the activity is destroyed keeps the manager holding it for the rest of the JVM's life,
+     * and every notice a later test asks for is then queued behind one nobody can see or dismiss — which is
+     * why the same assertion can pass alone and fail in a full run, where the machine is busy enough for a
+     * notice still to be up at the end.
+     */
+    @After
+    fun tearDown() {
         dismissNotices()
     }
 
@@ -143,8 +159,24 @@ class WorkAdjustmentUiTest {
      * The notice is read rather than merely spotted because which sentence the user gets is the thing
      * under test: "it did not save" and "this stretch is still being measured" are not the same ask. The
      * fragment's own container is skipped, so a check cannot pass on the screen's layout.
+     *
+     * Asking is not the same as being shown: the notice manager first animates whatever it still holds out
+     * of the way, and a paused looper only runs those frames when the clock is moved, so the words are
+     * waited for instead of assumed to be there already. The steps stay far shorter than the time a
+     * LENGTH_LONG notice spends up, so waiting cannot read a notice's own ending as "the screen was quiet";
+     * the attempt limit is what turns a screen that truly says nothing into a failure rather than a hang.
      */
     private fun noticeText(): String? {
+        repeat(NOTICE_READ_ATTEMPTS) {
+            val text = spokenNotice()
+            if (text != null) return text
+            shadowOf(Looper.getMainLooper()).idleFor(NOTICE_READ_STEP_MS, TimeUnit.MILLISECONDS)
+        }
+        return null
+    }
+
+    /** The first notice view the activity has been given, or null while the screen still says nothing. */
+    private fun spokenNotice(): String? {
         pump()
         return content().asSequence()
             .filter { it !== host }
@@ -211,13 +243,18 @@ class WorkAdjustmentUiTest {
      * A Snackbar is not shown by its own view: a process-wide manager keeps one as "the notice on screen",
      * and a paused Robolectric looper never runs the timeout that ends it. Removing the view alone would
      * therefore leave the manager queueing this test's notice behind one nobody can see, which reads as the
-     * screen having said nothing. The clock is moved past the longest notice first, then the views go.
+     * screen having said nothing. The clock is moved past the longest notice, then the views go, and the
+     * pair is repeated until the screen is actually quiet — one round is only enough when a single notice
+     * was left behind, and the manager can hand over to another one as soon as it releases the first.
      */
     private fun dismissNotices() {
-        shadowOf(Looper.getMainLooper()).idleFor(NOTICE_SETTLE_MS, TimeUnit.MILLISECONDS)
         val container = activity.findViewById<ViewGroup>(android.R.id.content)
-        for (index in container.childCount - 1 downTo 0) {
-            if (container.getChildAt(index) !== host) container.removeViewAt(index)
+        repeat(NOTICE_DRAIN_ROUNDS) {
+            shadowOf(Looper.getMainLooper()).idleFor(NOTICE_SETTLE_MS, TimeUnit.MILLISECONDS)
+            for (index in container.childCount - 1 downTo 0) {
+                if (container.getChildAt(index) !== host) container.removeViewAt(index)
+            }
+            if (spokenNotice() == null) return
         }
     }
 
@@ -455,5 +492,14 @@ class WorkAdjustmentUiTest {
 
         /** Past a LENGTH_LONG notice and its animation, so the notice manager has let go of it. */
         private const val NOTICE_SETTLE_MS = 10_000L
+
+        /** One frame's worth of patience: long enough to run an animation, short next to a notice's life. */
+        private const val NOTICE_READ_STEP_MS = 50L
+
+        /** Two seconds of screen time, which is when a notice that was never asked for is called absent. */
+        private const val NOTICE_READ_ATTEMPTS = 40
+
+        /** More hand-overs than the suite can leave queued, so a quiet screen is proven not assumed. */
+        private const val NOTICE_DRAIN_ROUNDS = 8
     }
 }
