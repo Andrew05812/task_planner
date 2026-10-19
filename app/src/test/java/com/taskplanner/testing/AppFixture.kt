@@ -24,7 +24,10 @@ import com.taskplanner.data.model.User
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
 import com.taskplanner.data.repository.CategoryRepository
-import java.util.concurrent.Executor
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,11 +39,26 @@ import com.taskplanner.data.repository.TaskRepository
 import com.taskplanner.data.repository.WorkStatisticsRepository
 import com.taskplanner.data.repository.WorkTrackingRepository
 import com.taskplanner.data.tracking.MonotonicReference
+import com.taskplanner.data.tracking.WorkTicker
 import com.taskplanner.data.sync.SyncAppliers
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import org.robolectric.Shadows.shadowOf
+
+/** How long the database threads must stay quiet before a command counts as finished. */
+private const val QUIET_MILLIS = 20L
+
+/**
+ * One database worker, of the shape production has, with the queue left visible: `newSingleThreadExecutor`
+ * hides it behind a wrapper that cannot say whether it still holds work, and a test has to be able to ask.
+ */
+private class FixtureExecutor(name: String) : ThreadPoolExecutor(
+    1, 1, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue(),
+    ThreadFactory { runnable -> Thread(runnable, name).apply { isDaemon = true } }
+) {
+    val isIdle: Boolean get() = activeCount == 0 && queue.isEmpty()
+}
 
 /**
  * Real objects, no mocked persistence: an in-memory Room database, the production DAOs, the
@@ -49,16 +67,19 @@ import org.robolectric.Shadows.shadowOf
  */
 class AppFixture(private val context: Context) : AutoCloseable {
 
-    // Room normally moves database work onto background threads. Robolectric's SQLite shadow keeps
-    // connection handles per thread, so those background jobs either fail with "illegal connection
-    // pointer" after close() or, worse, never deliver a Flow update at all. Running everything on
-    // the calling thread keeps the harness single-threaded and the emissions synchronous.
-    private val directExecutor = Executor { command -> command.run() }
+    // Room answers a query from the thread its Flow collector was resumed on, and it refuses that when
+    // the thread is inside a suspending transaction belonging to another coroutine context: committing
+    // a transaction dispatches the invalidation, which resumes the collector, which queries — all on the
+    // committing thread, which Room then correctly rejects. Production avoids it by having queries and
+    // transactions on their own threads, so the harness keeps that shape and leaves the test thread free
+    // to pump the looper instead.
+    private val queryExecutor = FixtureExecutor("fixture-query-thread")
+    private val transactionExecutor = FixtureExecutor("fixture-transaction-thread")
 
     val database: AppDatabase = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
         .allowMainThreadQueries()
-        .setQueryExecutor(directExecutor)
-        .setTransactionExecutor(directExecutor)
+        .setQueryExecutor(queryExecutor)
+        .setTransactionExecutor(transactionExecutor)
         .build()
 
     val taskDao: TaskDao = database.taskDao()
@@ -123,8 +144,12 @@ class AppFixture(private val context: Context) : AutoCloseable {
         MonotonicReference(timeBase)
     )
 
+    /** The reader's re-measurement, on the same clocks as the writer. */
+    val workTicker = WorkTicker(timeBase, monotonicReference)
+
     val workStatisticsRepository = WorkStatisticsRepository(
-        workStatisticsDao, workSessionDao, sessionRepository, timeBase, monotonicReference
+        workStatisticsDao, trackingSessionDao, workSessionDao, sessionRepository, timeBase,
+        monotonicReference, workTicker
     )
 
     val taskRepository = TaskRepository(
@@ -210,7 +235,41 @@ class AppFixture(private val context: Context) : AutoCloseable {
         return sink
     }
 
+    /**
+     * Waits until the database threads have run out of work.
+     *
+     * A screen command is not finished when its call returns any more: Room answers on its own threads,
+     * the way it does in the app, and the command's continuation runs there. So a test that reads a
+     * stored row or a published figure after such a command first lets those threads settle — otherwise
+     * it reads the state the *previous* command left behind and passes or fails for the wrong reason.
+     *
+     * A short quiet window is required rather than a single idle reading, because the thread that just
+     * finished a query can still be handed the next one by the collector it resumed. Returns early once
+     * the threads have been idle for QUIET_MILLIS; a timeout is not an error here, it just means the
+     * test's own assertions get to say what is wrong.
+     */
+    fun awaitIdle(timeoutMillis: Long = 2_000) {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        var quietSince = -1L
+        while (System.currentTimeMillis() < deadline) {
+            if (queryExecutor.isIdle && transactionExecutor.isIdle) {
+                if (quietSince < 0) quietSince = System.currentTimeMillis()
+                if (System.currentTimeMillis() - quietSince >= QUIET_MILLIS) return
+            } else {
+                quietSince = -1L
+            }
+            Thread.sleep(1)
+        }
+    }
+
     override fun close() {
+        // Robolectric keeps a SQLite connection handle per thread. Let both database threads finish the
+        // work they already hold before the storage goes away, otherwise a late query is reported
+        // against whichever test runs next.
+        queryExecutor.shutdown()
+        transactionExecutor.shutdown()
+        queryExecutor.awaitTermination(5, TimeUnit.SECONDS)
+        transactionExecutor.awaitTermination(5, TimeUnit.SECONDS)
         database.close()
     }
 

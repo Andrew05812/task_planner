@@ -231,6 +231,128 @@
 
         </LinearLayout>
 
+        <!-- Measured time, as distinct from the plan above: what the task has actually cost, not what
+             it was guessed or scheduled to cost. Hidden until a saved task is on screen. -->
+        <LinearLayout
+            android:id="@+id/work_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/plan_section">
+
+            <TextView
+                android:id="@+id/work_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/work_section_title"
+                android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/work_state_dot"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:background="@drawable/bg_work_dot"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/work_live_seconds"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textAppearance="?attr/textAppearanceSubtitle2"
+                    android:visibility="gone"
+                    tools:text="01:24:35" />
+
+                <TextView
+                    android:id="@+id/work_state_hint"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:textAppearance="?attr/textAppearanceCaption"
+                    tools:text="Nothing is being measured on this task" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/workStartButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/work_start" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/workPauseButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/work_pause"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/workResumeButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/work_resume"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/workStopButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/work_stop"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/work_totals"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textAppearance="?attr/textAppearanceBody2"
+                tools:text="Actual 1 h 45 min - Today 25 min" />
+
+            <TextView
+                android:id="@+id/work_balance"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textAppearance="?attr/textAppearanceCaption"
+                tools:text="Estimate 2 h - 15 min left inside the estimate" />
+
+            <TextView
+                android:id="@+id/work_intervals_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/work_intervals_title"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/work_intervals"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/work_intervals_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/work_no_intervals"
+                android:textAppearance="?attr/textAppearanceCaption" />
+
+        </LinearLayout>
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/task_priority_layout"
             android:layout_width="match_parent"

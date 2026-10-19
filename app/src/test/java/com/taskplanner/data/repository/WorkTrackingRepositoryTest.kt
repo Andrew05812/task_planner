@@ -13,6 +13,8 @@ import com.taskplanner.data.tracking.WorkTimeMath
 import com.taskplanner.testing.AppFixture
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -446,5 +448,121 @@ class WorkTrackingRepositoryTest {
 
         assertEquals(SyncState.PENDING, sessions().single().syncState)
         assertEquals(SyncState.PENDING, intervals().single().syncState)
+    }
+
+    // ---------------------------------------------------------------- what the screens read back
+
+    @Test
+    fun `the board names the task being measured and leaves every other task idle`() = runTest {
+        val (report, draft) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        fixture.timeBase.advance(30_000L)
+
+        val board = fixture.workStatisticsRepository.observeWorkBoard().first()
+
+        assertEquals(report.id, board.active?.taskId)
+        assertEquals(
+            "the bar has to say what it is measuring, from the title the row recorded",
+            "Write the report",
+            board.active?.taskTitle
+        )
+        assertEquals(TrackingPhase.RUNNING, board.active?.phase)
+        assertEquals(report.id, board.openTaskId)
+        assertEquals(
+            "the running figure is measured from the stored start, not remembered by a timer",
+            30L,
+            board.liveSeconds
+        )
+        assertEquals(TrackingPhase.RUNNING, board.phaseOf(report.id))
+        assertEquals(TrackingPhase.IDLE, board.phaseOf(draft.id))
+        assertNull("no other card gets a moving number", board.liveSecondsOf(draft.id))
+    }
+
+    @Test
+    fun `a paused session keeps its task on the board but has nothing to measure`() = runTest {
+        val (report, _) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        fixture.timeBase.advance(60_000L)
+        fixture.workTrackingRepository.pause(report)
+
+        val board = fixture.workStatisticsRepository.observeWorkBoard().first()
+
+        assertEquals(TrackingPhase.PAUSED, board.active?.phase)
+        assertEquals(report.id, board.active?.taskId)
+        assertNull("a pause closes the stretch, so no row is open", board.openTaskId)
+        assertNull(board.liveSeconds)
+        assertEquals(
+            "what was measured before the pause is already a stored fact",
+            60L,
+            board.closedSecondsOf(report.id)
+        )
+    }
+
+    @Test
+    fun `the board is empty for a profile that has never measured anything`() = runTest {
+        signInWithTwoTasks()
+
+        val board = fixture.workStatisticsRepository.observeWorkBoard().first()
+
+        assertNull(board.active)
+        assertTrue(board.closedByTask.isEmpty())
+        assertNull(board.liveSeconds)
+    }
+
+    @Test
+    /**
+     * The tracking block's own read, on a real clock: the day label sleeps until tomorrow, and a
+     * virtual-time scheduler skips that sleep instantly, so the flow would re-anchor its query forever
+     * instead of answering once. What is asserted stays the same.
+     */
+    fun `the task view carries the total, today, and the stretches, with the pause left out`() = runBlocking {
+        val (report, _) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        fixture.timeBase.advance(120_000L)
+        fixture.workTrackingRepository.pause(report)
+        fixture.timeBase.advance(600_000L)
+        fixture.workTrackingRepository.resume(report)
+        fixture.timeBase.advance(30_000L)
+        fixture.workTrackingRepository.stop(report)
+
+        val view = fixture.workStatisticsRepository.observeTaskWork(report).first()
+
+        assertEquals(150L, view.closedSeconds)
+        assertEquals(
+            "ten minutes of pause is not work, and it is in none of these figures",
+            150L,
+            view.totalSeconds
+        )
+        assertEquals(150L, view.todaySeconds)
+        assertEquals(TrackingPhase.IDLE, view.phase)
+        assertNull(view.liveSeconds)
+        assertEquals(2, view.intervals.size)
+        assertEquals(
+            "the list is newest first, which is the order the screen prints",
+            30L,
+            view.intervals.first().durationSeconds
+        )
+    }
+
+    @Test
+    /**
+     * The tracking block's own read, on a real clock: the day label sleeps until tomorrow, and a
+     * virtual-time scheduler skips that sleep instantly, so the flow would re-anchor its query forever
+     * instead of answering once. What is asserted stays the same.
+     */
+    fun `a task that is not the one being measured gets no live figure`() = runBlocking {
+        val (report, draft) = signInWithTwoTasks()
+        startAfter(report, 1_000L)
+        fixture.timeBase.advance(45_000L)
+
+        val other = fixture.workStatisticsRepository.observeTaskWork(draft).first()
+        val measured = fixture.workStatisticsRepository.observeTaskWork(report).first()
+
+        assertEquals(TrackingPhase.IDLE, other.phase)
+        assertNull(other.liveSeconds)
+        assertEquals(0L, other.closedSeconds)
+        assertEquals(TrackingPhase.RUNNING, measured.phase)
+        assertEquals(45L, measured.liveSeconds)
+        assertEquals(0L, measured.closedSeconds)
     }
 }

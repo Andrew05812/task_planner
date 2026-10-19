@@ -31,6 +31,19 @@ interface TrackingSessionDao {
     @Query("SELECT * FROM tracking_sessions WHERE user_id = :userId AND running_marker IS NOT NULL LIMIT 1")
     fun observeRunning(userId: Long): Flow<TrackingSession?>
 
+    /**
+     * The runs this profile has neither finished nor abandoned, newest first.
+     *
+     * A list because a paused run takes no slot: a profile can hold several of them, one per task, and
+     * each is a card that has to read "Resume" rather than "Start". There is at most one running entry
+     * among them, the marker index sees to that.
+     */
+    @Query(
+        "SELECT * FROM tracking_sessions WHERE user_id = :userId AND state != 'COMPLETED' " +
+            "AND is_deleted = 0 ORDER BY started_at DESC"
+    )
+    fun observeLiveForUser(userId: Long): Flow<List<TrackingSession>>
+
     /** A session left paused on this task — the one Start on the same task continues instead of opening
      *  a second block of work. */
     @Query(

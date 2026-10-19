@@ -6,6 +6,7 @@ import com.taskplanner.data.model.CategoryWorkSummary
 import com.taskplanner.data.model.DailyWorkSummary
 import com.taskplanner.data.model.TaskWorkSummary
 import com.taskplanner.data.model.WorkPeriodSummary
+import com.taskplanner.data.model.TaskTotalSeconds
 import com.taskplanner.data.model.WorkSession
 import kotlinx.coroutines.flow.Flow
 
@@ -36,6 +37,13 @@ interface WorkStatisticsDao {
             "WHERE user_id = :userId AND task_id = :taskId AND ended_at IS NOT NULL AND is_deleted = 0"
     )
     suspend fun secondsForTask(userId: Long, taskId: Long): Long
+
+    /** The same total as a Flow, so a task screen updates the moment a stretch is closed. */
+    @Query(
+        "SELECT COALESCE(SUM(duration_seconds), 0) FROM work_sessions " +
+            "WHERE user_id = :userId AND task_id = :taskId AND ended_at IS NOT NULL AND is_deleted = 0"
+    )
+    fun observeSecondsForTask(userId: Long, taskId: Long): Flow<Long>
 
     @Query(
         "SELECT COALESCE(SUM(duration_seconds), 0) FROM work_sessions " +
@@ -140,10 +148,48 @@ interface WorkStatisticsDao {
     )
     suspend fun completedTasksInPeriod(userId: Long, from: Long, to: Long): Int
 
-    /** The interval being measured right now: the live figure, kept apart from every total above. */
+    /**
+     * The trend for one task: one row per local day it was worked on inside the window.
+     *
+     * A window rather than a single day because the screen that reads "today" also has to be right at
+     * midnight, and a row per day lets it pick the day it means at the moment it reads instead of
+     * caching yesterday under today's label.
+     */
+    @Query(
+        "SELECT local_day AS localDay, COALESCE(SUM(duration_seconds), 0) AS seconds, " +
+            "COUNT(id) AS intervals FROM work_sessions " +
+            "WHERE user_id = :userId AND task_id = :taskId AND local_day >= :fromDay " +
+            "AND local_day < :toDay AND ended_at IS NOT NULL AND is_deleted = 0 " +
+            "GROUP BY local_day ORDER BY local_day ASC"
+    )
+    fun observeDailySeriesForTask(
+        userId: Long,
+        taskId: Long,
+        fromDay: Long,
+        toDay: Long
+    ): Flow<List<DailyWorkSummary>>
+
+    /**
+     * The interval being measured right now: the live figure, kept apart from every total above.
+     *
+     * One row per profile at most, because the unique index on `(user_id, open_marker)` rejects a
+     * second one — which is why the task cards read this as a single value instead of a list.
+     */
     @Query(
         "SELECT * FROM work_sessions WHERE user_id = :userId AND open_marker IS NOT NULL AND " +
             "is_deleted = 0 LIMIT 1"
     )
     fun observeOpenInterval(userId: Long): Flow<WorkSession?>
+
+    /**
+     * All-time measured time per task, for the list screen: one grouped query rather than one query per
+     * card. A task with no closed work has no row, which the screen renders as "nothing measured yet".
+     */
+    @Query(
+        "SELECT w.task_id AS taskId, COALESCE(SUM(w.duration_seconds), 0) AS seconds " +
+            "FROM work_sessions w " +
+            "WHERE w.user_id = :userId AND w.ended_at IS NOT NULL AND w.is_deleted = 0 " +
+            "GROUP BY w.task_id"
+    )
+    fun observeTotalsByTask(userId: Long): Flow<List<TaskTotalSeconds>>
 }

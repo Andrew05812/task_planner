@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One measured stretch of one task, as the detail screen lists them. Its own file because how many
+     there are is only known when the task is on screen, so no parent layout can hold them. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/work_interval_label"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="2dp"
+    android:textAppearance="?attr/textAppearanceCaption"
+    tools:text="Jun 18, 09:00 – Jun 18, 09:30, 30 min" />

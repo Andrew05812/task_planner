@@ -52,6 +52,7 @@ class TaskCardReminderTest {
             onPause = {},
             onResume = {},
             onComplete = {},
+            onWorkToggle = {},
             onToggleGroup = {},
             onGroupMenu = { _, _ -> },
             onStartDrag = {}

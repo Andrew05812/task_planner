@@ -1,15 +1,22 @@
 package com.taskplanner.data.repository
 
 import com.taskplanner.data.calendar.CalendarMath
+import com.taskplanner.data.local.TrackingSessionDao
 import com.taskplanner.data.local.WorkSessionDao
 import com.taskplanner.data.local.WorkStatisticsDao
 import com.taskplanner.data.model.CategoryWorkSummary
 import com.taskplanner.data.model.DailyWorkSummary
 import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskTotalSeconds
 import com.taskplanner.data.model.TaskWorkSummary
+import com.taskplanner.data.model.TrackingSession
+import com.taskplanner.data.model.WorkIntervalRow
 import com.taskplanner.data.model.WorkPeriodSummary
+import com.taskplanner.data.model.WorkSession
 import com.taskplanner.data.tracking.MonotonicReference
 import com.taskplanner.data.tracking.TimeBase
+import com.taskplanner.data.tracking.TrackingPhase
+import com.taskplanner.data.tracking.WorkTicker
 import com.taskplanner.data.tracking.WorkTimeMath
 import java.time.LocalDate
 import java.time.ZoneId
@@ -17,8 +24,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 /** The periods the history screen offers, named the way the user reads them. */
 enum class WorkPeriod {
@@ -65,10 +74,12 @@ data class WorkWindow(val fromDay: Long, val toDay: Long, val fromMillis: Long, 
 @Singleton
 class WorkStatisticsRepository @Inject constructor(
     private val statisticsDao: WorkStatisticsDao,
+    private val trackingSessionDao: TrackingSessionDao,
     private val workSessionDao: WorkSessionDao,
     private val sessionRepository: SessionRepository,
     private val timeBase: TimeBase,
-    private val monotonic: MonotonicReference
+    private val monotonic: MonotonicReference,
+    private val ticker: WorkTicker
 ) {
 
     /** Time that is already a fact, plus the stretch still being measured. */
@@ -132,14 +143,6 @@ class WorkStatisticsRepository @Inject constructor(
         userIdOrNull()?.let { statisticsDao.completedTasksInPeriod(it, window.fromMillis, window.toMillis) }
             ?: 0
 
-    /** Total measured work on [task] across the whole account, closed intervals only. */
-    suspend fun totalOnTask(task: Task): Long =
-        userIdOrNull()?.let { statisticsDao.secondsForTask(it, task.id) } ?: 0L
-
-    /** Work measured on [task] on one local day — the "today" figure beside the total. */
-    suspend fun onTaskToday(task: Task, onDay: LocalDate = LocalDate.now()): Long =
-        userIdOrNull()?.let { statisticsDao.secondsForTaskOnDay(it, task.id, onDay.toEpochDay()) } ?: 0L
-
     /**
      * What has been spent on [task], and what is still being spent on it right now.
      *
@@ -164,9 +167,153 @@ class WorkStatisticsRepository @Inject constructor(
         return WorkTotals(closed, live)
     }
 
-    /** Estimate against measured work — the detail screen's "remaining" or "overrun". */
-    suspend fun balanceOf(task: Task): WorkTimeMath.WorkBalance =
-        WorkTimeMath.balance(task.estimatedMinutes, totalsOnTask(task).totalSeconds)
+    /**
+     * What the profile is measuring now, next to what each task has already cost.
+     *
+     * One snapshot for the whole list, so a screen of fifty cards runs three queries — the per-task
+     * totals, the profile's live runs, the one open stretch — rather than three queries per card. The
+     * live figure is the only field that moves without a write, and it moves because [WorkTicker]
+     * re-measures the stored start, never because anything remembered a number.
+     */
+    data class WorkBoard(
+        val closedByTask: Map<Long, Long> = emptyMap(),
+        val phaseByTask: Map<Long, TrackingPhase> = emptyMap(),
+        val openTaskId: Long? = null,
+        val openStartedAt: Long? = null,
+        val liveSeconds: Long? = null,
+        /** The profile's one timer, whichever task holds it — what the global bar shows. */
+        val active: ActiveWork? = null
+    ) {
+        fun closedSecondsOf(taskId: Long): Long = closedByTask[taskId] ?: 0L
+
+        fun phaseOf(taskId: Long): TrackingPhase = phaseByTask[taskId] ?: TrackingPhase.IDLE
+
+        /** Seconds for the card that is being measured now, null for every other card. */
+        fun liveSecondsOf(taskId: Long): Long? = if (taskId == openTaskId) liveSeconds else null
+    }
+
+    /**
+     * The task holding the profile's single timer, named by the title recorded when it started.
+     *
+     * The title comes from the stored row rather than from a lookup: a task archived or deleted while
+     * its measurement is still open has to remain readable, which is what §9 asks history for.
+     */
+    data class ActiveWork(
+        val taskId: Long,
+        val taskTitle: String,
+        val phase: TrackingPhase
+    )
+
+    fun observeWorkBoard(): Flow<WorkBoard> =
+        sessionRepository.currentUser.flatMapLatest { user ->
+            if (user == null) flowOf(WorkBoard()) else combine(
+                statisticsDao.observeTotalsByTask(user.id),
+                trackingSessionDao.observeLiveForUser(user.id),
+                workSessionDao.observeOpen(user.id)
+            ) { totals, live, open -> boardOf(totals, live, open) }
+                .flatMapLatest { board ->
+                    ticker.secondsSince(board.openStartedAt).map { board.copy(liveSeconds = it) }
+                }
+        }
+
+    private fun boardOf(
+        totals: List<TaskTotalSeconds>,
+        live: List<TrackingSession>,
+        open: WorkSession?
+    ): WorkBoard {
+        val phases = live.associate { it.taskId to TrackingPhase.PAUSED }.toMutableMap()
+        // The open stretch is the evidence, not the state column: a row with no end is being measured
+        // whatever its session claims, and the ticker is already counting it.
+        open?.taskId?.let { phases[it] = TrackingPhase.RUNNING }
+        val active = live.firstOrNull { open != null && it.taskId == open.taskId }
+            ?.let { ActiveWork(it.taskId, it.taskTitle, TrackingPhase.RUNNING) }
+            ?: live.firstOrNull()?.let { ActiveWork(it.taskId, it.taskTitle, TrackingPhase.PAUSED) }
+        return WorkBoard(
+            closedByTask = totals.associate { it.taskId to it.seconds },
+            phaseByTask = phases,
+            openTaskId = open?.taskId,
+            openStartedAt = open?.startedAt,
+            active = active
+        )
+    }
+
+    /**
+     * The task screen's whole tracking block: what the task has cost, what it has cost today, whether a
+     * stretch is being measured on it now, and the stretches themselves.
+     *
+     * The stored figures come from Room's invalidation tracker, so a screen open while work is being
+     * written sees the total move when the interval closes rather than on a timer; the live figure and
+     * the day the "today" label belongs to come from [WorkTicker]. A task with no tracking data is a
+     * zeroed view rather than a null, because the card still has to offer Start.
+     */
+    data class TaskWorkView(
+        val closedSeconds: Long = 0L,
+        val todaySeconds: Long = 0L,
+        val liveSeconds: Long? = null,
+        val openStartedAt: Long? = null,
+        val phase: TrackingPhase = TrackingPhase.IDLE,
+        val intervals: List<WorkIntervalRow> = emptyList()
+    ) {
+        /** Everything measured on the task, finished or not — the figure the ticker prints. */
+        val totalSeconds: Long get() = closedSeconds + (liveSeconds ?: 0L)
+
+        /** Estimate against measured work: the screen's remaining or overrun line. */
+        fun balanceAgainst(estimatedMinutes: Int?): WorkTimeMath.WorkBalance =
+            WorkTimeMath.balance(estimatedMinutes, totalSeconds)
+    }
+
+    fun observeTaskWork(
+        task: Task,
+        recentIntervalLimit: Int = RECENT_INTERVAL_LIMIT,
+        zone: ZoneId = CalendarMath.systemZone()
+    ): Flow<TaskWorkView> = sessionRepository.currentUser.flatMapLatest { user ->
+        if (user == null) flowOf(TaskWorkView()) else {
+            val stored = combine(
+                statisticsDao.observeSecondsForTask(user.id, task.id),
+                // Re-anchored on every day change, so a screen held open across midnight moves its
+                // "today" instead of holding yesterday's total under today's label.
+                ticker.localDays(zone).flatMapLatest { day ->
+                    statisticsDao.observeDailySeriesForTask(
+                        user.id,
+                        task.id,
+                        day.minusDays(TREND_BACKFILL_DAYS).toEpochDay(),
+                        day.plusDays(1).toEpochDay()
+                    ).map { day to it }
+                },
+                workSessionDao.observeRecentIntervals(user.id, task.id, recentIntervalLimit)
+            ) { total, series, intervals -> Triple(total, series, intervals) }
+
+            val live = combine(
+                trackingSessionDao.observeLiveForUser(user.id),
+                workSessionDao.observeOpen(user.id)
+            ) { sessions, open -> sessions to open }
+
+            combine(stored, live) { (total, dayAndSeries, intervals), (sessions, open) ->
+                val (day, series) = dayAndSeries
+                TaskWorkView(
+                    closedSeconds = total,
+                    todaySeconds = series.firstOrNull { it.localDay == day.toEpochDay() }?.seconds ?: 0L,
+                    openStartedAt = open?.startedAt?.takeIf { open.taskId == task.id },
+                    phase = when {
+                        open != null && open.taskId == task.id -> TrackingPhase.RUNNING
+                        sessions.any { it.taskId == task.id } -> TrackingPhase.PAUSED
+                        else -> TrackingPhase.IDLE
+                    },
+                    intervals = intervals
+                )
+            }.flatMapLatest { view ->
+                ticker.secondsSince(view.openStartedAt).map { view.copy(liveSeconds = it) }
+            }
+        }
+    }
 
     private suspend fun userIdOrNull(): Long? = sessionRepository.currentUserId()
+
+    companion object {
+        /** Stretches the task screen lists before sending the user to the history. */
+        const val RECENT_INTERVAL_LIMIT = 12
+
+        /** Days of per-task trend the task screen keeps in view, enough to cover a weekend's work. */
+        private const val TREND_BACKFILL_DAYS = 30L
+    }
 }

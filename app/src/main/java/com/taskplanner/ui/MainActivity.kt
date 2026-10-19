@@ -1,8 +1,17 @@
 package com.taskplanner.ui
 
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -10,9 +19,13 @@ import com.taskplanner.R
 import com.taskplanner.data.recurrence.RecurrenceScheduler
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
+import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.databinding.ActivityMainBinding
+import com.taskplanner.ui.util.WorkTimeFormat
+import com.taskplanner.ui.work.ActiveWorkBarViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
@@ -21,10 +34,19 @@ class MainActivity : AppCompatActivity() {
     /** Only here to publish the reminder channel, which the shade needs before the first notification. */
     @Inject lateinit var reminderNotifier: ReminderNotifier
 
+    /** The measurement in progress, wherever the user is. */
+    private lateinit var workBar: ActiveWorkBarViewModel
+
+    /** The last bar rendered, kept only so the row can say which task a tap should open. */
+    private var activeBar: ActiveWorkBarViewModel.Bar? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // Hilt's activity factory is what builds a @HiltViewModel, and it is only in place after
+        // super.onCreate has run.
+        workBar = ViewModelProvider(this)[ActiveWorkBarViewModel::class.java]
 
         // Repeating series keep producing their next task while the app is closed. WorkManager
         // stores the schedule on disk, so this runs once per install and survives a reboot; the
@@ -41,6 +63,46 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<BottomNavigationView>(R.id.bottom_navigation)
             .setupWithNavController(navController)
+
+        setupWorkBar(navController)
+    }
+
+    /**
+     * The bar over every screen, fed by the same board the task list reads.
+     *
+     * It is a way to the task, not a second set of controls: Start, Pause and Stop belong to the task
+     * they measure, where the figures explaining them are. The tapped navigation goes through the
+     * deep link the reminders already use, so the destination is reached the same way from both.
+     */
+    private fun setupWorkBar(navController: NavController) {
+        binding.workStatusBar.setOnClickListener {
+            val taskId = activeBar?.taskId ?: return@setOnClickListener
+            navController.navigate(Uri.parse(ReminderNotifier.taskDeepLink(taskId)))
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                workBar.bar.collect { state ->
+                    activeBar = state
+                    binding.workStatusBar.isVisible = state != null
+                    if (state == null) return@collect
+                    binding.workStatusBarLabel.text = getString(
+                        if (state.isRunning) R.string.work_bar_measuring else R.string.work_bar_paused,
+                        state.taskTitle
+                    )
+                    binding.workStatusBarTicker.isVisible = state.isRunning
+                    binding.workStatusBarTicker.text = WorkTimeFormat.ticker(state.liveSeconds ?: 0L)
+                    binding.workStatusBarDot.backgroundTintList = ColorStateList.valueOf(
+                        ContextCompat.getColor(
+                            this@MainActivity,
+                            if (state.phase == TrackingPhase.RUNNING) R.color.priority_high
+                            else R.color.status_paused
+                        )
+                    )
+                    binding.workStatusBar.contentDescription =
+                        getString(R.string.work_bar_open)
+                }
+            }
+        }
     }
 
     /**

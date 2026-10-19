@@ -157,6 +157,60 @@
                 app:layout_constraintTop_toTopOf="@id/taskDueDate"
                 app:tint="?attr/colorPrimary" />
 
+            <!-- Measured time: the total the task has cost, the live figure while a stretch runs, and
+                 the one control that starts, pauses or resumes it. Its own row so the status buttons and
+                 the swipe panel keep the places they had. -->
+            <LinearLayout
+                android:id="@+id/workRow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="@id/taskTitle"
+                app:layout_constraintTop_toBottomOf="@id/taskDueDate">
+
+                <View
+                    android:id="@+id/workDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/bg_work_dot"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/workTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:textAppearance="?attr/textAppearanceCaption"
+                    tools:text="1 h 45 min" />
+
+                <TextView
+                    android:id="@+id/workTicker"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textAppearance="?attr/textAppearanceCaption"
+                    android:visibility="gone"
+                    tools:text="01:24:35" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <ImageButton
+                    android:id="@+id/workControlButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/work_start"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_play"
+                    app:tint="?attr/colorPrimary" />
+            </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/buttonGroup"
                 android:layout_width="wrap_content"

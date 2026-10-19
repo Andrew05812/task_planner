@@ -319,6 +319,45 @@
     <string name="error_plan_conflict">The plan ends before it starts.</string>
     <string name="error_plan_estimate_not_number">Enter the estimate in whole minutes.</string>
 
+    <!-- Work tracking: the time a task actually took, measured rather than planned -->
+    <string name="work_section_title">Time worked</string>
+    <string name="work_time_hours">%1$d h</string>
+    <string name="work_time_hours_minutes">%1$d h %2$d min</string>
+    <string name="work_time_minutes">%1$d min</string>
+    <string name="work_time_seconds">%1$d s</string>
+    <string name="work_start">Start measuring</string>
+    <string name="work_pause">Pause measuring</string>
+    <string name="work_resume">Resume measuring</string>
+    <string name="work_stop">Stop and save</string>
+    <string name="work_card_description">%1$s measured on this task</string>
+    <string name="work_measuring_since">Measuring since %1$s</string>
+    <string name="work_paused_at">Paused at %1$s</string>
+    <string name="work_paused_unknown">Measuring is paused on this task</string>
+    <string name="work_not_measured">Nothing is being measured on this task</string>
+    <string name="work_actual_format">Actual %1$s</string>
+    <string name="work_today_format">Today %1$s</string>
+    <string name="work_estimate_format">Estimate %1$s</string>
+    <string name="work_no_estimate">No estimate was set</string>
+    <string name="work_on_estimate">Used exactly as estimated</string>
+    <string name="work_remaining_format">%1$s left inside the estimate</string>
+    <string name="work_overrun_format">Overrun by %1$s</string>
+    <string name="work_intervals_title">Measured stretches</string>
+    <string name="work_no_intervals">No measured time on this task yet</string>
+    <string name="work_interval_row_format">%1$s – %2$s, %3$s</string>
+    <string name="work_interval_manual">entered by hand</string>
+    <string name="work_interval_open">still running</string>
+    <string name="work_interval_anomaly">the clock was adjusted during this stretch</string>
+    <string name="work_bar_format">%1$s · %2$s</string>
+    <string name="work_bar_measuring">Measuring \"%1$s\"</string>
+    <string name="work_bar_paused">Paused on \"%1$s\"</string>
+    <string name="work_bar_open">Open the task being measured</string>
+    <string name="work_conflict_title">Another task is being measured</string>
+    <string name="work_conflict_message">\"%1$s\" has measurement in progress. Say what happens to it before \"%2$s\" starts; nothing is changed until you choose.</string>
+    <string name="work_conflict_pause">Pause it, then start this one</string>
+    <string name="work_conflict_stop">Stop it, then start this one</string>
+    <string name="work_conflict_cancel">Keep measuring the other task</string>
+    <string name="work_closed_on_complete">Task finished. The stretch being measured was closed and its time saved; time spent paused was not counted.</string>
+
     <plurals name="reminder_count">
         <item quantity="one">%1$d reminder set</item>
         <item quantity="other">%1$d reminders set</item>

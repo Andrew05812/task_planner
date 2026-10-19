@@ -73,3 +73,9 @@ data class WorkIntervalRow(
     val localDay: Long,
     val utcOffsetMinutes: Int
 )
+
+/** Measured time on one task across the whole account — the figure a task card prints. */
+data class TaskTotalSeconds(
+    val taskId: Long,
+    val seconds: Long
+)

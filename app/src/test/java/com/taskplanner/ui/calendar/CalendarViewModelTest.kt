@@ -103,6 +103,9 @@ class CalendarViewModelTest {
 
     /** Room notifies flow collectors from an executor, so a test waits for the emission it asked for. */
     private fun awaitUntil(what: String, condition: () -> Boolean) {
+        // Room answers on its own threads, so the wait starts by letting them settle: without that the
+        // first check can be satisfied by the state a previous command published.
+        fixture.awaitIdle()
         val deadline = System.currentTimeMillis() + 5_000
         while (!condition()) {
             if (System.currentTimeMillis() > deadline) {
@@ -353,7 +356,7 @@ class CalendarViewModelTest {
         val id = insert("Shift", start = today to "20:00", end = today to "21:00")
 
         awaitUntil("the column to show the block") {
-            state.selected == today && state.dayPlan?.blocks?.single()?.task?.title == "Shift"
+            state.selected == today && state.dayPlan?.blocks?.singleOrNull()?.task?.title == "Shift"
         }
 
         viewModel.select(to)
@@ -365,7 +368,7 @@ class CalendarViewModelTest {
 
         viewModel.moveTask(id, to)
         awaitUntil("the block to land in the column") {
-            state.dayPlan?.blocks?.single()?.task?.title == "Shift"
+            state.dayPlan?.blocks?.singleOrNull()?.task?.title == "Shift"
         }
         assertEquals(
             "at the clock time it left with, not the minute a day of milliseconds would have put it",
@@ -421,7 +424,7 @@ class CalendarViewModelTest {
             val moved = stored("Renew passport")
             moved.dueDate == instant(days.last(), "10:00") &&
                 runBlocking { fixture.reminderDao.getLiveForTask(moved.uuid) }
-                    .single().triggerAt == moved.dueDate!! - MINUTE * 60
+                    .singleOrNull()?.triggerAt == moved.dueDate!! - MINUTE * 60
         }
         assertEquals(
             "one reminder row, re-pointed rather than duplicated",

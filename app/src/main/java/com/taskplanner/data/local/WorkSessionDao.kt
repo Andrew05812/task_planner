@@ -99,6 +99,22 @@ interface WorkSessionDao {
     )
     suspend fun getIntervalRowsOf(sessionUuid: String): List<WorkIntervalRow>
 
+    /**
+     * The stretches last measured on one task, newest first, for the task screen's history.
+     *
+     * The projection rather than the entity, and a limit rather than the account: the block shows the
+     * most recent few, and the rows behind them belong to the history screen.
+     */
+    @Query(
+        "SELECT uuid AS uuid, started_at AS startedAt, ended_at AS endedAt, " +
+            "duration_seconds AS durationSeconds, source AS source, " +
+            "clock_anomaly AS clockAnomaly, local_day AS localDay, " +
+            "utc_offset_minutes AS utcOffsetMinutes " +
+            "FROM work_sessions WHERE user_id = :userId AND task_id = :taskId AND is_deleted = 0 " +
+            "ORDER BY started_at DESC, id DESC LIMIT :limit"
+    )
+    fun observeRecentIntervals(userId: Long, taskId: Long, limit: Int): Flow<List<WorkIntervalRow>>
+
     @Query("SELECT * FROM work_sessions WHERE uuid = :uuid LIMIT 1")
     suspend fun getByUuid(uuid: String): WorkSession?
 

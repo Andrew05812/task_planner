@@ -65,7 +65,9 @@ class TasksRecurrenceTest {
             fixture.groupRepository,
             fixture.recurrenceRepository,
             fixture.reminderRepository,
-            fixture.sessionRepository
+            fixture.sessionRepository,
+            fixture.workTrackingRepository,
+            fixture.workStatisticsRepository
         )
     }
 
@@ -106,7 +108,13 @@ class TasksRecurrenceTest {
 
     private fun openTasks() = runBlocking { fixture.taskDao.getActiveTasksOnce(userId) }
 
+    /**
+     * Room answers on its own threads, so a command is not finished when its call returns: the wait
+     * starts by letting those threads settle. Without that the condition below can be satisfied by the
+     * state a *previous* command published, and the test then reads a row that was never written yet.
+     */
     private fun awaitUntil(what: String, condition: () -> Boolean) {
+        fixture.awaitIdle()
         val deadline = System.currentTimeMillis() + 5_000
         while (!condition()) {
             if (System.currentTimeMillis() > deadline) throw AssertionError("timed out waiting for $what")
