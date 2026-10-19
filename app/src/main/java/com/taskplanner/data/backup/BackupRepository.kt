@@ -8,11 +8,17 @@ import com.taskplanner.BuildConfig
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.RecurrenceDao
+import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.model.Category
+import com.taskplanner.data.model.RecurrenceRule
+import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
+import com.taskplanner.data.repository.RecurrenceRepository
+import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -28,17 +34,26 @@ class BackupRepository @Inject constructor(
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
     private val groupDao: GroupDao,
-    private val sessionRepository: SessionRepository
+    private val recurrenceDao: RecurrenceDao,
+    private val reminderDao: ReminderDao,
+    private val sessionRepository: SessionRepository,
+    private val recurrenceRepository: RecurrenceRepository,
+    private val reminderRepository: ReminderRepository
 ) {
     private val gson = Gson()
 
     suspend fun buildBackupJson(): String {
         val userId = sessionRepository.currentUserId()
             ?: throw BackupValidationException("No active profile")
+        val tasks = tasksWithIdentity(taskDao.getAllTasksOnce(userId))
         val data = BackupData(
-            tasks = tasksWithIdentity(taskDao.getAllTasksOnce(userId)),
+            tasks = tasks,
             categories = categoriesWithIdentity(categoryDao.getAllCategoriesOnce(userId)),
-            groups = groupsWithIdentity(groupDao.getAllGroupsOnce(userId))
+            groups = groupsWithIdentity(groupDao.getAllGroupsOnce(userId)),
+            recurrenceRules = recurrenceDao.getAllRulesOnce(userId),
+            // Only reminders whose task is in the file: see validateRelations for why a reminder
+            // without its task is refused rather than imported loose.
+            reminders = remindersWithIdentity(reminderDao.getLiveForUser(userId), tasks)
         )
         val file = BackupFile(
             formatVersion = FORMAT_VERSION.toString(),
@@ -84,11 +99,13 @@ class BackupRepository @Inject constructor(
         // Blank uuids are allowed: they belong to rows written before stable identities existed.
         // What must never repeat is an identity, because the import matches rows by uuid.
         val uuids = (file.data.tasks.map { it.uuid } + file.data.categories.map { it.uuid } +
-            file.data.groups.map { it.uuid }).filter { it.isNotBlank() }
+            file.data.groups.map { it.uuid } + file.data.recurrenceRules.map { it.uuid } +
+            file.data.reminders.map { it.uuid }).filter { it.isNotBlank() }
         if (uuids.size != uuids.distinct().size) {
             throw BackupValidationException("Backup contains duplicated entity identifiers")
         }
         val groupUuids = file.data.groups.map { it.uuid }.toSet()
+        val taskUuids = file.data.tasks.map { it.uuid }.filter { it.isNotBlank() }.toSet()
         file.data.categories.forEach { category ->
             category.parentCategoryId?.let {
                 if (it != 0L && it !in categoryIds) {
@@ -113,6 +130,26 @@ class BackupRepository @Inject constructor(
                     )
                 }
             }
+            // A series link is deliberately *not* checked here. A deleted series keeps the instance
+            // the user already worked on, so a correct backup really can contain a task whose rule
+            // is not in it; refusing that would reject files describing the user's own data. Queries
+            // treat an unknown series as "no rule", so the task stays a plain task.
+        }
+        file.data.reminders.forEach { reminder ->
+            // Unlike a series link this one cannot be left dangling: a reminder fires by joining its
+            // task, so a file that carries one with no task of its own would restore a row that can
+            // never notify and that the editor cannot show or untick either.
+            if (reminder.taskUuid.isBlank() || reminder.taskUuid !in taskUuids) {
+                throw BackupValidationException(
+                    "Reminder references a task missing from the backup"
+                )
+            }
+        }
+        val identities = file.data.reminders.map { it.taskUuid to it.offsetMinutes }
+        if (identities.size != identities.distinct().size) {
+            throw BackupValidationException(
+                "Backup contains several reminders for the same lead time on one task"
+            )
         }
     }
 
@@ -122,7 +159,9 @@ class BackupRepository @Inject constructor(
         taskCount = file.data.tasks.count { !it.archived },
         categoryCount = file.data.categories.size,
         groupCount = file.data.groups.size,
-        archivedCount = file.data.tasks.count { it.archived }
+        archivedCount = file.data.tasks.count { it.archived },
+        seriesCount = file.data.recurrenceRules.size,
+        reminderCount = file.data.reminders.size
     )
 
     /** Safety copy kept in app-private storage before any destructive replace. */
@@ -152,14 +191,27 @@ class BackupRepository @Inject constructor(
                 taskDao.deleteAllTasks(userId)
                 categoryDao.deleteAllCategories(userId)
                 groupDao.deleteAllGroups(userId)
+                // The series and their lead times belong to the data being replaced: a rule left
+                // behind would generate an instance the restored backup knows nothing about, and a
+                // reminder left behind would still arm an alarm for it.
+                recurrenceDao.deleteAllRules(userId)
+                reminderDao.deleteAllReminders(userId)
             }
             // A backup is written by one device, so its numeric row ids mean nothing on another:
             // rows are matched by uuid and every new row gets a fresh local id. Inserting the file
             // ids directly would REPLACE whatever unrelated local row happens to own that id.
             val categoryIds = importCategories(file.data.categories, userId)
             val ownedGroups = importGroups(file.data.groups, userId)
-            importTasks(file.data.tasks, userId, categoryIds, ownedGroups)
+            val ownedRules = importRules(file.data.recurrenceRules, userId)
+            importTasks(file.data.tasks, userId, categoryIds, ownedGroups, ownedRules)
+            importReminders(file.data.reminders, userId)
         }
+        // Outside the transaction, and after the rows are committed: both of these arm alarms and
+        // post notifications, which a rollback would be unable to take back. The same pair the sync
+        // pull runs, for the same reason — an imported series has to expose its next instance right
+        // away, and an imported lead time has to be on the clock without waiting for a restart.
+        recurrenceRepository.ensureOpenInstances()
+        reminderRepository.rescheduleAll()
     }
 
     /** Maps the category id used inside the backup onto the local row that now holds it. */
@@ -234,17 +286,60 @@ class BackupRepository @Inject constructor(
         return owned
     }
 
+    /**
+     * Series are matched by uuid, the primary key, so a re-import updates the rule in place instead of
+     * adding a second copy of the pattern. Returns the series this profile owns afterwards, which is
+     * what decides whether a task may keep its `series_uuid`.
+     */
+    private suspend fun importRules(rules: List<RecurrenceRule>, userId: Long): Set<String> {
+        val owned = mutableSetOf<String>()
+        rules.forEach { incoming ->
+            val existing = incoming.uuid.ifBlank { null }?.let { recurrenceDao.findByUuid(it) }
+            when {
+                // Ours already: refresh it only when the file is newer, so a restore cannot rewind a
+                // series the user has since paused or advanced on this device.
+                existing?.userId == userId -> {
+                    if (incoming.updatedAt > existing.updatedAt) {
+                        recurrenceDao.upsertRule(
+                            incoming.forUser(userId).copy(uuid = existing.uuid)
+                        )
+                    }
+                    owned += existing.uuid
+                }
+
+                // Another profile owns this series: neither steal it nor claim it.
+                existing != null -> Unit
+
+                else -> {
+                    val withIdentity = incoming.copy(
+                        uuid = incoming.uuid.ifBlank { UUID.randomUUID().toString() }
+                    )
+                    recurrenceDao.upsertRule(withIdentity.forUser(userId))
+                    owned += withIdentity.uuid
+                }
+            }
+        }
+        return owned
+    }
+
     private suspend fun importTasks(
         tasks: List<Task>,
         userId: Long,
         categoryIds: Map<Long, Long>,
-        ownedGroups: Set<String>
+        ownedGroups: Set<String>,
+        ownedRules: Set<String>
     ) {
         tasks.forEach { incoming ->
+            val seriesKept = incoming.seriesUuid?.let { it in ownedRules } == true
             val linked = incoming.forUser(userId).copy(
                 categoryId = incoming.categoryId?.let { categoryIds[it] },
                 // a topic that belongs to another profile must not leak into this one
-                groupId = incoming.groupId?.takeIf { it in ownedGroups }
+                groupId = incoming.groupId?.takeIf { it in ownedGroups },
+                // Same for a series: an instance of a foreign rule would be drawn as this profile's
+                // repeating task, and the (series, occurrence) index could then overwrite that
+                // profile's row. Detached, the task is an ordinary one with the same date.
+                seriesUuid = incoming.seriesUuid.takeIf { seriesKept },
+                occurrenceAt = incoming.occurrenceAt.takeIf { seriesKept }
             )
             // findTaskByUuid also sees tombstones, so re-importing revives a row instead of
             // creating a second row with the same uuid; only this profile's rows are matched.
@@ -255,6 +350,38 @@ class BackupRepository @Inject constructor(
                 existing == null -> taskDao.insertTask(linked.copy(id = 0))
                 incoming.updatedAt >= existing.updatedAt ->
                     taskDao.insertTask(linked.copy(id = existing.id, uuid = existing.uuid))
+            }
+        }
+    }
+
+    /**
+     * Lead times are matched by (task, offset), which is what the unique index and
+     * [Reminder.identity] both say makes a reminder the same reminder. Matching by uuid alone would
+     * let a file that renumbered its rows put a second alarm on the same minute.
+     */
+    private suspend fun importReminders(reminders: List<Reminder>, userId: Long) {
+        reminders.forEach { incoming ->
+            val local = reminderDao.findByTaskAndOffset(incoming.taskUuid, incoming.offsetMinutes)
+            when {
+                // The same lead time on the same task is already here: keep its uuid so its
+                // notification and alarm slots stay the ones the system already knows.
+                local?.userId == userId -> {
+                    if (incoming.updatedAt > local.updatedAt) {
+                        reminderDao.update(incoming.forUser(userId).copy(uuid = local.uuid))
+                    }
+                }
+
+                // Another profile holds this (task, lead time): the unique index is theirs, and a
+                // second row for the same minute is exactly what that index exists to prevent.
+                local != null -> Unit
+
+                else -> reminderDao.insertOrIgnore(
+                    incoming.forUser(userId).copy(
+                        uuid = incoming.uuid.ifBlank {
+                            Reminder.identity(incoming.taskUuid, incoming.offsetMinutes)
+                        }
+                    )
+                )
             }
         }
     }
@@ -284,6 +411,25 @@ class BackupRepository @Inject constructor(
                 .also { groupDao.upsertGroup(it) }
         }
 
+    /**
+     * Reminders exported for a task the backup does not carry are left out: a file holding one would
+     * be refused by [validateRelations], and such a row can never fire anyway — the query that
+     * notifies joins its task.
+     *
+     * A reminder written before uuids were filled in is given the identity its (task, lead time)
+     * implies, which is the same value the editor generates. Nothing needs storing: re-importing the
+     * file recomputes that identity and lands on the same row.
+     */
+    private fun remindersWithIdentity(reminders: List<Reminder>, tasks: List<Task>): List<Reminder> {
+        val taskUuids = tasks.map { it.uuid }.filter { it.isNotBlank() }.toSet()
+        return reminders.filter { it.taskUuid in taskUuids }.map { reminder ->
+            if (reminder.uuid.isNotBlank()) reminder
+            else reminder.copy(
+                uuid = Reminder.identity(reminder.taskUuid, reminder.offsetMinutes)
+            )
+        }
+    }
+
     private fun Task.forUser(userId: Long) = copy(
         userId = userId,
         uuid = uuid.ifBlank { UUID.randomUUID().toString() },
@@ -301,9 +447,24 @@ class BackupRepository @Inject constructor(
         syncState = SyncState.PENDING
     )
 
+    /** A restored series has to be pushed again: the device it lands on has never seen it. */
+    private fun RecurrenceRule.forUser(userId: Long) = copy(
+        userId = userId,
+        syncState = SyncState.PENDING
+    )
+
+    private fun Reminder.forUser(userId: Long) = copy(
+        userId = userId,
+        syncState = SyncState.PENDING
+    )
+
     companion object {
-        /** Compatible range: same major, minor <= supported. */
-        val FORMAT_VERSION = SemanticVersion(1, 0)
+        /**
+         * Compatible range: same major, minor <= supported. 1.1 put the repeating series and the
+         * reminder lead times into the data block; a 1.0 file still reads because both of those
+         * lists default to empty, so an old backup restores the data it actually carries.
+         */
+        val FORMAT_VERSION = SemanticVersion(1, 1)
     }
 }
 

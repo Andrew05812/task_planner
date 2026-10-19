@@ -18,6 +18,13 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders WHERE user_id = :userId AND is_deleted = 0 ORDER BY trigger_at ASC")
     suspend fun getLiveForUser(userId: Long): List<Reminder>
 
+    /**
+     * Includes tombstones: the sync queue has to push a deleted reminder too, otherwise the other
+     * device keeps firing an alarm the user already cancelled.
+     */
+    @Query("SELECT * FROM reminders WHERE user_id = :userId")
+    suspend fun getAllRowsOnce(userId: Long): List<Reminder>
+
     /** What the list screen badges: armed reminders of the current profile, including shown ones. */
     @Query("SELECT * FROM reminders WHERE user_id = :userId AND is_deleted = 0")
     fun observeLiveForUser(userId: Long): Flow<List<Reminder>>
@@ -86,4 +93,15 @@ interface ReminderDao {
             "sync_state = 'PENDING' WHERE uuid = :uuid"
     )
     suspend fun snooze(uuid: String, triggerAt: Long, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE reminders SET sync_state = :state WHERE uuid = :uuid")
+    suspend fun setSyncState(uuid: String, state: String)
+
+    /**
+     * Hard delete of one profile's rows, used only by a replace-import: the file that follows has to
+     * be the whole truth, and a tombstone left behind from the discarded data would suppress a
+     * reminder the restored backup actually carries.
+     */
+    @Query("DELETE FROM reminders WHERE user_id = :userId")
+    suspend fun deleteAllReminders(userId: Long)
 }

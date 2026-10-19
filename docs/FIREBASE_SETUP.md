@@ -57,8 +57,11 @@ the app runs in local-only mode: no Firebase init, no sign-in button action, no 
 Database → Firestore → create database (production mode, no test rules).
 
 Deploy the rules that ship with this repo (`firebase/firestore.rules`). They grant access only
-to `users/{uid}/…` where `uid == request.auth.uid`, and require the document id to equal the
-entity `uuid`, so a replayed write cannot overwrite someone else's data:
+to `users/{uid}/…` where `uid == request.auth.uid`, require the document id to equal the entity
+`uuid`, and require the fields that make each row meaningful (a task's `title` and `updated_at`, a
+pattern's `anchor_at` and `cursor_at`, a reminder's `task_uuid` and `offset_minutes`), so a replayed
+write cannot overwrite someone else's data and a partial write cannot leave a document that points at
+nothing:
 
 ```
 firebase deploy --only firestore:rules
@@ -78,22 +81,29 @@ Optional, for CI/Emulator Suite, `firebase.json`:
 users/{firebaseUid}/tasks/{uuid}
 users/{firebaseUid}/categories/{uuid}
 users/{firebaseUid}/groups/{uuid}
+users/{firebaseUid}/recurrence_rules/{uuid}
+users/{firebaseUid}/reminders/{uuid}
 ```
 
-* **Stable identity.** Every task/category/group carries a `uuid` generated locally. It is the
-  document id, so pushes are idempotent and a retry after a dropped network cannot duplicate a
-  record. Rows that predate the uuid column get one on their first push, and it is persisted
-  before the write, so the retry reuses the same id.
-* **Cross-device references.** Tasks reference categories by `uuid` in the cloud (local numeric
-  row ids never leave the device) and are re-resolved to the local id on pull.
+* **Stable identity.** Every task, category, group, repeat pattern and reminder carries a `uuid`
+  generated locally. It is the document id, so pushes are idempotent and a retry after a dropped
+  network cannot duplicate a record. Rows that predate the uuid column get one on their first push,
+  and it is persisted before the write, so the retry reuses the same id. A reminder's uuid is derived
+  from its task and its lead time, so two devices that both offered the same warning write the same
+  document.
+* **Cross-device references.** Tasks reference categories, topics and their series by `uuid` in the
+  cloud (local numeric row ids never leave the device) and are re-resolved to the local id on pull. A
+  pull applies categories, then topics, then patterns, then tasks, then reminders, so a row always
+  finds what it points at.
 * **Offline queue.** `sync_state` is `PENDING`, `SYNCED` or `DELETING`. Local writes never wait
   for the network. WorkManager (`data/sync/SyncScheduler.kt`) runs a periodic pass and an
   immediate pass, both with a `CONNECTED` constraint, so work enqueued offline is picked up when
-  connectivity returns rather than being dropped.
+  connectivity returns rather than being dropped. Deleted patterns and cancelled lead times are
+  queued too, otherwise the other device keeps firing an alarm the user already removed.
 * **Tombstones.** Deletes set `is_deleted`/`deleted_at` and are pushed as tombstones. A remote
   tombstone deletes the local row; a remote update of a locally deleted row is ignored, so a
   delete never resurrects data.
-* **Conflict rule** (documented in `SyncRepository.applyRemoteTask`, same for all entities):
+* **Conflict rule** (documented once in `SyncAppliers`, the same for all five entity types):
   1. a local row with unsent changes (`sync_state != SYNCED`) wins — an offline edit is never
      silently dropped in favour of a cloud snapshot;
   2. otherwise the newer `updated_at` wins;
@@ -101,13 +111,17 @@ users/{firebaseUid}/groups/{uuid}
   A blind last-write-wins merge is deliberately not used, because it would erase offline edits.
 * **Incremental pull.** A per-uid watermark (`updated_at` of the last applied document) is kept
   in `SharedPreferences`; the first pass pulls everything, later passes pull only newer docs.
+* **What the cloud never sees.** A document holds the entity's own fields: never its local row id,
+  never the numeric `user_id`, never `sync_state`. Those three describe one device's storage, and
+  putting them on the wire would let a client claim identities or queue positions it does not have.
 
 ## 6. Moving existing local data into a Google account
 
 Migration is **explicit and user-visible**, never automatic. After signing in, Settings →
 Account offers "Move local data into this account". It runs in a single Room transaction:
-tasks, categories and topics of the selected local profile are re-tagged with the account's user
-id, verified, and only then removed from the source profile. Cancelling leaves the local profile
-exactly as it was.
+tasks, categories, topics, repeat patterns and lead times of the selected local profile are
+re-tagged with the account's user id, verified, and only then removed from the source profile.
+Cancelling leaves the local profile exactly as it was.
 
-Signing out clears the session only. No stored task, category or topic is deleted by signing out.
+Signing out clears the session only. No stored task, category, topic, pattern or reminder is deleted
+by signing out.

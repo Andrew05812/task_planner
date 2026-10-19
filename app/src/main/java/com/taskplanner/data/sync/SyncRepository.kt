@@ -5,11 +5,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.taskplanner.data.auth.CloudConfig
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.RecurrenceDao
+import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
-import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.SyncState
-import com.taskplanner.data.model.Task
-import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
@@ -43,7 +42,7 @@ sealed class SyncStatus {
  * uuid, a sync_state and a tombstone, so:
  *  - a push is idempotent (document id = uuid) and safe to retry after any failure;
  *  - a delete propagates instead of resurrecting;
- *  - conflicts follow the single documented rule in [applyRemoteTask], not blind last-write-wins.
+ *  - conflicts follow the single documented rule in [SyncAppliers], not blind last-write-wins.
  */
 @Singleton
 class SyncRepository @Inject constructor(
@@ -52,6 +51,9 @@ class SyncRepository @Inject constructor(
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
     private val groupDao: GroupDao,
+    private val recurrenceDao: RecurrenceDao,
+    private val reminderDao: ReminderDao,
+    private val appliers: SyncAppliers,
     private val recurrenceRepository: RecurrenceRepository,
     private val reminderRepository: ReminderRepository,
     private val prefs: SharedPreferences
@@ -134,6 +136,25 @@ class SyncRepository @Inject constructor(
                 )
                 pushed++
             }
+
+        // A series and its lead times are part of what the user set up, so they are queued like any
+        // other row: a repeating pattern that never reaches the cloud would start a second,
+        // independent one on the next device.
+        recurrenceDao.getAllRowsOnce(userId)
+            .filter { it.syncState != SyncState.SYNCED }
+            .forEach { rule ->
+                recurrenceDao.setSyncState(rule.uuid, SyncState.SYNCED.name)
+                store.pushRule(rule)
+                pushed++
+            }
+
+        reminderDao.getAllRowsOnce(userId)
+            .filter { it.syncState != SyncState.SYNCED }
+            .forEach { reminder ->
+                reminderDao.setSyncState(reminder.uuid, SyncState.SYNCED.name)
+                store.pushReminder(reminder)
+                pushed++
+            }
         return pushed
     }
 
@@ -155,160 +176,30 @@ class SyncRepository @Inject constructor(
 
         store.pullCategoriesSince(since).forEach { remote ->
             maxSeen = maxOf(maxSeen, remote.updatedAt)
-            if (applyRemoteCategory(userId, remote)) applied++
+            if (appliers.applyRemoteCategory(userId, remote)) applied++
         }
         store.pullGroupsSince(since).forEach { remote ->
             maxSeen = maxOf(maxSeen, remote.updatedAt)
-            if (applyRemoteGroup(userId, remote)) applied++
+            if (appliers.applyRemoteGroup(userId, remote)) applied++
+        }
+        // Before the tasks: an instance of a series has to find its rule on disk to be drawn as a
+        // repeating task rather than as an ordinary one.
+        store.pullRulesSince(since).forEach { remote ->
+            maxSeen = maxOf(maxSeen, remote.updatedAt)
+            if (appliers.applyRemoteRule(userId, remote)) applied++
         }
         val categoryUuidById = categoryDao.getAllRowsOnce(userId).associate { it.uuid to it.id }
         store.pullTasksSince(since).forEach { remote ->
             maxSeen = maxOf(maxSeen, remote.updatedAt)
-            if (applyRemoteTask(userId, remote, categoryUuidById)) applied++
+            if (appliers.applyRemoteTask(userId, remote, categoryUuidById)) applied++
+        }
+        store.pullRemindersSince(since).forEach { remote ->
+            maxSeen = maxOf(maxSeen, remote.updatedAt)
+            if (appliers.applyRemoteReminder(userId, remote)) applied++
         }
 
         if (maxSeen > since) prefs.edit().putLong(KEY_WATERMARK + uid, maxSeen).apply()
         return applied
-    }
-
-    /**
-     * Conflict rule, identical for all three entity types:
-     *  1. a local row with unsent changes (sync_state != SYNCED) always wins — an offline edit
-     *     must never be silently dropped in favour of a cloud snapshot;
-     *  2. otherwise the newer updated_at wins, deletions included (the tombstone carries it);
-     *  3. a remote update of a locally deleted row is ignored, so a delete never resurrects.
-     */
-    private suspend fun applyRemoteTask(
-        userId: Long,
-        remote: SyncedTask,
-        categoryUuidById: Map<String, Long>
-    ): Boolean {
-        val local = taskDao.findTaskByUuid(remote.uuid)
-        if (local == null) {
-            taskDao.insertTask(
-                Task(
-                    uuid = remote.uuid,
-                    title = remote.title,
-                    description = remote.description,
-                    dueDate = remote.dueDate,
-                    priority = remote.priority,
-                    status = remote.status,
-                    categoryId = remote.categoryUuid?.let { categoryUuidById[it] },
-                    groupId = remote.groupUuid,
-                    archived = remote.archived,
-                    archivedAt = remote.archivedAt,
-                    startedAt = remote.startedAt,
-                    userId = userId,
-                    order = remote.order,
-                    isDeleted = remote.isDeleted,
-                    deletedAt = remote.deletedAt,
-                    syncState = SyncState.SYNCED,
-                    createdAt = remote.createdAt,
-                    updatedAt = remote.updatedAt
-                )
-            )
-            return true
-        }
-        if (local.syncState != SyncState.SYNCED) return false
-        if (remote.updatedAt <= local.updatedAt) return false
-        if (remote.isDeleted && !local.isDeleted) {
-            taskDao.softDeleteTasks(listOf(local.id))
-            taskDao.setSyncState(local.uuid, SyncState.SYNCED.name)
-            return true
-        }
-        if (!remote.isDeleted && local.isDeleted) return false
-        taskDao.insertTask(
-            local.copy(
-                title = remote.title,
-                description = remote.description,
-                dueDate = remote.dueDate,
-                priority = remote.priority,
-                status = remote.status,
-                categoryId = remote.categoryUuid?.let { categoryUuidById[it] } ?: local.categoryId,
-                groupId = remote.groupUuid,
-                archived = remote.archived,
-                archivedAt = remote.archivedAt,
-                startedAt = remote.startedAt,
-                order = remote.order,
-                syncState = SyncState.SYNCED,
-                updatedAt = remote.updatedAt
-            )
-        )
-        return true
-    }
-
-    private suspend fun applyRemoteCategory(userId: Long, remote: SyncedCategory): Boolean {
-        val local = categoryDao.getCategoryByUuid(remote.uuid)
-        if (local == null) {
-            categoryDao.insertCategory(
-                Category(
-                    uuid = remote.uuid,
-                    name = remote.name,
-                    color = remote.color,
-                    icon = remote.icon,
-                    userId = userId,
-                    isDeleted = remote.isDeleted,
-                    deletedAt = remote.deletedAt,
-                    syncState = SyncState.SYNCED,
-                    createdAt = remote.createdAt,
-                    updatedAt = remote.updatedAt
-                )
-            )
-            return true
-        }
-        if (local.syncState != SyncState.SYNCED) return false
-        if (remote.updatedAt <= local.updatedAt) return false
-        if (remote.isDeleted) {
-            categoryDao.softDelete(local.id)
-            categoryDao.setSyncState(local.uuid, SyncState.SYNCED.name)
-            return true
-        }
-        if (local.isDeleted) return false
-        categoryDao.insertCategory(
-            local.copy(
-                name = remote.name,
-                color = remote.color,
-                icon = remote.icon,
-                syncState = SyncState.SYNCED,
-                updatedAt = remote.updatedAt
-            )
-        )
-        return true
-    }
-
-    private suspend fun applyRemoteGroup(userId: Long, remote: SyncedGroup): Boolean {
-        val local = groupDao.getGroupByUuid(remote.uuid)
-        if (local == null) {
-            groupDao.upsertGroup(
-                TaskGroup(
-                    uuid = remote.uuid,
-                    userId = userId,
-                    name = remote.name,
-                    collapsed = remote.collapsed,
-                    sortOrder = remote.sortOrder,
-                    isDeleted = remote.isDeleted,
-                    deletedAt = remote.deletedAt,
-                    syncState = SyncState.SYNCED,
-                    createdAt = remote.createdAt,
-                    updatedAt = remote.updatedAt
-                )
-            )
-            return true
-        }
-        if (local.syncState != SyncState.SYNCED) return false
-        if (remote.updatedAt <= local.updatedAt) return false
-        groupDao.upsertGroup(
-            local.copy(
-                name = remote.name,
-                collapsed = remote.collapsed,
-                sortOrder = remote.sortOrder,
-                isDeleted = remote.isDeleted,
-                deletedAt = remote.deletedAt,
-                syncState = SyncState.SYNCED,
-                updatedAt = remote.updatedAt
-            )
-        )
-        return true
     }
 
     companion object {

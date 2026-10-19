@@ -3,6 +3,7 @@ package com.taskplanner.data.sync
 import android.content.Context
 import com.google.firebase.firestore.FirebaseFirestore
 import com.taskplanner.data.auth.CloudConfig
+import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.testing.AppFixture
 import dagger.Lazy
@@ -47,6 +48,9 @@ class SyncRepositoryTest {
         fixture.taskDao,
         fixture.categoryDao,
         fixture.groupDao,
+        fixture.recurrenceDao,
+        fixture.reminderDao,
+        fixture.syncAppliers,
         fixture.recurrenceRepository,
         fixture.reminderRepository,
         fixture.prefs
@@ -62,7 +66,12 @@ class SyncRepositoryTest {
     @Test
     fun `sync reports cloud disabled and leaves the queue untouched`() = runTest {
         val user = fixture.signIn()
-        val taskId = fixture.addTask(user.id, "not uploaded yet")
+        val taskId = fixture.addTask(
+            user.id, "not uploaded yet", dueAt = System.currentTimeMillis() + 3_600_000L
+        )
+        val task = fixture.taskDao.getTaskById(taskId)!!
+        fixture.recurrenceRepository.startSeries(task, RepeatUnit.DAY)
+        fixture.reminderRepository.applyReminders(fixture.taskDao.getTaskById(taskId)!!, listOf(15))
         val categoryId = fixture.addCategory(user.id, "Work")
         val group = fixture.addGroup(user.id, "Sprint")
 
@@ -74,6 +83,14 @@ class SyncRepositoryTest {
         assertEquals(SyncState.PENDING, fixture.taskDao.getTaskById(taskId)?.syncState)
         assertEquals(SyncState.PENDING, fixture.categoryDao.getCategoryById(categoryId)?.syncState)
         assertEquals(SyncState.PENDING, fixture.groupDao.getGroupByUuid(group.uuid)?.syncState)
+        assertEquals(
+            "a series the cloud has never seen stays in the queue",
+            SyncState.PENDING, fixture.recurrenceDao.getAllRowsOnce(user.id).single().syncState
+        )
+        assertEquals(
+            "a lead time the cloud has never seen stays in the queue",
+            SyncState.PENDING, fixture.reminderDao.getAllRowsOnce(user.id).single().syncState
+        )
     }
 
     @Test
