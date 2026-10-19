@@ -13,7 +13,10 @@ import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.local.TrackingSessionDao
 import com.taskplanner.data.local.UserDao
+import com.taskplanner.data.local.WorkSessionDao
+import com.taskplanner.data.local.WorkStatisticsDao
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
@@ -30,6 +33,7 @@ import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
+import com.taskplanner.data.repository.WorkTrackingRepository
 import com.taskplanner.data.sync.SyncAppliers
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -93,8 +97,29 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val recurrenceRepository =
         RecurrenceRepository(recurrenceDao, taskDao, sessionRepository, reminderRepository)
 
-    val taskRepository =
-        TaskRepository(taskDao, sessionRepository, recurrenceRepository, reminderRepository)
+    /**
+     * The tracker's clocks under the test's control. A duration is only reproducible if the instant it
+     * was measured from is, and a clock change is one of the cases the feature has to answer for, so
+     * the fixture hands the repository a fake rather than the device clock.
+     */
+    val timeBase = FakeTimeBase(wall = System.currentTimeMillis(), monotonic = 0L)
+
+    val trackingSessionDao: TrackingSessionDao = database.trackingSessionDao()
+    val workSessionDao: WorkSessionDao = database.workSessionDao()
+    val workStatisticsDao: WorkStatisticsDao = database.workStatisticsDao()
+
+    val workTrackingRepository = WorkTrackingRepository(
+        database, trackingSessionDao, workSessionDao, sessionRepository, timeBase
+    )
+
+    /** The same storage seen by a second process: what a restart or a re-sign-in reads. */
+    fun newWorkTrackingRepository(): WorkTrackingRepository = WorkTrackingRepository(
+        database, trackingSessionDao, workSessionDao, sessionRepository, timeBase
+    )
+
+    val taskRepository = TaskRepository(
+        taskDao, sessionRepository, recurrenceRepository, reminderRepository, workTrackingRepository
+    )
     val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
     val groupRepository = GroupRepository(groupDao, sessionRepository)
     val calendarRepository =

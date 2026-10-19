@@ -10,7 +10,10 @@ import com.taskplanner.data.local.LegacyDbRescuer
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.local.TrackingSessionDao
 import com.taskplanner.data.local.UserDao
+import com.taskplanner.data.local.WorkSessionDao
+import com.taskplanner.data.local.WorkStatisticsDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -59,4 +62,15 @@ object DatabaseModule {
 
     @Provides
     fun provideRecurrenceDao(database: AppDatabase): RecurrenceDao = database.recurrenceDao()
+
+    @Provides
+    fun provideTrackingSessionDao(database: AppDatabase): TrackingSessionDao =
+        database.trackingSessionDao()
+
+    @Provides
+    fun provideWorkSessionDao(database: AppDatabase): WorkSessionDao = database.workSessionDao()
+
+    @Provides
+    fun provideWorkStatisticsDao(database: AppDatabase): WorkStatisticsDao =
+        database.workStatisticsDao()
 }

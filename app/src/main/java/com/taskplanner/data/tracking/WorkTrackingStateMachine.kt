@@ -1,5 +1,6 @@
 package com.taskplanner.data.tracking
 
+import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TrackingState
 import com.taskplanner.data.model.TrackingSession
 import com.taskplanner.data.model.WorkSession
@@ -21,14 +22,21 @@ enum class ConflictResolution { PAUSE_ACTIVE, STOP_ACTIVE, CANCEL }
 /** The state as the stored rows describe it, read back after a restart or a sync. */
 data class TrackingSnapshot(
     val taskId: Long,
+    val taskUuid: String,
     val taskTitle: String,
     val phase: TrackingPhase,
+    /** The session the rows hold for this task, null when the task has never been tracked. */
+    val sessionUuid: String? = null,
     /** `started_at` of this session's still-open interval, null when every interval is closed. */
     val openSince: Long? = null,
 ) {
     /** A session the user can still act on: not absent, not stopped. */
     val isLive: Boolean get() = phase == TrackingPhase.RUNNING || phase == TrackingPhase.PAUSED
 }
+
+/** A task that has no rows yet — what a fresh install and a migrated database look like. */
+fun idleSnapshot(taskId: Long, taskUuid: String, taskTitle: String): TrackingSnapshot =
+    TrackingSnapshot(taskId, taskUuid, taskTitle, TrackingPhase.IDLE)
 
 /** The row changes one accepted request causes. Everything is inside a single transaction. */
 sealed interface IntervalOp {
@@ -106,15 +114,8 @@ object WorkTrackingStateMachine {
      * PAUSED rather than repaired silently — the work up to that instant is already stored, and the
      * user decides whether to resume it.
      */
-    fun snapshotOf(
-        session: TrackingSession?,
-        openInterval: WorkSession?,
-        fallbackTaskId: Long,
-        fallbackTitle: String,
-    ): TrackingSnapshot {
-        if (session == null) {
-            return TrackingSnapshot(fallbackTaskId, fallbackTitle, TrackingPhase.IDLE)
-        }
+    fun snapshotOf(session: TrackingSession?, openInterval: WorkSession?): TrackingSnapshot {
+        if (session == null) return idleSnapshot(-1L, "", "")
         val phase = when {
             session.state == TrackingState.RUNNING && openInterval == null -> TrackingPhase.PAUSED
             else -> when (session.state) {
@@ -125,11 +126,18 @@ object WorkTrackingStateMachine {
         }
         return TrackingSnapshot(
             taskId = session.taskId,
+            taskUuid = session.taskUuid,
             taskTitle = session.taskTitle,
             phase = phase,
+            sessionUuid = session.uuid,
             openSince = openInterval?.startedAt,
         )
     }
+
+    /** The snapshot of a task the user is looking at, before any session row exists for it. */
+    fun snapshotOf(task: Task, session: TrackingSession?, openInterval: WorkSession?): TrackingSnapshot =
+        if (session == null) idleSnapshot(task.id, task.uuid, task.title)
+        else snapshotOf(session, openInterval)
 
     /**
      * Start tracking [own]'s task.

@@ -1,5 +1,6 @@
 package com.taskplanner.data.tracking
 
+import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TrackingSession
 import com.taskplanner.data.model.TrackingState
 import com.taskplanner.data.model.WorkSession
@@ -29,27 +30,36 @@ class WorkTrackingStateMachineTest {
 
     private val measure: (Long) -> MeasuredDuration = { MeasuredDuration(seconds = (now - it) / 1000L) }
 
+    private val taskUuid = "task-1"
+
     private fun running(openIntervalSince: Long = now - 600_000L) = TrackingSnapshot(
         taskId = taskId,
+        taskUuid = taskUuid,
         taskTitle = "Write the report",
         phase = TrackingPhase.RUNNING,
+        sessionUuid = "session-1",
         openSince = openIntervalSince,
     )
 
     private val paused = TrackingSnapshot(
         taskId = taskId,
+        taskUuid = taskUuid,
         taskTitle = "Write the report",
         phase = TrackingPhase.PAUSED,
+        sessionUuid = "session-1",
     )
 
     private val completed = TrackingSnapshot(
         taskId = taskId,
+        taskUuid = taskUuid,
         taskTitle = "Write the report",
         phase = TrackingPhase.COMPLETED,
+        sessionUuid = "session-1",
     )
 
     private val idle = TrackingSnapshot(
         taskId = otherTaskId,
+        taskUuid = "task-2",
         taskTitle = "Review the draft",
         phase = TrackingPhase.IDLE,
     )
@@ -162,7 +172,7 @@ class WorkTrackingStateMachineTest {
 
     @Test
     fun `resume of a paused task waits for the user while another task is still running`() {
-        val runningElsewhere = running().copy(taskId = 99L, taskTitle = "Fix the build")
+        val runningElsewhere = running().copy(taskId = 99L, taskUuid = "task-99", taskTitle = "Fix the build")
 
         assertEquals(
             TrackingDecision.Conflict(99L, "Fix the build"),
@@ -299,7 +309,7 @@ class WorkTrackingStateMachineTest {
             uuid = "session-1",
             userId = userId,
             taskId = taskId,
-            taskUuid = "task-1",
+            taskUuid = taskUuid,
             taskTitle = "Write the report",
             state = TrackingState.RUNNING,
             startedAt = now - 600_000L,
@@ -310,26 +320,35 @@ class WorkTrackingStateMachineTest {
             userId = userId,
             trackingSessionUuid = session.uuid,
             taskId = taskId,
-            taskUuid = "task-1",
+            taskUuid = taskUuid,
             startedAt = now - 600_000L,
             localDay = 20_644L,
             utcOffsetMinutes = -300,
             openMarker = session.uuid,
         )
 
-        val restored = WorkTrackingStateMachine.snapshotOf(session, open, taskId, "Write the report")
+        val restored = WorkTrackingStateMachine.snapshotOf(session, open)
 
         assertEquals(TrackingPhase.RUNNING, restored.phase)
         assertEquals(now - 600_000L, restored.openSince)
-        assertEquals("the stored title is what history reads after a rename",
-            "Write the report", restored.taskTitle)
+        assertEquals("session-1", restored.sessionUuid)
+        assertEquals(
+            "the stored title is what history reads after a rename",
+            "Write the report",
+            restored.taskTitle
+        )
     }
 
     @Test
     fun `a task with no rows is idle, which is what a fresh install and an old database look like`() {
-        val restored = WorkTrackingStateMachine.snapshotOf(null, null, taskId, "Write the report")
+        val task = Task(id = taskId, uuid = taskUuid, title = "Write the report", description = "", userId = userId)
+
+        val restored = WorkTrackingStateMachine.snapshotOf(task, session = null, openInterval = null)
 
         assertEquals(TrackingPhase.IDLE, restored.phase)
+        assertEquals(taskId, restored.taskId)
+        assertEquals(taskUuid, restored.taskUuid)
+        assertNull(restored.sessionUuid)
         assertNull(restored.openSince)
         assertFalse(restored.isLive)
     }
@@ -340,13 +359,13 @@ class WorkTrackingStateMachineTest {
             uuid = "session-2",
             userId = userId,
             taskId = taskId,
-            taskUuid = "task-1",
+            taskUuid = taskUuid,
             taskTitle = "Write the report",
             state = TrackingState.RUNNING,
             startedAt = now - 600_000L,
         )
 
-        val restored = WorkTrackingStateMachine.snapshotOf(session, null, taskId, "Write the report")
+        val restored = WorkTrackingStateMachine.snapshotOf(session, openInterval = null)
 
         assertEquals(
             "a row lost mid-write must not be read as a timer that is still running",
@@ -362,7 +381,7 @@ class WorkTrackingStateMachineTest {
             uuid = "session-3",
             userId = userId,
             taskId = taskId,
-            taskUuid = "task-1",
+            taskUuid = taskUuid,
             taskTitle = "Write the report",
             state = TrackingState.COMPLETED,
             startedAt = now - 600_000L,
@@ -373,7 +392,7 @@ class WorkTrackingStateMachineTest {
             userId = otherUserId,
             trackingSessionUuid = session.uuid,
             taskId = taskId,
-            taskUuid = "task-1",
+            taskUuid = taskUuid,
             startedAt = now - 600_000L,
             localDay = 20_644L,
             utcOffsetMinutes = -300,
@@ -382,7 +401,7 @@ class WorkTrackingStateMachineTest {
 
         assertEquals(
             TrackingPhase.COMPLETED,
-            WorkTrackingStateMachine.snapshotOf(session, open, taskId, "Write the report").phase,
+            WorkTrackingStateMachine.snapshotOf(session, open).phase,
         )
     }
 
