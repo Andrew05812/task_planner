@@ -28,6 +28,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,6 +78,21 @@ class WorkAdjustmentUiTest {
         activity.supportFragmentManager.beginTransaction().add(host.id, anchor, "anchor").commitNow()
         // A notice asserted later in the test is only worth anything if it is this test's own, so the
         // manager starts each test empty rather than still holding one an earlier test showed.
+        dismissNotices()
+    }
+
+    /**
+     * Puts this test's notices away before its window goes with them.
+     *
+     * This belongs here and not only in the next test's setup because the notice manager only lets go of a
+     * notice through its exit animation, and that animation needs a view which is still attached. A notice
+     * left up when the activity is destroyed keeps the manager holding it for the rest of the JVM's life,
+     * and every notice a later test asks for is then queued behind one nobody can see or dismiss — which is
+     * why the same assertion can pass alone and fail in a full run, where the machine is busy enough for a
+     * notice still to be up at the end.
+     */
+    @After
+    fun tearDown() {
         dismissNotices()
     }
 
