@@ -9,6 +9,7 @@ import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.TrackingState
 import com.taskplanner.data.model.WorkSource
+import com.taskplanner.data.model.isCompletedSpelling
 import java.util.Date
 
 import java.util.Locale
@@ -79,13 +80,17 @@ class Converters {
     fun toTaskStatus(value: String): TaskStatus {
         // Historical databases store TaskStatus constant names as TEXT. Unknown or
         // legacy aliases fall back to TODO instead of throwing, and COMPLETED (the
-        // value written by every previous release) keeps its exact name.
-        return when (value.uppercase(Locale.ROOT)) {
-            "TODO" -> TaskStatus.TODO
-            "IN_PROGRESS" -> TaskStatus.IN_PROGRESS
-            "PAUSED" -> TaskStatus.PAUSED
-            "COMPLETED", "DONE" -> TaskStatus.COMPLETED
-            else -> TaskStatus.TODO
+        // value written by every previous release) keeps its exact name. Which
+        // spellings mean "finished" is `isCompletedSpelling`'s, shared with the
+        // dashboard's SQL so the two cannot drift apart.
+        return when {
+            isCompletedSpelling(value) -> TaskStatus.COMPLETED
+            else -> when (value.uppercase(Locale.ROOT)) {
+                "TODO" -> TaskStatus.TODO
+                "IN_PROGRESS" -> TaskStatus.IN_PROGRESS
+                "PAUSED" -> TaskStatus.PAUSED
+                else -> TaskStatus.TODO
+            }
         }
     }
 

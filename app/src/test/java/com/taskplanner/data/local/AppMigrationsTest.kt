@@ -225,7 +225,7 @@ class AppMigrationsTest {
     fun `migrations are idempotently registered for every retained version pair`() {
         val pairs = AppMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11, 11 to 12),
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11, 11 to 12, 12 to 13),
             pairs
         )
     }
@@ -422,6 +422,86 @@ class AppMigrationsTest {
             "and nothing is left open",
             0L,
             db.firstLong("SELECT COUNT(*) FROM work_sessions WHERE open_marker IS NOT NULL")
+        )
+    }
+
+    @Test
+    fun `migration 12 to 13 adds only the index the dashboard reads completed work through`() {
+        val db = open(12)
+        val before = counts(db)
+        val beforeValues = db.rows(
+            "SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id"
+        )
+        db.migrate(AppMigrations.MIGRATION_12_13)
+        builder.assertMatchesSchema(db, 13, "MIGRATION_12_13")
+
+        assertEquals("an index migration moves no row", before, counts(db))
+        assertEquals(
+            "an index migration changes no stored value",
+            beforeValues,
+            db.rows("SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id")
+        )
+        assertEquals(
+            listOf("user_id", "completed_at"),
+            db.rows("PRAGMA index_info('index_tasks_user_id_completed_at')").map { it[2] }
+        )
+    }
+
+    @Test
+    fun `migration 12 to 13 applied to a database that already has the index changes nothing`() {
+        val db = open(12)
+        db.migrate(AppMigrations.MIGRATION_12_13)
+        val indexes = db.rows("PRAGMA index_list('tasks')").size
+        db.migrate(AppMigrations.MIGRATION_12_13)
+
+        assertEquals(indexes, db.rows("PRAGMA index_list('tasks')").size)
+        builder.assertMatchesSchema(db, 13, "MIGRATION_12_13 applied twice")
+    }
+
+    @Test
+    fun `the completion window seeks the new index instead of walking the profile`() {
+        val db = open(12)
+        db.migrate(AppMigrations.MIGRATION_12_13)
+        val plan = db.rows(
+            "EXPLAIN QUERY PLAN SELECT completed_at FROM tasks WHERE user_id = ${Seeder.USER_ID} " +
+                "AND is_deleted = 0 AND status IN ('COMPLETED', 'DONE') " +
+                "AND completed_at IS NOT NULL AND completed_at >= 100 AND completed_at < 200"
+        ).flatten().joinToString(" ")
+
+        assertTrue(
+            "the window has to be answered by seeking the new index; the plan was: $plan",
+            plan.contains("index_tasks_user_id_completed_at")
+        )
+    }
+
+    @Test
+    fun `a database built at 13 finds the tasks finished inside a window`() {
+        val db = open(12)
+        db.migrate(AppMigrations.MIGRATION_12_13)
+        db.exec(
+            "UPDATE tasks SET completed_at = 150, status = 'COMPLETED' " +
+                "WHERE id = ${Seeder.COMPLETED_TASK_ID}"
+        )
+
+        // Exactly the statement the dashboard's completion series runs, against the schema the
+        // migration produces rather than against Room's generated code: what has to hold is that a
+        // window of instants selects the tasks finished inside it, that one finished outside it is
+        // not in the result, and that an unfinished task cannot be there — its `completed_at` is NULL.
+        assertEquals(
+            listOf(Seeder.COMPLETED_TASK_ID.toString()),
+            db.rows(
+                "SELECT id FROM tasks WHERE user_id = ${Seeder.USER_ID} AND is_deleted = 0 " +
+                    "AND status IN ('COMPLETED', 'DONE') AND completed_at IS NOT NULL " +
+                    "AND completed_at >= 100 AND completed_at < 200"
+            ).map { it[0] }
+        )
+        assertEquals(
+            "an unfinished task has no completion instant to be found by",
+            0L,
+            db.firstLong(
+                "SELECT COUNT(*) FROM tasks WHERE user_id = ${Seeder.USER_ID} AND is_deleted = 0 " +
+                    "AND completed_at IS NOT NULL AND completed_at >= 1000 AND completed_at < 2000"
+            )
         )
     }
 

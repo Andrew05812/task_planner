@@ -3,7 +3,10 @@ package com.taskplanner.data.local
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.model.isCompletedSpelling
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Date
 
@@ -35,6 +38,17 @@ class ConvertersTest {
     @Test
     fun `the done label used by the ui also reads as completed`() {
         assertEquals(TaskStatus.COMPLETED, converters.toTaskStatus("DONE"))
+
+        // The dashboard's SQL and this reader cannot see each other, so the rule they share is this
+        // function: a row an old release spelled `DONE`, or an import spelled `done`, has to be a
+        // completion for both, or the screen reports finished work as still open. The SQL says the same
+        // thing with `UPPER(status)`, which is why the casing below is not a mistake but a requirement.
+        assertTrue(isCompletedSpelling("DONE"))
+        assertTrue(isCompletedSpelling(converters.fromTaskStatus(TaskStatus.COMPLETED)))
+        assertTrue(isCompletedSpelling("done"))
+        assertFalse(isCompletedSpelling("IN_PROGRESS"))
+        assertFalse(isCompletedSpelling("PAUSED"))
+        assertFalse(isCompletedSpelling("COMPLETED_BUT_NOT_REALLY"))
     }
 
     @Test

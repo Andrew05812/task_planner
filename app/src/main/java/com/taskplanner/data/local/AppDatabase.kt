@@ -25,7 +25,7 @@ import com.taskplanner.data.model.WorkSession
         WorkSession::class,
         WorkIntervalCorrection::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -39,6 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackingSessionDao(): TrackingSessionDao
     abstract fun workSessionDao(): WorkSessionDao
     abstract fun workStatisticsDao(): WorkStatisticsDao
+    abstract fun taskStatisticsDao(): TaskStatisticsDao
 
     companion object {
         const val NAME = "taskplanner.db"

@@ -393,6 +393,20 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // One index and nothing else. The dashboard answers "what was finished in this window"
+            // straight from `completed_at`, and without an index that starts with the profile, SQLite
+            // would answer it by walking every task of every profile on the device — the read the
+            // whole aggregation exists to replace. The column itself arrived with schema 12, so this
+            // step adds no column, rewrites no row, and only makes the data already there seekable.
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tasks_user_id_completed_at` " +
+                    "ON `tasks` (`user_id`, `completed_at`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -404,6 +418,7 @@ object AppMigrations {
         MIGRATION_8_9,
         MIGRATION_9_10,
         MIGRATION_10_11,
-        MIGRATION_11_12
+        MIGRATION_11_12,
+        MIGRATION_12_13
     )
 }

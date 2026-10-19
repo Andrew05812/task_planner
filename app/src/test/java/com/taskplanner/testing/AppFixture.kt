@@ -13,6 +13,7 @@ import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.local.TaskStatisticsDao
 import com.taskplanner.data.local.TrackingSessionDao
 import com.taskplanner.data.local.UserDao
 import com.taskplanner.data.local.WorkSessionDao
@@ -133,6 +134,9 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val trackingSessionDao: TrackingSessionDao = database.trackingSessionDao()
     val workSessionDao: WorkSessionDao = database.workSessionDao()
     val workStatisticsDao: WorkStatisticsDao = database.workStatisticsDao()
+
+    /** The task-side aggregates the dashboard reads, straight from the same storage. */
+    val taskStatisticsDao: TaskStatisticsDao = database.taskStatisticsDao()
 
     val workTrackingRepository = WorkTrackingRepository(
         database, trackingSessionDao, workSessionDao, sessionRepository, timeBase, monotonicReference

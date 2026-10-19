@@ -140,10 +140,14 @@ interface WorkStatisticsDao {
      * Tasks finished inside a period, counted in SQL from the instant this stage added:
      * `tasks.completed_at`. Status alone cannot answer it — a task completed last year still reads
      * `COMPLETED` today.
+     *
+     * `UPPER` keeps this answer in step with the dashboard's own completion figures, which group the
+     * same rows: `Converters` reads a row an import spelled `done` as completed, so a count that only
+     * matched the exact uppercase spelling would disagree with the chart next to it.
      */
     @Query(
         "SELECT COUNT(*) FROM tasks " +
-            "WHERE user_id = :userId AND is_deleted = 0 AND status = 'COMPLETED' " +
+            "WHERE user_id = :userId AND is_deleted = 0 AND UPPER(status) IN ('COMPLETED', 'DONE') " +
             "AND completed_at IS NOT NULL AND completed_at >= :from AND completed_at < :to"
     )
     suspend fun completedTasksInPeriod(userId: Long, from: Long, to: Long): Int
