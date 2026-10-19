@@ -1,6 +1,7 @@
 package com.taskplanner.ui.tasks
 
 import android.annotation.SuppressLint
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -13,8 +14,10 @@ import androidx.recyclerview.widget.RecyclerView
 import com.taskplanner.R
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.databinding.ItemGroupHeaderBinding
 import com.taskplanner.databinding.ItemTaskBinding
+import com.taskplanner.ui.util.WorkTimeFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -30,6 +33,8 @@ class TasksAdapter(
     private val onPause: (com.taskplanner.data.model.Task) -> Unit,
     private val onResume: (com.taskplanner.data.model.Task) -> Unit,
     private val onComplete: (com.taskplanner.data.model.Task) -> Unit,
+    /** The card's single work-tracking control: start, pause or resume, chosen by the stored phase. */
+    private val onWorkToggle: (com.taskplanner.data.model.Task) -> Unit,
     private val onToggleGroup: (TaskGroup) -> Unit,
     private val onGroupMenu: (View, TaskGroup) -> Unit,
     private val onStartDrag: (RecyclerView.ViewHolder) -> Unit
@@ -202,6 +207,53 @@ class TasksAdapter(
             }
         }
 
+        /**
+         * The measured-time line: what the task has cost, the seconds still being counted on it, and the
+         * one button that answers for every phase.
+         *
+         * A completed task gets no button. Its timer was stopped when it was finished, and starting a
+         * measurement on a task the user has closed would ask history to hold work nobody did.
+         */
+        private fun bindWork(item: TasksListItem.TaskRow) {
+            val b = binding
+            val context = b.root.context
+            val work = item.work
+
+            b.workRow.isVisible = work.isShown && item.task.status != TaskStatus.COMPLETED
+            if (!b.workRow.isVisible) return
+
+            // A task nothing has been measured on gets no zero: the line says "work is happening here",
+            // and a bare 0 s would say it about every card.
+            b.workTime.isVisible = work.closedSeconds > 0
+            if (b.workTime.isVisible) {
+                val measured = WorkTimeFormat.compact(context, work.closedSeconds)
+                b.workTime.text = measured
+                b.workTime.contentDescription =
+                    context.getString(R.string.work_card_description, measured)
+            }
+            b.workTicker.isVisible = work.isMeasured
+            b.workTicker.text = WorkTimeFormat.ticker(work.liveSeconds ?: 0)
+            b.workDot.isVisible = work.phase != TrackingPhase.IDLE
+            b.workDot.backgroundTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(
+                    context,
+                    if (work.phase == TrackingPhase.RUNNING) R.color.priority_high
+                    else R.color.status_paused
+                )
+            )
+            b.workControlButton.setImageResource(
+                if (work.phase == TrackingPhase.RUNNING) R.drawable.ic_pause else R.drawable.ic_play
+            )
+            b.workControlButton.contentDescription = context.getString(
+                when (work.phase) {
+                    TrackingPhase.RUNNING -> R.string.work_pause
+                    TrackingPhase.PAUSED -> R.string.work_resume
+                    else -> R.string.work_start
+                }
+            )
+            b.workControlButton.setOnClickListener { current?.task?.let { onWorkToggle(it) } }
+        }
+
         fun bind(item: TasksListItem.TaskRow) {
             current = item
             panelWidth = 0f
@@ -274,6 +326,8 @@ class TasksAdapter(
             b.pauseTaskButton.setOnClickListener { current?.task?.let { onPause(it) } }
             b.resumeTaskButton.setOnClickListener { current?.task?.let { onResume(it) } }
             b.completeTaskButton.setOnClickListener { current?.task?.let { onComplete(it) } }
+
+            bindWork(item)
 
             b.dragHandle.visibility = if (selectionMode || !reorderEnabled) View.GONE else View.VISIBLE
             b.selectionCheck.visibility = if (selectionMode) View.VISIBLE else View.GONE

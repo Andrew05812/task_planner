@@ -70,8 +70,13 @@ class TasksReminderTest {
     private fun badgeOf(title: String): Int =
         rows().first { it.task.title == title }.pendingReminders
 
-    /** Room notifies flow collectors from a background executor, so the test has to wait for it. */
+    /**
+     * Room notifies flow collectors from its own threads and answers a query there too, so the test has
+     * to wait for it — starting by letting those threads settle, because otherwise a condition can be
+     * satisfied by the state a previous command published.
+     */
     private fun awaitUntil(what: String, condition: () -> Boolean) {
+        fixture.awaitIdle()
         val deadline = System.currentTimeMillis() + 5_000
         while (!condition()) {
             if (System.currentTimeMillis() > deadline) {
@@ -91,7 +96,9 @@ class TasksReminderTest {
         fixture.groupRepository,
         fixture.recurrenceRepository,
         fixture.reminderRepository,
-        fixture.sessionRepository
+        fixture.sessionRepository,
+        fixture.workTrackingRepository,
+        fixture.workStatisticsRepository
     )
 
     @Test
@@ -159,6 +166,9 @@ class TasksReminderTest {
         val taskId = rows().single().task.id
 
         viewModel.loadTask(taskId)
+        // The editor saves the task it holds rather than the id it was handed, so the load has to have
+        // landed before the next save is issued.
+        awaitUntil("the task to load back") { viewModel.currentTask.value?.id == taskId }
         viewModel.saveTask(
             taskId = taskId,
             title = "Water the plants",
@@ -252,6 +262,9 @@ class TasksReminderTest {
         val taskId = rows().single().task.id
 
         viewModel.loadTask(taskId)
+        // The editor saves the task it holds rather than the id it was handed, so the load has to have
+        // landed before the next save is issued.
+        awaitUntil("the task to load back") { viewModel.currentTask.value?.id == taskId }
         viewModel.saveTask(
             taskId = taskId,
             title = "Dentist",

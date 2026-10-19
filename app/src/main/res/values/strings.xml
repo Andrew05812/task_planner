@@ -319,6 +319,115 @@
     <string name="error_plan_conflict">The plan ends before it starts.</string>
     <string name="error_plan_estimate_not_number">Enter the estimate in whole minutes.</string>
 
+    <!-- Work tracking: the time a task actually took, measured rather than planned -->
+    <string name="work_section_title">Time worked</string>
+    <string name="work_time_hours">%1$d h</string>
+    <string name="work_time_hours_minutes">%1$d h %2$d min</string>
+    <string name="work_time_minutes">%1$d min</string>
+    <string name="work_time_seconds">%1$d s</string>
+    <string name="work_start">Start measuring</string>
+    <string name="work_pause">Pause measuring</string>
+    <string name="work_resume">Resume measuring</string>
+    <string name="work_stop">Stop and save</string>
+    <string name="work_card_description">%1$s measured on this task</string>
+    <string name="work_measuring_since">Measuring since %1$s</string>
+    <string name="work_paused_at">Paused at %1$s</string>
+    <string name="work_paused_unknown">Measuring is paused on this task</string>
+    <string name="work_not_measured">Nothing is being measured on this task</string>
+    <string name="work_actual_format">Actual %1$s</string>
+    <string name="work_today_format">Today %1$s</string>
+    <string name="work_estimate_format">Estimate %1$s</string>
+    <string name="work_no_estimate">No estimate was set</string>
+    <string name="work_on_estimate">Used exactly as estimated</string>
+    <string name="work_remaining_format">%1$s left inside the estimate</string>
+    <string name="work_overrun_format">Overrun by %1$s</string>
+    <string name="work_intervals_title">Measured stretches</string>
+    <string name="work_no_intervals">No measured time on this task yet</string>
+    <string name="work_interval_row_format">%1$s – %2$s, %3$s</string>
+    <string name="work_interval_manual">entered by hand</string>
+    <string name="work_interval_open">still running</string>
+    <string name="work_interval_anomaly">the clock was adjusted during this stretch</string>
+    <string name="work_bar_format">%1$s · %2$s</string>
+    <string name="work_bar_measuring">Measuring \"%1$s\"</string>
+    <string name="work_bar_paused">Paused on \"%1$s\"</string>
+    <string name="work_bar_open">Open the task being measured</string>
+    <string name="work_conflict_title">Another task is being measured</string>
+    <string name="work_conflict_message">\"%1$s\" has measurement in progress. Say what happens to it before \"%2$s\" starts; nothing is changed until you choose.</string>
+    <string name="work_conflict_pause">Pause it, then start this one</string>
+    <string name="work_conflict_stop">Stop it, then start this one</string>
+    <string name="work_conflict_cancel">Keep measuring the other task</string>
+    <string name="work_closed_on_complete">Task finished. The stretch being measured was closed and its time saved; time spent paused was not counted.</string>
+
+    <!-- Work history: the list, its period filters, and hand-entered adjustments to it -->
+    <string name="action_work_history">Work history</string>
+    <string name="history_title">Work history</string>
+    <string name="history_period_today">Today</string>
+    <string name="history_period_yesterday">Yesterday</string>
+    <string name="history_period_this_week">This week</string>
+    <string name="history_period_last_week">Last week</string>
+    <string name="history_period_this_month">This month</string>
+    <string name="history_period_last_month">Last month</string>
+    <string name="history_period_custom">Choose dates</string>
+    <string name="history_summary">%1$s measured · %2$s · %3$s</string>
+    <string name="history_range_format">%1$s – %2$s</string>
+    <string name="history_in_progress">Still being measured</string>
+    <string name="history_meta_format">%1$s · %2$s</string>
+    <string name="history_meta_manual_format">%1$s · %2$s · %3$s</string>
+    <string name="history_empty">Nothing was measured in this period.</string>
+    <string name="history_sort_title">Order by</string>
+    <string name="history_sort_date">Newest first</string>
+    <string name="history_sort_duration">Longest first</string>
+    <string name="history_sort_task">Task name</string>
+    <string name="history_edit_interval">Correct this stretch</string>
+    <string name="history_delete_interval">Throw this stretch away</string>
+    <string name="history_correct_title">Correct this stretch</string>
+    <string name="history_add_title">Enter time by hand</string>
+    <string name="history_start_hint">Starts (yyyy-MM-dd HH:mm)</string>
+    <string name="history_end_hint">Ends (yyyy-MM-dd HH:mm)</string>
+    <string name="history_reason_hint">Why it changed (optional)</string>
+    <string name="history_previous_corrections">What this stretch said before: %1$s</string>
+    <string name="history_interval_was_format">%1$s – %2$s</string>
+    <string name="history_from_hint">From (yyyy-MM-dd)</string>
+    <string name="history_to_hint">To (yyyy-MM-dd)</string>
+    <string name="history_apply">Apply</string>
+    <string name="history_bad_instant">Write the instant as yyyy-MM-dd HH:mm, for example 2026-06-18 09:00.</string>
+    <string name="history_bad_range">A stretch cannot end at or before it starts.</string>
+    <string name="history_bad_dates">The last day cannot fall before the first.</string>
+    <string name="history_corrected">The stretch was corrected. What it said before is kept.</string>
+    <string name="history_recorded">The time you entered is in the history, marked as entered by hand.</string>
+    <string name="history_removed">The stretch is out of history. Its record stays in the database.</string>
+    <string name="history_still_measured">This stretch is still being measured. Stop the timer before changing it.</string>
+    <string name="history_not_found">This measurement is no longer in the history.</string>
+    <string name="history_no_profile">No profile is signed in, so there is no history to write to.</string>
+    <string name="history_conflict_title">This stretch is already measured</string>
+    <string name="history_conflict_message">Nothing was changed: the time you named is already covered by the measurements listed here. Correct one of them instead, or name a different stretch.</string>
+    <string name="history_delete_confirm_title">Throw this stretch away?</string>
+    <string name="history_delete_confirm_message">It leaves the history list. The row and the record of its corrections stay in this device\'s database, so what was measured is still there if it has to be shown again.</string>
+    <string name="history_delete_confirm_yes">Take it out</string>
+
+    <plurals name="history_conflict_count">
+        <item quantity="one">%1$d measurement already covers it</item>
+        <item quantity="other">%1$d measurements already cover it</item>
+    </plurals>
+
+    <!-- The counted words of the history header and its rows. A period of one stretch must read
+         "1 stretch", and a sentence assembled in Kotlin from "1" + "stretches" is the shape that gets
+         that wrong and cannot be translated. -->
+    <plurals name="history_stretch_count">
+        <item quantity="one">%1$d stretch</item>
+        <item quantity="other">%1$d stretches</item>
+    </plurals>
+
+    <plurals name="history_session_count">
+        <item quantity="one">%1$d session</item>
+        <item quantity="other">%1$d sessions</item>
+    </plurals>
+
+    <plurals name="history_manual_count">
+        <item quantity="one">%1$d entered by hand</item>
+        <item quantity="other">%1$d entered by hand</item>
+    </plurals>
+
     <plurals name="reminder_count">
         <item quantity="one">%1$d reminder set</item>
         <item quantity="other">%1$d reminders set</item>

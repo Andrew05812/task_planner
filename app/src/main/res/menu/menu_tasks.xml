@@ -21,6 +21,11 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_work_history"
+        android:title="@string/action_work_history"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_sort"
         android:icon="@drawable/ic_sort"
         android:title="@string/action_sort"

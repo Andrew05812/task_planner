@@ -7,6 +7,8 @@ import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.model.TrackingState
+import com.taskplanner.data.model.WorkSource
 import java.util.Date
 
 import java.util.Locale
@@ -105,4 +107,32 @@ class Converters {
     fun fromSyncState(value: SyncState): String {
         return value.name
     }
+
+    @TypeConverter
+    fun toTrackingState(value: String): TrackingState {
+        // A state written by a newer build, or damaged, is read as paused rather than running: the
+        // worst thing an unknown row could be read as is "a timer is going" that nobody started.
+        return try {
+            TrackingState.valueOf(value.uppercase(Locale.ROOT))
+        } catch (e: IllegalArgumentException) {
+            TrackingState.PAUSED
+        }
+    }
+
+    @TypeConverter
+    fun fromTrackingState(value: TrackingState): String = value.name
+
+    @TypeConverter
+    fun toWorkSource(value: String): WorkSource {
+        // Same rule as the other columns: an unreadable source is still work the user did, so the
+        // interval is kept and read as a measured one rather than dropped.
+        return try {
+            WorkSource.valueOf(value.uppercase(Locale.ROOT))
+        } catch (e: IllegalArgumentException) {
+            WorkSource.TRACKER
+        }
+    }
+
+    @TypeConverter
+    fun fromWorkSource(value: WorkSource): String = value.name
 } 

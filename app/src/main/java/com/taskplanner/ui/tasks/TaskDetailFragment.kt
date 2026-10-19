@@ -5,6 +5,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.format.DateFormat
 import android.view.LayoutInflater
@@ -17,7 +18,9 @@ import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import com.google.android.material.chip.Chip
@@ -28,7 +31,14 @@ import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.model.WorkSource
+import com.taskplanner.data.repository.WorkStatisticsRepository
+import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.databinding.FragmentTaskDetailBinding
+import com.taskplanner.databinding.ItemWorkIntervalBinding
+import com.taskplanner.ui.util.WorkAdjustmentUi
+import com.taskplanner.ui.util.WorkConflictDialog
+import com.taskplanner.ui.util.WorkTimeFormat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -73,6 +83,12 @@ class TaskDetailFragment : Fragment() {
     private var carriedCustomOffsets: List<Int> = emptyList()
 
     /**
+     * The stored task on screen, kept apart from the fields being edited because the tracking block
+     * belongs to the task as saved: a task not yet written to the database has nothing measured on it.
+     */
+    private var detailTask: Task? = null
+
+    /**
      * Asks for notification permission the first time the user actually ticks a reminder — a task
      * with no reminders never needs it, and Android 13 only shows the dialog once per request.
      */
@@ -99,6 +115,7 @@ class TaskDetailFragment : Fragment() {
         observeCurrentTask()
         observeSeries()
         observeReminders()
+        observeTaskWork()
         args.taskId.let { taskId ->
             if (taskId > 0) {
                 viewModel.loadTask(taskId)
@@ -115,6 +132,7 @@ class TaskDetailFragment : Fragment() {
         setupCategorySpinner()
         setupRepeat()
         setupReminders()
+        setupWork()
     }
 
     private fun setupDatePicker() {
@@ -306,6 +324,8 @@ class TaskDetailFragment : Fragment() {
         binding.planEndTime.isEnabled = end != null
 
         binding.planHint.text = describePlan()
+        // The balance line weighs measured time against the estimate in this field, so it moves with it.
+        renderWork()
     }
 
     /**
@@ -610,6 +630,211 @@ class TaskDetailFragment : Fragment() {
         return false
     }
 
+    // ---------------------------------------------------------------- measured time
+
+    /**
+     * The four commands on one row: only the buttons the stored phase allows are put on screen, so
+     * "Resume" cannot be tapped on a task that never started and "Start" cannot appear twice.
+     */
+    private fun setupWork() {
+        binding.apply {
+            workStartButton.setOnClickListener { workSubject()?.let { viewModel.toggleWork(it) } }
+            workPauseButton.setOnClickListener { workSubject()?.let { viewModel.toggleWork(it) } }
+            workResumeButton.setOnClickListener { workSubject()?.let { viewModel.toggleWork(it) } }
+            workStopButton.setOnClickListener { workSubject()?.let { viewModel.stopWork(it) } }
+            workAddButton.setOnClickListener { askForManualWork() }
+        }
+    }
+
+    /**
+     * Time the user says they worked here without the timer measuring it.
+     *
+     * The form asks for two instants and nothing else: no reason is wanted, because an entered stretch has
+     * no earlier figure to explain, and it is marked as hand-entered by the row itself rather than by a
+     * note. What the history already holds decides whether the entry can be written, and the answer — including
+     * the measurements it would overlap — goes back to the screen that asked.
+     */
+    private fun askForManualWork() {
+        val task = workSubject() ?: return
+        WorkAdjustmentUi.showIntervalForm(
+            anchor = this,
+            titleRes = R.string.history_add_title,
+            start = null,
+            end = null,
+            reasonVisible = false
+        ) { startedAt, endedAt, _ ->
+            viewModel.recordManualWork(task, startedAt, endedAt) { result ->
+                WorkAdjustmentUi.report(this, result, R.string.history_recorded)
+            }
+        }
+    }
+
+    /** Only a task that has been saved can be measured; a new task has no row to attach intervals to. */
+    private fun workSubject(): Task? = detailTask?.takeIf { it.id > 0 }
+
+    private fun observeTaskWork() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.taskWork.collect { renderWork() }
+        }
+        // Start answers to the same single timer here as it does on the list screen.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.workConflict.collect { conflict ->
+                    conflict?.let { WorkConflictDialog.show(this@TaskDetailFragment, viewModel, it) }
+                }
+            }
+        }
+    }
+
+    /**
+     * The tracking block, drawn from the figures the database holds rather than from anything this
+     * screen remembers.
+     *
+     * The stored total and today's part of it are read facts; the running figure is the open stretch
+     * re-measured from the start held in the row, and the pause is never in it. Estimate, actual, and
+     * the difference between them are three separate lines because §8 asks the screen to keep them
+     * apart: a task can be late, over its estimate, and unfinished at the same time.
+     */
+    private fun renderWork() {
+        val task = detailTask
+        val saved = task != null && task.id > 0
+        binding.workSection.isVisible = saved
+        if (!saved || task == null) return
+
+        val view = viewModel.taskWork.value
+        val phase = view.phase
+        val closed = phase != TrackingPhase.IDLE
+        val finished = task.status == TaskStatus.COMPLETED
+
+        binding.workStateDot.isVisible = closed
+        binding.workStateDot.backgroundTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(
+                requireContext(),
+                if (phase == TrackingPhase.RUNNING) R.color.priority_high else R.color.status_paused
+            )
+        )
+        binding.workLiveSeconds.isVisible = view.liveSeconds != null
+        binding.workLiveSeconds.text = WorkTimeFormat.ticker(view.liveSeconds ?: 0L)
+        binding.workStateHint.text = when (phase) {
+            TrackingPhase.RUNNING -> getString(
+                R.string.work_measuring_since,
+                momentLabel(Calendar.getInstance().apply { timeInMillis = view.openStartedAt ?: 0L })
+            )
+            // The instant the stretch stopped is the end of the last closed interval, not a guess.
+            TrackingPhase.PAUSED -> view.intervals.firstOrNull { it.endedAt != null }?.endedAt?.let {
+                getString(R.string.work_paused_at, momentLabel(Calendar.getInstance().apply { timeInMillis = it }))
+            } ?: getString(R.string.work_paused_unknown)
+            else -> getString(R.string.work_not_measured)
+        }
+
+        binding.workStartButton.isVisible = !closed && !finished
+        binding.workPauseButton.isVisible = phase == TrackingPhase.RUNNING && !finished
+        binding.workResumeButton.isVisible = phase == TrackingPhase.PAUSED && !finished
+        binding.workStopButton.isVisible = closed && !finished
+
+        val context = requireContext()
+        binding.workTotals.text = getString(
+            R.string.work_bar_format,
+            getString(R.string.work_actual_format, WorkTimeFormat.compact(context, view.totalSeconds)),
+            getString(R.string.work_today_format, WorkTimeFormat.compact(context, view.todaySeconds))
+        )
+        binding.workBalance.text = describeBalance(view)
+        renderIntervals(view)
+    }
+
+    /** Estimate against measured time, saying plainly when there is no estimate to weigh work against. */
+    private fun describeBalance(view: WorkStatisticsRepository.TaskWorkView): String {
+        val estimated = planEstimate() ?: detailTask?.estimatedMinutes
+            ?: return getString(R.string.work_no_estimate)
+        val balance = view.balanceAgainst(estimated)
+        val context = requireContext()
+        val estimateLabel = getString(
+            R.string.work_estimate_format,
+            WorkTimeFormat.compactMinutes(context, estimated)
+        )
+        val remaining = balance.remainingSeconds
+        val overrun = balance.overrunSeconds
+        return when {
+            remaining != null -> getString(
+                R.string.work_bar_format,
+                estimateLabel,
+                getString(R.string.work_remaining_format, WorkTimeFormat.compact(context, remaining))
+            )
+            overrun != null -> getString(
+                R.string.work_bar_format,
+                estimateLabel,
+                getString(R.string.work_overrun_format, WorkTimeFormat.compact(context, overrun))
+            )
+            // The work is exactly the length it was guessed to be: saying so is truer than showing a
+            // difference of zero.
+            else -> getString(
+                R.string.work_bar_format,
+                estimateLabel,
+                getString(R.string.work_on_estimate)
+            )
+        }
+    }
+
+    /**
+     * The stretches that make up the total, newest first, each labelled with what it is: a measured
+     * interval, one entered by hand, one still running, or one whose length was decided while the
+     * device clock was being moved.
+     */
+    private fun renderIntervals(view: WorkStatisticsRepository.TaskWorkView) {
+        val rows = view.intervals
+        binding.workIntervalsEmpty.isVisible = rows.isEmpty()
+        binding.workIntervals.removeAllViews()
+        rows.forEach { row ->
+            val labels = listOfNotNull(
+                if (row.source == WorkSource.MANUAL.name) getString(R.string.work_interval_manual) else null,
+                if (row.clockAnomaly != null) getString(R.string.work_interval_anomaly) else null
+            )
+            val text = buildString {
+                append(
+                    getString(
+                        R.string.work_interval_row_format,
+                        momentLabel(Calendar.getInstance().apply { timeInMillis = row.startedAt }),
+                        row.endedAt?.let {
+                            momentLabel(Calendar.getInstance().apply { timeInMillis = it })
+                        } ?: getString(R.string.work_interval_open),
+                        WorkTimeFormat.compact(
+                            requireContext(),
+                            row.durationSeconds ?: view.liveSeconds ?: 0L
+                        )
+                    )
+                )
+                if (labels.isNotEmpty()) {
+                    append(" (")
+                    append(labels.joinToString(", "))
+                    append(")")
+                }
+            }
+            val holder = ItemWorkIntervalBinding.inflate(
+                layoutInflater,
+                binding.workIntervals,
+                false
+            )
+            holder.root.text = text
+            binding.workIntervals.addView(holder.root)
+        }
+    }
+
+    /**
+     * Set when the save that is about to happen finishes a task whose stretch is still being measured.
+     *
+     * Completion closes the interval and keeps the time already worked in history, which is the right
+     * outcome and a change to the user's measurements at the same time, so the screen says it rather
+     * than letting a plain "saved" imply nothing happened to the timer.
+     */
+    private var closingMeasuredTask = false
+
+    private fun saveConfirmationMessage(): String =
+        if (closingMeasuredTask) {
+            getString(R.string.work_closed_on_complete)
+        } else {
+            getString(R.string.msg_task_saved)
+        }
+
     private fun getPriorityStringRes(priority: Priority): Int {
         return when (priority) {
             Priority.LOW -> R.string.priority_low
@@ -666,6 +891,9 @@ class TaskDetailFragment : Fragment() {
                 }
                 if (!notificationPlanValid() || !planValid()) return@setOnClickListener
 
+                closingMeasuredTask = status == TaskStatus.COMPLETED &&
+                    workSubject() != null &&
+                    viewModel.taskWork.value.phase != TrackingPhase.IDLE
                 viewModel.saveTask(
                     taskId = args.taskId,
                     title = title,
@@ -702,7 +930,7 @@ class TaskDetailFragment : Fragment() {
                         binding.saveTask.isEnabled = true
                         binding.progressBar.isVisible = false
                         setFieldsEnabled(true)
-                        showSnackbar(getString(R.string.msg_task_saved))
+                        showSnackbar(saveConfirmationMessage())
                         findNavController().navigateUp()
                     }
                     is TaskSaveState.ScheduleConflict -> {
@@ -748,6 +976,8 @@ class TaskDetailFragment : Fragment() {
     private fun observeCurrentTask() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.currentTask.collect { task ->
+                detailTask = task
+                renderWork()
                 task?.let {
                     binding.apply {
                         taskTitle.setText(it.title)

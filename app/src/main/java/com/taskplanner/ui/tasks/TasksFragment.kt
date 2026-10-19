@@ -28,6 +28,7 @@ import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.databinding.FragmentTasksBinding
 import com.taskplanner.ui.util.EditTextDialog
+import com.taskplanner.ui.util.WorkConflictDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -98,6 +99,12 @@ class TasksFragment : Fragment() {
                             )
                             true
                         }
+                        R.id.action_work_history -> {
+                            findNavController().navigate(
+                                TasksFragmentDirections.actionTasksToWorkHistory()
+                            )
+                            true
+                        }
                         else -> false
                     }
             },
@@ -125,6 +132,7 @@ class TasksFragment : Fragment() {
             onPause = { task -> viewModel.pauseTask(task) },
             onResume = { task -> viewModel.resumeTask(task) },
             onComplete = { task -> viewModel.completeTask(task) },
+            onWorkToggle = { task -> viewModel.toggleWork(task) },
             onToggleGroup = { group -> viewModel.toggleGroupCollapsed(group) },
             onGroupMenu = { anchor, group -> showGroupMenu(anchor, group) },
             onStartDrag = { vh -> itemTouchHelper.startDrag(vh) }
@@ -196,6 +204,22 @@ class TasksFragment : Fragment() {
                 viewModel.state.collect { state -> render(state) }
             }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.workConflict.collect { conflict -> conflict?.let { showWorkConflict(it) } }
+            }
+        }
+    }
+
+    /**
+     * Start was refused because another task holds the profile's single timer, so the screen names that
+     * task and lets the user decide what happens to it.
+     *
+     * Nothing is written until an answer is given — not the other session, not this one. Dismissing the
+     * dialog by any means other than a choice is the "keep measuring the other task" answer.
+     */
+    private fun showWorkConflict(conflict: WorkConflict) {
+        WorkConflictDialog.show(this, viewModel, conflict)
     }
 
     private fun render(state: TasksState) {

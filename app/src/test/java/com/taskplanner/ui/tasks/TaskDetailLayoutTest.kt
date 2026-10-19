@@ -177,6 +177,51 @@ class TaskDetailLayoutTest {
     }
 
     @Test
+    fun `the tracking block is hidden for a new task and holds the four commands`() {
+        val binding = inflated()
+        val context = binding.root.context
+
+        assertFalse(
+            "a task not yet saved has nothing to measure, so the block stays out of the way",
+            binding.workSection.isVisible
+        )
+        assertTrue("Start is the only command an unstarted task can be offered", binding.workStartButton.isVisible)
+        assertFalse(binding.workPauseButton.isVisible)
+        assertFalse(binding.workResumeButton.isVisible)
+        assertFalse(binding.workStopButton.isVisible)
+        assertFalse("no stretch is running, so no figure is counting", binding.workLiveSeconds.isVisible)
+        assertFalse("and no dot is lit", binding.workStateDot.isVisible)
+        assertEquals(context.getString(R.string.work_start), binding.workStartButton.text)
+        assertEquals(context.getString(R.string.work_stop), binding.workStopButton.text)
+        assertEquals(
+            "the empty state says there is no history rather than showing a blank list",
+            context.getString(R.string.work_no_intervals),
+            binding.workIntervalsEmpty.text.toString()
+        )
+        // The measured figures are read, never typed: the block has no editable field in it.
+        assertEquals(
+            "the stretch rows are built from whatever the task has, so the container starts empty",
+            0,
+            binding.workIntervals.childCount
+        )
+    }
+
+    @Test
+    fun `measured time sits under the plan it is kept apart from`() {
+        val binding = inflated()
+        val content = binding.root.getChildAt(0) as ViewGroup
+        val index = { id: Int ->
+            (0 until content.childCount).first { content.getChildAt(it).id == id }
+        }
+
+        assertTrue(
+            "the estimate and the actual are neighbours in the form but never the same line",
+            index(R.id.plan_section) < index(R.id.work_section)
+        )
+        assertTrue(index(R.id.work_section) < index(R.id.task_priority_layout))
+    }
+
+    @Test
     fun `the reminder section says what it needs before anything is chosen`() {
         val binding = inflated()
         val context = binding.root.context

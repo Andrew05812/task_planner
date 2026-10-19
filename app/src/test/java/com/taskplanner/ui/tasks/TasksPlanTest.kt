@@ -51,7 +51,9 @@ class TasksPlanTest {
             fixture.groupRepository,
             fixture.recurrenceRepository,
             fixture.reminderRepository,
-            fixture.sessionRepository
+            fixture.sessionRepository,
+            fixture.workTrackingRepository,
+            fixture.workStatisticsRepository
         )
     }
 
@@ -76,6 +78,9 @@ class TasksPlanTest {
 
     /** Room notifies flow collectors from a background executor, so the test has to wait for it. */
     private fun awaitUntil(what: String, condition: () -> Boolean) {
+        // Room answers on its own threads, so the wait starts by letting them settle: without that the
+        // first check can be satisfied by the state a previous command published.
+        fixture.awaitIdle()
         val deadline = System.currentTimeMillis() + 5_000
         while (!condition()) {
             if (System.currentTimeMillis() > deadline) {

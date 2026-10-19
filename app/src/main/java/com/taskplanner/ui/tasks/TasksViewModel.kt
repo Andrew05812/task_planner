@@ -8,17 +8,25 @@ import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.repository.AdjustmentResult
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
+import com.taskplanner.data.repository.WorkStatisticsRepository
+import com.taskplanner.data.repository.WorkTrackingRepository
+import com.taskplanner.data.tracking.ConflictResolution
+import com.taskplanner.data.tracking.TrackingPhase
+import com.taskplanner.data.repository.TrackingOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -39,9 +47,38 @@ sealed interface TasksListItem {
         /** The series this row is an instance of, when the task repeats. */
         val series: RecurrenceRule? = null,
         /** Lead times still armed on this task — what puts the bell on the card. */
-        val pendingReminders: Int = 0
+        val pendingReminders: Int = 0,
+        /** The measured-time line, read from the same snapshot for every card on the screen. */
+        val work: CardWork = CardWork()
     ) : TasksListItem
 }
+
+/**
+ * The measured time a card prints.
+ *
+ * [liveSeconds] is null for every card but the one being measured now, and it is the only figure here
+ * that is not a stored fact: it is the open stretch re-measured each second from the start in the
+ * database. A card with nothing measured and nothing running shows no line at all rather than a zero.
+ */
+data class CardWork(
+    val closedSeconds: Long = 0L,
+    val liveSeconds: Long? = null,
+    val phase: TrackingPhase = TrackingPhase.IDLE
+) {
+    val isMeasured: Boolean get() = liveSeconds != null
+
+    val isShown: Boolean get() = closedSeconds > 0L || phase != TrackingPhase.IDLE
+
+    fun totalSeconds(): Long = closedSeconds + (liveSeconds ?: 0L)
+}
+
+/**
+ * Start was refused because another task already holds the profile's single timer.
+ *
+ * The screen has to say which task and what will happen to it: quietly pausing or stopping work the
+ * user is measuring is a decision about their data, so the app asks instead of choosing.
+ */
+data class WorkConflict(val runningTaskId: Long, val runningTaskTitle: String, val targetTask: Task)
 
 data class TasksState(
     val items: List<TasksListItem> = emptyList(),
@@ -68,7 +105,9 @@ class TasksViewModel @Inject constructor(
     private val groupRepository: GroupRepository,
     private val recurrenceRepository: RecurrenceRepository,
     private val reminderRepository: ReminderRepository,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val workTrackingRepository: WorkTrackingRepository,
+    private val workStatisticsRepository: WorkStatisticsRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TasksState())
@@ -92,6 +131,16 @@ class TasksViewModel @Inject constructor(
     private val _reminderOffsets = MutableStateFlow<List<Int>>(emptyList())
     val reminderOffsets: StateFlow<List<Int>> = _reminderOffsets.asStateFlow()
 
+    /** Set when Start was refused because another task holds the profile's single timer. */
+    private val _workConflict = MutableStateFlow<WorkConflict?>(null)
+    val workConflict: StateFlow<WorkConflict?> = _workConflict.asStateFlow()
+
+    /** The tracking block of the task open in the editor, re-measured while a stretch runs. */
+    private val _taskWork = MutableStateFlow<WorkStatisticsRepository.TaskWorkView>(
+        WorkStatisticsRepository.TaskWorkView()
+    )
+    val taskWork: StateFlow<WorkStatisticsRepository.TaskWorkView> = _taskWork.asStateFlow()
+
     private data class Filters(
         val categoryId: Long?,
         val status: TaskStatus?,
@@ -101,12 +150,16 @@ class TasksViewModel @Inject constructor(
 
     private val filters = MutableStateFlow(Filters(null, null, "", SortOrder.MANUAL))
 
+    /** The collector that follows the task on screen; cancelled when another task replaces it. */
+    private var workFollow: Job? = null
+
     private data class RenderInput(
         val tasks: List<Task>,
         val categories: List<Category>,
         val groups: List<TaskGroup>,
         val rules: Map<String, RecurrenceRule>,
         val pendingReminders: Map<String, Int>,
+        val work: WorkStatisticsRepository.WorkBoard,
         val filters: Filters
     )
 
@@ -135,14 +188,16 @@ class TasksViewModel @Inject constructor(
                 lists,
                 recurrenceRepository.observeRules(),
                 reminderRepository.observeLiveForCurrentUser(),
-                filterSignals
-            ) { (tasks, categories, groups), rules, reminders, signal ->
+                filterSignals,
+                workStatisticsRepository.observeWorkBoard()
+            ) { (tasks, categories, groups), rules, reminders, signal, work ->
                 RenderInput(
                     tasks,
                     categories,
                     groups,
                     rules.associateBy { it.uuid },
                     reminders.filter { it.isPending }.groupBy { it.taskUuid }.mapValues { it.value.size },
+                    work,
                     signal.filters
                 )
             }.collect { input ->
@@ -210,13 +265,7 @@ class TasksViewModel @Inject constructor(
             items += TasksListItem.GroupHeader(group, groupTasks.size, allSelected)
             if (!group.collapsed) {
                 groupTasks.forEach { task ->
-                    items += TasksListItem.TaskRow(
-                        task,
-                        task.categoryId?.let { categoryMap[it] },
-                        task.id in selected,
-                        task.seriesUuid?.let { input.rules[it] },
-                        input.pendingReminders[task.uuid] ?: 0
-                    )
+                    items += taskRow(task, input, categoryMap, selected)
                     groupedTaskIds += task.id
                 }
             } else {
@@ -224,13 +273,7 @@ class TasksViewModel @Inject constructor(
             }
         }
         visible.filter { it.id !in groupedTaskIds }.forEach { task ->
-            items += TasksListItem.TaskRow(
-                task,
-                task.categoryId?.let { categoryMap[it] },
-                task.id in selected,
-                task.seriesUuid?.let { input.rules[it] },
-                input.pendingReminders[task.uuid] ?: 0
-            )
+            items += taskRow(task, input, categoryMap, selected)
         }
 
         _categories.value = input.categories
@@ -249,6 +292,24 @@ class TasksViewModel @Inject constructor(
             )
         }
     }
+
+    private fun taskRow(
+        task: Task,
+        input: RenderInput,
+        categoryMap: Map<Long, Category>,
+        selected: Set<Long>
+    ) = TasksListItem.TaskRow(
+        task,
+        task.categoryId?.let { categoryMap[it] },
+        task.id in selected,
+        task.seriesUuid?.let { input.rules[it] },
+        input.pendingReminders[task.uuid] ?: 0,
+        CardWork(
+            closedSeconds = input.work.closedSecondsOf(task.id),
+            liveSeconds = input.work.liveSecondsOf(task.id),
+            phase = input.work.phaseOf(task.id)
+        )
+    )
 
     private fun Priority.rank(): Int = when (this) {
         Priority.LOW -> 0
@@ -372,6 +433,93 @@ class TasksViewModel @Inject constructor(
             }
         }
     }
+
+    // ---------------------------------------------------------------- work tracking
+
+    /**
+     * The card's and the detail screen's one control: measure this task, or stop measuring it.
+     *
+     * The phase is read from the stored rows rather than from what the user last tapped, so two screens
+     * on one task agree and a task already being measured cannot be started twice. Nothing is started
+     * over another task's running timer: that answer comes from [resolveWorkConflict], after the user
+     * has been told which task holds it.
+     */
+    fun toggleWork(task: Task) {
+        viewModelScope.launch {
+            try {
+                val outcome = when (workTrackingRepository.snapshotOf(task).phase) {
+                    TrackingPhase.RUNNING -> workTrackingRepository.pause(task)
+                    TrackingPhase.PAUSED -> workTrackingRepository.resume(task)
+                    else -> workTrackingRepository.start(task)
+                }
+                if (outcome == TrackingOutcome.CONFLICT) askAboutConflict(task)
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
+    /** Ends the run on [task]: the open stretch is measured and stored, the session is finished. */
+    fun stopWork(task: Task) {
+        viewModelScope.launch {
+            try {
+                workTrackingRepository.stop(task)
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
+    /**
+     * Records time the user says they worked on [task] without the timer measuring it.
+     *
+     * The request goes to the tracking repository rather than to the task row, because whether the stretch
+     * can be written is a question about the history: an interval that ends before it starts measures
+     * nothing, and one whose time is already occupied by other measurements has to be shown to the user
+     * before it is saved. The answer is handed back for the screen to say.
+     */
+    fun recordManualWork(
+        task: Task,
+        startedAt: Long,
+        endedAt: Long,
+        onResult: (AdjustmentResult) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                onResult(workTrackingRepository.recordManualInterval(task, startedAt, endedAt))
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
+    private suspend fun askAboutConflict(target: Task) {
+        val running = workTrackingRepository.observeRunningSession().first()
+        if (running == null) {
+            _state.update { it.copy(error = "Nothing is being measured, so nothing was started") }
+        } else {
+            _workConflict.value = WorkConflict(running.taskId, running.taskTitle, target)
+        }
+    }
+
+    fun clearWorkConflict() {
+        _workConflict.value = null
+    }
+
+    /** The user said what happens to the other timer; the request is made again with that answer. */
+    fun resolveWorkConflict(resolution: ConflictResolution) {
+        val conflict = _workConflict.value ?: return
+        _workConflict.value = null
+        if (resolution == ConflictResolution.CANCEL) return
+        viewModelScope.launch {
+            try {
+                workTrackingRepository.start(conflict.targetTask, resolution)
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
 
     // ---------------------------------------------------------------- groups
 
@@ -636,6 +784,7 @@ class TasksViewModel @Inject constructor(
             try {
                 val task = if (taskId == 0L) null else taskRepository.getTaskById(taskId)
                 _currentTask.value = task
+                followWork(task)
                 _seriesRule.value = task?.let { recurrenceRepository.ruleFor(it) }
                 _reminderOffsets.value = task?.let { reminderRepository.offsetsFor(it.uuid) }
                     ?: emptyList()
@@ -649,6 +798,23 @@ class TasksViewModel @Inject constructor(
         _currentTask.value = null
         _seriesRule.value = null
         _reminderOffsets.value = emptyList()
+        followWork(null)
+    }
+
+    /**
+     * Follows the measured time of the task on screen, and stops following it when the screen moves on.
+     *
+     * One collector per editor instance rather than one per recomposition: the flow it collects is the
+     * ticker, which produces a value every second a stretch runs and no value at all while one does not.
+     */
+    private fun followWork(task: Task?) {
+        workFollow?.cancel()
+        _taskWork.value = WorkStatisticsRepository.TaskWorkView()
+        if (task != null) {
+            workFollow = viewModelScope.launch {
+                workStatisticsRepository.observeTaskWork(task).collect { _taskWork.value = it }
+            }
+        }
     }
 
     /** Whether the notification bar will actually show a reminder for this app. */

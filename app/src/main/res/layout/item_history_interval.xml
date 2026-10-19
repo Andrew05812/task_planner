@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One stretch under an opened history entry, with the two things the user can do to a measurement that
+     is already closed: correct it, or throw it away. Both act on this row only — the entry above stays,
+     because a session is the record that work was begun. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
+
+    <TextView
+        android:id="@+id/historyIntervalLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textAppearance="?attr/textAppearanceCaption"
+        tools:text="09:00 – 09:30, 30 min" />
+
+    <ImageButton
+        android:id="@+id/historyIntervalEdit"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/history_edit_interval"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_edit"
+        app:tint="@color/on_surface" />
+
+    <ImageButton
+        android:id="@+id/historyIntervalDelete"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/history_delete_interval"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_delete"
+        app:tint="@color/error" />
+</LinearLayout>

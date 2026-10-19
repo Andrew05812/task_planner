@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The hand-entry and correction form. Its own file because the same form serves both: an entry the user
+     is adding has no previous numbers to show, and a correction has the values it is replacing. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="24dp">
+
+    <TextView
+        android:id="@+id/workPrevious"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:visibility="gone"
+        tools:text="What this stretch said before: 2026-06-18 09:00 – 2026-06-18 09:30" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/workStartInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/history_start_hint"
+        android:inputType="datetime"
+        android:maxLines="1" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/workEndInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/history_end_hint"
+        android:inputType="datetime"
+        android:maxLines="1" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/workReasonInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/history_reason_hint"
+        android:inputType="textCapSentences"
+        android:maxLines="3" />
+</LinearLayout>

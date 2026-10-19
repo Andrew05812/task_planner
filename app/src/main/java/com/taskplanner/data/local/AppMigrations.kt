@@ -289,6 +289,110 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Work tracking. Three new tables and one nullable column: no existing table is rebuilt,
+            // no existing row is touched, so a database that already holds years of tasks gains the
+            // place to record measured time without anything of what it holds changing meaning.
+            //
+            // `completed_at` starts NULL, which is the honest state for a task completed by an earlier
+            // build — it was completed, but the instant was never recorded, and guessing it from
+            // `updated_at` or `archived_at` would put invented timestamps into a column whose whole
+            // purpose is to be trustworthy.
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `completed_at` INTEGER")
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `tracking_sessions` (`uuid` TEXT NOT NULL, " +
+                    "`user_id` INTEGER NOT NULL, `task_id` INTEGER NOT NULL, " +
+                    "`task_uuid` TEXT NOT NULL, `task_title` TEXT NOT NULL, " +
+                    "`state` TEXT NOT NULL DEFAULT 'RUNNING', `started_at` INTEGER NOT NULL, " +
+                    "`stopped_at` INTEGER, `zone_id` TEXT NOT NULL, `running_marker` TEXT, " +
+                    "`is_deleted` INTEGER NOT NULL DEFAULT 0, `deleted_at` INTEGER, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`uuid`), " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_tracking_sessions_running_marker` " +
+                    "ON `tracking_sessions` (`running_marker`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tracking_sessions_user_id` " +
+                    "ON `tracking_sessions` (`user_id`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tracking_sessions_user_id_task_id` " +
+                    "ON `tracking_sessions` (`user_id`, `task_id`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tracking_sessions_user_id_started_at` " +
+                    "ON `tracking_sessions` (`user_id`, `started_at`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `work_sessions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
+                    "NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, " +
+                    "`tracking_session_uuid` TEXT NOT NULL, `task_id` INTEGER NOT NULL, " +
+                    "`task_uuid` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, " +
+                    "`duration_seconds` INTEGER, `local_day` INTEGER NOT NULL, " +
+                    "`utc_offset_minutes` INTEGER NOT NULL, `source` TEXT NOT NULL DEFAULT 'TRACKER', " +
+                    "`open_marker` TEXT, `clock_anomaly` TEXT, `is_deleted` INTEGER NOT NULL DEFAULT 0, " +
+                    "`deleted_at` INTEGER, `sync_state` TEXT NOT NULL DEFAULT 'PENDING', " +
+                    "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            // One open interval per profile. A partial index (`WHERE ended_at IS NOT NULL`) would say
+            // it more directly, but Room cannot declare one, and an index Room does not know about
+            // would make the migrated schema differ from the exported one. NULLs are distinct in a
+            // SQLite unique index, so the marker column closes on pause and stop by itself.
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_work_sessions_user_id_open_marker` " +
+                    "ON `work_sessions` (`user_id`, `open_marker`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_work_sessions_user_id_started_at` " +
+                    "ON `work_sessions` (`user_id`, `started_at`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_work_sessions_user_id_local_day` " +
+                    "ON `work_sessions` (`user_id`, `local_day`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_work_sessions_user_id_task_id` " +
+                    "ON `work_sessions` (`user_id`, `task_id`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_work_sessions_tracking_session_uuid` " +
+                    "ON `work_sessions` (`tracking_session_uuid`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_work_sessions_uuid` " +
+                    "ON `work_sessions` (`uuid`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `work_interval_corrections` (`uuid` TEXT NOT NULL, " +
+                    "`interval_uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, " +
+                    "`old_started_at` INTEGER NOT NULL, `old_ended_at` INTEGER, " +
+                    "`new_started_at` INTEGER NOT NULL, `new_ended_at` INTEGER, `reason` TEXT, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`uuid`), " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_work_interval_corrections_interval_uuid` " +
+                    "ON `work_interval_corrections` (`interval_uuid`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_work_interval_corrections_user_id` " +
+                    "ON `work_interval_corrections` (`user_id`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -299,6 +403,7 @@ object AppMigrations {
         MIGRATION_7_8,
         MIGRATION_8_9,
         MIGRATION_9_10,
-        MIGRATION_10_11
+        MIGRATION_10_11,
+        MIGRATION_11_12
     )
 }

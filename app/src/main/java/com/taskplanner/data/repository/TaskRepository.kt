@@ -18,7 +18,8 @@ class TaskRepository @Inject constructor(
     private val taskDao: TaskDao,
     private val sessionRepository: SessionRepository,
     private val recurrenceRepository: RecurrenceRepository,
-    private val reminderRepository: ReminderRepository
+    private val reminderRepository: ReminderRepository,
+    private val workTrackingRepository: WorkTrackingRepository
 ) {
     /** Convenience alias kept for statistics/categories screens. */
     fun getAllTasks(): Flow<List<Task>> = observeActiveTasks()
@@ -104,6 +105,10 @@ class TaskRepository @Inject constructor(
      */
     suspend fun completeAndArchive(taskId: Long) {
         val task = taskDao.getTaskById(taskId)
+        // A timer left running on a finished task measures nothing anyone will ever read, so it is
+        // stopped here — the one place every local completion passes through — and the work it had
+        // already measured stays in the history under the task's title.
+        task?.let { workTrackingRepository.onTaskCompleted(it) }
         taskDao.archiveTask(taskId)
         recurrenceRepository.ensureOpenInstances()
         task?.let { reminderRepository.onTaskArchived(it) }
