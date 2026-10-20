@@ -823,4 +823,66 @@
         <item quantity="one">%d day from today</item>
         <item quantity="other">%d days from today</item>
     </plurals>
+
+    <!--
+        The insights screen itself: the two lists the switch reads, the four answers a card takes, and the
+        framing a card prints around the sentences its rule stored. Nothing here repeats a reading's own words —
+        title, body and basis come off the row — so these are only what a screen has to supply for itself: what
+        kind of claim it is being shown, over what window, with how much evidence, and where a tap leads.
+    -->
+    <string name="title_insights">Insights</string>
+    <string name="insights_scope_current">Being said now</string>
+    <string name="insights_scope_history">No longer said</string>
+    <string name="insights_empty_current">Nothing worth saying yet</string>
+    <string name="insights_empty_history">No reading the app has stopped making</string>
+    <string name="insight_answer_refused">There is nothing here to answer, so nothing was recorded.</string>
+
+    <string name="insight_kind_fact">Fact</string>
+    <string name="insight_kind_pattern">Pattern</string>
+    <string name="insight_kind_hypothesis">Hypothesis</string>
+
+    <string name="insight_card_period_range">Counted %1$s – %2$s</string>
+    <string name="insight_card_period_single">Counted on %1$s</string>
+    <string name="insight_card_confidence">%1$d%% sure</string>
+    <string name="insight_card_meta_joiner">" · "</string>
+    <plurals name="insight_card_sample">
+        <item quantity="one">%d row counted</item>
+        <item quantity="other">%d rows counted</item>
+    </plurals>
+
+    <string name="insight_action_task">Open the task</string>
+    <string name="insight_action_day">See the day</string>
+    <string name="insight_action_week">See the week</string>
+    <string name="insight_action_goal">Open the goal</string>
+    <string name="insight_action_habit">Open the habit</string>
+    <string name="insight_action_category">Open the category</string>
+
+    <!-- The four answers §7 asks for, in the reader's own words rather than the app's: an accepted reading is a
+         thing they mean to do, a useful one a thing worth knowing, a hidden one true at the wrong moment, and a
+         rejected one a reading of the profile the reader says is wrong. The last two retire the card; the first
+         two keep it, which is why the labels have to be readable as four different sentences. -->
+    <string name="insight_answer_accept">Accept</string>
+    <string name="insight_answer_useful">Useful</string>
+    <string name="insight_answer_hide">Hide</string>
+    <string name="insight_answer_reject">Not true</string>
+
+    <!--
+        The overload panel (§8): the window the readings were counted against, stated once and scrolled with
+        them. The caveat sentence is the requirement itself — an estimated length has to be called an estimate —
+        and the day rows say which figures are minutes, which are counts, and which day the panel calls busiest.
+    -->
+    <string name="workload_title">What the days ahead ask for</string>
+    <string name="workload_window_format">%1$s – %2$s</string>
+    <string name="workload_total_format">%1$s across %2$s</string>
+    <string name="workload_no_load">Nothing is planned over the %1$s.</string>
+    <string name="workload_approximate_note">Some of these lengths come from estimates, so the hours are approximate.</string>
+    <string name="workload_caveat_joiner">" "</string>
+    <plurals name="workload_length_unknown">
+        <item quantity="one">%d task states no length at all.</item>
+        <item quantity="other">%d tasks state no length at all.</item>
+    </plurals>
+    <string name="workload_baseline_format">%1$s on a usual working day, measured over %2$s.</string>
+    <string name="workload_no_baseline">No measured work behind these days, so nothing here is a comparison.</string>
+    <string name="workload_busiest">Busiest</string>
+    <string name="workload_row_approximate">Estimated lengths</string>
 </resources>

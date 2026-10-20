@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The insight marker: a lightbulb, the shape the app means by "this was noticed rather than typed". Drawn in
+     black like every other icon here, so the theme tints it and values-night needs no second copy. The base is
+     filled and the ray lines are strokes, so the mark reads at 24dp without turning into a smudge. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FF000000"
+        android:pathData="M9,21c0,0.55 0.45,1 1,1h4c0.55,0 1,-0.45 1,-1v-1H9V21zM12,2C8.14,2 5,5.14 5,9c0,2.38 1.19,4.47 3,5.74V17c0,0.55 0.45,1 1,1h6c0.55,0 1,-0.45 1,-1v-2.26c1.81,-1.27 3,-3.36 3,-5.74C19,5.14 15.86,2 12,2z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.4" android:strokeLineCap="round"
+        android:pathData="M3.2,7.5 L5.6,9.1" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.4" android:strokeLineCap="round"
+        android:pathData="M20.8,7.5 L18.4,9.1" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.4" android:strokeLineCap="round"
+        android:pathData="M12,0.6 L12,2" />
+</vector>

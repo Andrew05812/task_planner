@@ -124,20 +124,40 @@ class CalendarViewModel @Inject constructor(
      * does not hold the day the user was reading is a page they would have to find again by hand.
      */
     fun setMode(mode: CalendarMode) {
-        screen.update { current ->
-            val anchor = when (mode) {
-                CalendarMode.MONTH ->
-                    if (YearMonth.from(current.anchor) == YearMonth.from(current.selected)) current.anchor
-                    else current.selected
+        screen.update { current -> anchored(mode, current.anchor, current.selected) }
+    }
 
-                CalendarMode.WEEK ->
-                    if (CalendarMath.weekGrid(current.anchor).contains(current.selected)) current.anchor
-                    else current.selected
+    /**
+     * Opens the calendar on a day another screen named, at the level that day is read at.
+     *
+     * The insights panel and the heavy-day reading both count a particular day, and "go and look" that lands
+     * on today is no answer at all. The page follows the day through the same rule a mode change uses, so the
+     * calendar arrives holding the named day on screen rather than somewhere behind a page the reader has to
+     * find — and the day view, whose page *is* the day, cannot be shown a day it is not holding.
+     */
+    fun focus(date: LocalDate, mode: CalendarMode) {
+        screen.update { current -> anchored(mode, current.anchor, date) }
+    }
 
-                CalendarMode.DAY -> current.selected
-            }
-            Screen(mode, anchor, current.selected)
+    /**
+     * The page a mode shows for a selected day: the page already being read if it holds that day, otherwise
+     * the page the day itself opens.
+     *
+     * Shared by the two commands on purpose. A month, a week and a day are three magnifications of one place
+     * on the time line, so "zoom to this day" and "open on that day" have to agree about which page the day
+     * belongs to, and two copies of that rule would be two answers waiting to drift apart.
+     */
+    private fun anchored(mode: CalendarMode, anchor: LocalDate, selected: LocalDate): Screen {
+        val newAnchor = when (mode) {
+            CalendarMode.MONTH ->
+                if (YearMonth.from(anchor) == YearMonth.from(selected)) anchor else selected
+
+            CalendarMode.WEEK ->
+                if (CalendarMath.weekGrid(anchor).contains(selected)) anchor else selected
+
+            CalendarMode.DAY -> selected
         }
+        return Screen(mode, newAnchor, selected)
     }
 
     /**

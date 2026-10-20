@@ -19,7 +19,14 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,6 +51,10 @@ import org.robolectric.RobolectricTestRunner
  *    it, and the window says so — §8 asks for the caveat to be part of the figure rather than a footnote.
  *  * **Nothing here touches the work.** Automatic rescheduling and automatic priority changes are forbidden, so
  *    a read that issues no write is the guarantee, and the signature test keeps it that way.
+ *  * **The panel watches rather than re-asks.** The screen holds one Flow over the same two queries the one-shot
+ *    read runs, so a task written from the list or a stretch measured by the tracker redraws the fortnight by
+ *    itself; a second implementation of the window for the live case would be a panel that could disagree with
+ *    the insight beside it.
  *
  * The clock is parked at midday Wednesday 3 June 2026 in Europe/Berlin, as everywhere in this suite, so every
  * day the read names is a day the assertions can write out.
@@ -134,16 +145,21 @@ class WorkloadRepositoryTest {
     )
 
     /**
-     * A measured stretch of work on one of the days behind the window.
+     * A row with no date on it at all, which the window cannot hold.
      *
-     * It hangs off its own undated task, because an interval has to belong to a row and the day being measured
-     * must not also arrive as load — the baseline and the window are two different questions.
+     * Work has to be measured against something, and the day being recorded must not also arrive as load: the
+     * baseline and the window are two different questions, so an interval hangs off an undated task.
      */
-    private suspend fun worked(day: LocalDate, minutes: Long) {
-        val taskId = fixture.taskDao.insertTask(
-            Task(title = "Logged on $day", description = "", userId = userId)
+    private suspend fun undatedTask(title: String): Task {
+        val id = fixture.taskDao.insertTask(
+            Task(title = title, description = "", userId = userId)
         )
-        val task = fixture.taskDao.getTaskById(taskId)!!
+        return fixture.taskDao.getTaskById(id)!!
+    }
+
+    /** A measured stretch of work on one of the days behind the window. */
+    private suspend fun worked(day: LocalDate, minutes: Long) {
+        val task = undatedTask("Logged on $day")
         fixture.workSessionDao.insert(
             WorkSession(
                 uuid = "interval-$day-$minutes",
@@ -178,6 +194,44 @@ class WorkloadRepositoryTest {
 
     private suspend fun upcoming(): WorkloadRead =
         repository.upcoming().also { fixture.awaitIdle() }
+
+    /**
+     * The first frame a watched read draws, then nothing more.
+     *
+     * A Flow from Room publishes on its own thread, so a screen test cannot ask for the first frame by reading
+     * a value; it has to be looked at until it arrives. The collector goes away once it has, because nothing
+     * below compares a later frame with this one.
+     */
+    private suspend fun <T : Any> firstFrame(source: Flow<T>): T = coroutineScope {
+        val seen = CopyOnWriteArrayList<T>()
+        val watching = launch { source.collect { seen.add(it) } }
+        withTimeout(TIMEOUT_MILLIS) { while (seen.isEmpty()) delay(POLL_MILLIS) }
+        watching.cancel()
+        seen.first()
+    }
+
+    /**
+     * Watches [source] across [write], and hands back the frames it drew.
+     *
+     * The write goes through whichever side of the app owns it — the task repository, the tracker — rather than
+     * straight at a DAO, because the promise under test is that a screen which never asked again still moved.
+     * The last frame is compared with [expected], which re-runs the one-shot read over the rows on disk: the
+     * watched figure has to agree with the computed one, or the two paths through this class are two answers.
+     */
+    private suspend fun <T : Any> rebuiltBy(
+        source: Flow<T>,
+        write: suspend () -> Unit,
+        expected: suspend () -> T
+    ): List<T> = coroutineScope {
+        val frames = CopyOnWriteArrayList<T>()
+        val watching = launch { source.collect { frames.add(it) } }
+        withTimeout(TIMEOUT_MILLIS) { while (frames.isEmpty()) delay(POLL_MILLIS) }
+        write()
+        val wanted = expected()
+        withTimeout(TIMEOUT_MILLIS) { while (frames.lastOrNull() != wanted) delay(POLL_MILLIS) }
+        watching.cancel()
+        frames.toList()
+    }
 
     // -- what the window holds ------------------------------------------------------------------------
 
@@ -366,6 +420,91 @@ class WorkloadRepositoryTest {
         assertEquals(0, result.baselineDailyMinutes)
     }
 
+    // -- the read a screen holds open --------------------------------------------------------------------
+
+    @Test
+    fun `the watched read answers the one fortnight the panel would have computed for itself`() = runBlocking {
+        seed()
+        deadlineTask("Review", friday, estimate = 90)
+        worked(wednesday.minusDays(1), 60)
+
+        val frame = firstFrame(repository.observeUpcoming())
+        val computed = repository.upcoming().also { fixture.awaitIdle() }
+
+        assertEquals(
+            "the same window, folded by the same code, whatever path the rows arrived on",
+            computed,
+            frame
+        )
+        assertEquals(today, frame.fromDay)
+        assertEquals(today + 14, frame.toDay)
+        assertEquals(listOf(friday.toEpochDay()), frame.days.map { it.epochDay })
+        assertEquals(90, frame.days.single().minutes)
+        assertEquals(60, frame.baselineDailyMinutes)
+        assertEquals(1, frame.measuredDays)
+    }
+
+    @Test
+    fun `a task written on the other side of the app moves the watched window by itself`() = runBlocking {
+        seed()
+
+        val frames = rebuiltBy(
+            repository.observeUpcoming().map { it.totalTasks },
+            // Through the task repository, with no goal screen, panel or refresh in the way: the whole claim
+            // is that the panel is told.
+            write = {
+                fixture.taskRepository.insertTask(
+                    Task(
+                        title = "Answer the mail", description = "", userId = userId,
+                        dueDate = at(friday, 17, 0), estimatedMinutes = 30
+                    )
+                )
+            },
+            expected = { repository.upcoming().also { fixture.awaitIdle() }.totalTasks }
+        )
+
+        assertEquals(0, frames.first())
+        assertEquals("the panel drew the task nobody asked it about", 1, frames.last())
+    }
+
+    @Test
+    fun `work measured behind the window moves the watched baseline`() = runBlocking {
+        seed()
+        val reading = undatedTask("Reading")
+
+        val frames = rebuiltBy(
+            repository.observeUpcoming().map { it.baselineDailyMinutes },
+            // The tracker's own entry for work the timer did not measure, on a day behind the window: a
+            // stretch recorded while the screen is open has to change the pace the days ahead look heavy
+            // against, without the screen re-asking for it.
+            write = {
+                val result = fixture.workTrackingRepository.recordManualInterval(
+                    reading, at(wednesday.minusDays(1), 9), at(wednesday.minusDays(1), 10)
+                )
+                assertTrue("the tracker refused the entry: $result", result is AdjustmentResult.Accepted)
+            },
+            expected = { repository.upcoming().also { fixture.awaitIdle() }.baselineDailyMinutes }
+        )
+
+        assertEquals("no measured day yet", 0, frames.first())
+        assertEquals("an hour on one day is an hour a day", 60, frames.last())
+    }
+
+    @Test
+    fun `a watched read with nobody signed in is an empty fortnight, not a screen still waiting`() =
+        runBlocking {
+            fixture.timeBase.shiftTo(at(wednesday, 12, 0))
+
+            val frame = firstFrame(repository.observeUpcoming())
+
+            assertEquals(today, frame.fromDay)
+            assertEquals(today + 14, frame.toDay)
+            assertTrue(frame.days.isEmpty())
+            assertEquals(PriorityLoad(), frame.priorities)
+            assertEquals(0, frame.baselineDailyMinutes)
+            assertNull(frame.heaviestDay)
+        }
+
     // -- what the read must never do -------------------------------------------------------------------
 
     @Test
@@ -424,5 +563,16 @@ class WorkloadRepositoryTest {
         seed()
 
         assertNull(read(wednesday, saturday).heaviestDay)
+    }
+
+    companion object {
+        /**
+         * Room answers on its own thread, so a watched read is waited for rather than slept at; ten seconds is
+         * long enough for the busiest of these windows on the slowest machine in CI and short enough that a
+         * timeout is read as a failure rather than as bad luck.
+         */
+        private const val TIMEOUT_MILLIS = 10_000L
+
+        private const val POLL_MILLIS = 10L
     }
 }

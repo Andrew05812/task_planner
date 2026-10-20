@@ -8,11 +8,16 @@ import com.taskplanner.data.local.WorkStatisticsDao
 import com.taskplanner.data.model.DailyWorkSummary
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.tracking.TimeBase
+import com.taskplanner.data.tracking.WorkTicker
 import com.taskplanner.data.tracking.WorkTimeMath
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * The overload read (§8): what the days ahead are asked for, against the days behind that were measured.
@@ -35,12 +40,16 @@ import javax.inject.Singleton
  *  * **Nothing is invented about a duration.** A deadline nobody estimated arrives as a task on a day and no
  *    minutes, and the read carries [WorkloadRead.lengthUnknownTasks] so a panel can say how much of its own
  *    total is unmeasured.
+ *  * **The screen watches; it does not poll.** [observeUpcoming] holds the same two queries the one-shot
+ *    [read] runs and folds their rows through the same code, so a task written on the list screen or an hour
+ *    measured by the tracker redraws the fortnight by itself.
  */
 @Singleton
 class WorkloadRepository @Inject constructor(
     private val taskDao: TaskDao,
     private val workStatisticsDao: WorkStatisticsDao,
     private val sessionRepository: SessionRepository,
+    private val ticker: WorkTicker,
     private val timeBase: TimeBase
 ) {
 
@@ -58,26 +67,46 @@ class WorkloadRepository @Inject constructor(
     suspend fun read(fromDay: Long, toDay: Long): WorkloadRead {
         val userId = sessionRepository.currentUserId() ?: return WorkloadRead.empty(fromDay, toDay)
         val zone = CalendarMath.systemZone()
-        val fold = WorkloadMath.fold(
-            tasks = window(userId, fromDay, toDay, zone),
+        return workloadOf(
             fromDay = fromDay,
             toDay = toDay,
+            tasks = window(userId, fromDay, toDay, zone),
+            series = workStatisticsDao.dailySeries(userId, baselineFrom(fromDay), fromDay + 1L),
             zone = zone
         )
-        // The four weeks behind the window, up to and including its first day and no further: what was worked
-        // today is history the days ahead are judged against, and tomorrow is one of the days being judged.
-        val baseline = baselineOf(
-            workStatisticsDao.dailySeries(userId, fromDay - BASELINE_DAYS, fromDay + 1L)
-        )
-        return WorkloadRead(
-            fromDay = fromDay,
-            toDay = toDay,
-            days = fold.days,
-            priorities = fold.priorities,
-            lengthUnknownTasks = fold.lengthUnknownTasks,
-            baselineDailyMinutes = baseline.first,
-            measuredDays = baseline.second
-        )
+    }
+
+    /**
+     * The same read, held open: the panel that shows a fortnight and the rule that calls a day heavy both
+     * watch this, so the figures on the screen are the figures the insight beside them was written from.
+     *
+     * The window is the profile's today and the fourteen days after it, re-derived when the day changes — the
+     * ticker is what lets an app open past midnight move its fortnight without anyone touching it, the same way
+     * a goal's week moves. Both bounds go into both queries at the moment of subscription, and the fold and the
+     * baseline below are the ones the one-shot [read] runs, over the rows the watched queries return.
+     *
+     * A profile that is not signed in is an empty window rather than a silence: the screen has to be able to
+     * show the right fortnight with nothing in it, and it cannot do that from a Flow that never answers.
+     */
+    fun observeUpcoming(): Flow<WorkloadRead> = sessionRepository.currentUser.flatMapLatest { user ->
+        val userId = user?.id
+        val zone = CalendarMath.systemZone()
+        ticker.localDays(zone).flatMapLatest { today ->
+            val fromDay = today.toEpochDay()
+            val toDay = fromDay + HORIZON_DAYS
+            if (userId == null) {
+                flowOf(WorkloadRead.empty(fromDay, toDay))
+            } else {
+                combine(
+                    taskDao.observeWindow(
+                        userId,
+                        CalendarMath.startOfDay(LocalDate.ofEpochDay(fromDay), zone),
+                        CalendarMath.startOfDay(LocalDate.ofEpochDay(toDay + 1), zone)
+                    ),
+                    workStatisticsDao.observeDailySeries(userId, baselineFrom(fromDay), fromDay + 1L)
+                ) { tasks, series -> workloadOf(fromDay, toDay, tasks, series, zone) }
+            }
+        }
     }
 
     /**
@@ -98,6 +127,44 @@ class WorkloadRepository @Inject constructor(
             CalendarMath.startOfDay(LocalDate.ofEpochDay(fromDay), zone),
             CalendarMath.startOfDay(LocalDate.ofEpochDay(toDay + 1), zone)
         )
+
+    /**
+     * The window's rows, the measured days behind it and the two bounds, assembled into the one figure.
+     *
+     * Both readings end here, which is the point: nothing about a fortnight is decided twice, so the watch and
+     * the one-shot read cannot disagree about Thursday, and the only difference between them is which of the
+     * two Room paths handed over the rows.
+     */
+    private fun workloadOf(
+        fromDay: Long,
+        toDay: Long,
+        tasks: List<Task>,
+        series: List<DailyWorkSummary>,
+        zone: ZoneId
+    ): WorkloadRead {
+        val fold = WorkloadMath.fold(
+            tasks = tasks,
+            fromDay = fromDay,
+            toDay = toDay,
+            zone = zone
+        )
+        val baseline = baselineOf(series)
+        return WorkloadRead(
+            fromDay = fromDay,
+            toDay = toDay,
+            days = fold.days,
+            priorities = fold.priorities,
+            lengthUnknownTasks = fold.lengthUnknownTasks,
+            baselineDailyMinutes = baseline.first,
+            measuredDays = baseline.second
+        )
+    }
+
+    /**
+     * The four weeks behind a window's first day, up to and including that day and no further: what was worked
+     * today is history the days ahead are judged against, and tomorrow is one of the days being judged.
+     */
+    private fun baselineFrom(fromDay: Long): Long = fromDay - BASELINE_DAYS
 
     /**
      * The daily average the profile has actually been measured on, over the days behind the window.

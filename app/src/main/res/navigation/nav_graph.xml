@@ -33,6 +33,18 @@
         android:id="@+id/navigation_calendar"
         android:name="com.taskplanner.ui.calendar.CalendarFragment"
         android:label="@string/title_calendar">
+        <!-- The day another screen named. An insight about a heavy Thursday opens the calendar on that
+             Thursday rather than on today, because the reading the reader is following is about a day the
+             panel counted; -1 is the id no day has, which is how the graph says "open where you always
+             open". The level travels with it, so a week-long reading lands on a week. -->
+        <argument
+            android:name="dayEpoch"
+            android:defaultValue="-1L"
+            app:argType="long" />
+        <argument
+            android:name="mode"
+            android:defaultValue="MONTH"
+            app:argType="string" />
         <action
             android:id="@+id/action_calendar_to_task_detail"
             app:destination="@id/navigation_task_detail" />
@@ -82,6 +94,11 @@
         <action
             android:id="@+id/action_profile_to_habits"
             app:destination="@id/navigation_habits" />
+        <!-- What the app noticed about this account is the account's own reading, so it is opened from the
+             account: the insights are computed from this profile's rows and are of no use to another one. -->
+        <action
+            android:id="@+id/action_profile_to_insights"
+            app:destination="@id/navigation_insights" />
     </fragment>
 
     <fragment
@@ -221,6 +238,33 @@
 
     <!-- The one form for starting a habit and moving its schedule, in the same shape as the goal editor: an id
          no device ever gave a row is how the graph says "a new habit". -->
+    <!-- What the app noticed, and the fortnight of load those readings were taken against (§7, §8). Its own
+         screen rather than a block on the dashboard because a reading is not a figure: it carries the claim,
+         the evidence behind it, and the reader's own answer, and the history of what was said on earlier days
+         has nowhere else to live. Every action it offers goes to the rows the rule counted — the app never
+         acts on a reading by itself. -->
+    <fragment
+        android:id="@+id/navigation_insights"
+        android:name="com.taskplanner.ui.insights.InsightsFragment"
+        android:label="@string/title_insights"
+        tools:layout="@layout/fragment_insights">
+        <action
+            android:id="@+id/action_insights_to_task_detail"
+            app:destination="@id/navigation_task_detail" />
+        <action
+            android:id="@+id/action_insights_to_goal_detail"
+            app:destination="@id/navigation_goal_detail" />
+        <action
+            android:id="@+id/action_insights_to_habit_detail"
+            app:destination="@id/navigation_habit_detail" />
+        <action
+            android:id="@+id/action_insights_to_category_detail"
+            app:destination="@id/navigation_category_detail" />
+        <action
+            android:id="@+id/action_insights_to_calendar"
+            app:destination="@id/navigation_calendar" />
+    </fragment>
+
     <fragment
         android:id="@+id/navigation_habit_editor"
         android:name="com.taskplanner.ui.habits.HabitEditorFragment"

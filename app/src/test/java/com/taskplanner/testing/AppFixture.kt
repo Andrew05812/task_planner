@@ -200,7 +200,9 @@ class AppFixture(private val context: Context) : AutoCloseable {
      * Built before the insight repository because the insights are handed its figures: a heavy day named by a
      * rule and a heavy day shown by the panel have to be the same day, counted from the same rows.
      */
-    val workloadRepository = WorkloadRepository(taskDao, workStatisticsDao, sessionRepository, timeBase)
+    val workloadRepository = WorkloadRepository(
+        taskDao, workStatisticsDao, sessionRepository, workTicker, timeBase
+    )
 
     /**
      * The notebook of readings, wired after the two repositories it reads through.

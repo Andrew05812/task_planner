@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The overload panel (§8): the window the readings were taken against, stated once. It is the first row of
+     the same list the cards live in, so the panel and the cards scroll together and cannot be two accounts of
+     two different fortnights. Days are listed because a total on its own cannot be acted on — the reader's
+     question is which day is the crowded one, and the busiest is marked rather than made the reader work it
+     out. Nothing here moves work: a day row is a way to that day, and the decision stays with the reader. -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="8dp"
+    android:layout_marginTop="4dp"
+    app:cardElevation="2dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/workloadTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/workload_title"
+            android:textAppearance="?attr/textAppearanceSubtitle1"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/workloadWindow"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/workloadTitle"
+            tools:text="Jun 3, 2026 – Jun 17, 2026" />
+
+        <TextView
+            android:id="@+id/workloadTotal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="?attr/textAppearanceBody1"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/workloadWindow"
+            tools:text="165 min across 15 days" />
+
+        <TextView
+            android:id="@+id/workloadCaveat"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:textColor="@color/health_due_today"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/workloadTotal"
+            tools:text="These lengths come from estimates, so the hours are approximate. 2 tasks state no length."
+            tools:visibility="visible" />
+
+        <com.taskplanner.ui.components.StackedBarView
+            android:id="@+id/workloadPriority"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/workloadCaveat" />
+
+        <com.taskplanner.ui.components.ChartLegendView
+            android:id="@+id/workloadPriorityLegend"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/workloadPriority" />
+
+        <TextView
+            android:id="@+id/workloadBaseline"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="?attr/textAppearanceBody2"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/workloadPriorityLegend"
+            tools:text="1 h 30 min on a usual working day, over 12 days" />
+
+        <LinearLayout
+            android:id="@+id/workloadDays"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical"
+            app:layout_constraintTop_toBottomOf="@id/workloadBaseline"
+            tools:layout_height="wrap_content" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.material.card.MaterialCardView>

@@ -12,6 +12,21 @@ import com.taskplanner.data.model.WorkSession
 import kotlinx.coroutines.flow.Flow
 
 /**
+ * The trend the work screens and the overload read both ask for: one row per local day the user actually
+ * worked, with nothing between them invented.
+ *
+ * Written once and given to both readings of it, because a baseline the panel watches and a baseline a rule
+ * computes have to be the same four weeks; two copies of a statement are two answers waiting to drift apart.
+ * The bound is half-open (`< :toDay`), as every period in this file is.
+ */
+internal const val DAILY_SERIES_QUERY: String =
+    "SELECT w.local_day AS localDay, COALESCE(SUM(w.duration_seconds), 0) AS seconds, " +
+        "COUNT(w.id) AS intervals FROM work_sessions w " +
+        "WHERE w.user_id = :userId AND w.local_day >= :fromDay AND w.local_day < :toDay " +
+        "AND w.ended_at IS NOT NULL AND w.is_deleted = 0 " +
+        "GROUP BY w.local_day ORDER BY w.local_day ASC"
+
+/**
  * Every total the work-tracking screens show, computed by SQLite.
  *
  * Three rules hold throughout, and they are the reason this DAO exists as its own file:
@@ -32,6 +47,14 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface WorkStatisticsDao {
+
+    /** The trend, read once. */
+    @Query(DAILY_SERIES_QUERY)
+    suspend fun dailySeries(userId: Long, fromDay: Long, toDay: Long): List<DailyWorkSummary>
+
+    /** The same trend as a Flow, for the screen that stays on the window while the work moves under it. */
+    @Query(DAILY_SERIES_QUERY)
+    fun observeDailySeries(userId: Long, fromDay: Long, toDay: Long): Flow<List<DailyWorkSummary>>
 
     @Query(
         "SELECT COALESCE(SUM(duration_seconds), 0) FROM work_sessions " +
@@ -122,16 +145,6 @@ interface WorkStatisticsDao {
             "GROUP BY c.id ORDER BY seconds DESC"
     )
     suspend fun workByCategory(userId: Long, fromDay: Long, toDay: Long): List<CategoryWorkSummary>
-
-    /** The trend: one row per local day the user actually worked, with nothing between them invented. */
-    @Query(
-        "SELECT w.local_day AS localDay, COALESCE(SUM(w.duration_seconds), 0) AS seconds, " +
-            "COUNT(w.id) AS intervals FROM work_sessions w " +
-            "WHERE w.user_id = :userId AND w.local_day >= :fromDay AND w.local_day < :toDay " +
-            "AND w.ended_at IS NOT NULL AND w.is_deleted = 0 " +
-            "GROUP BY w.local_day ORDER BY w.local_day ASC"
-    )
-    suspend fun dailySeries(userId: Long, fromDay: Long, toDay: Long): List<DailyWorkSummary>
 
     @Query(
         "SELECT AVG(duration_seconds) FROM work_sessions " +
