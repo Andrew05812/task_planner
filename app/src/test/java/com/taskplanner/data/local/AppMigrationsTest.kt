@@ -225,7 +225,10 @@ class AppMigrationsTest {
     fun `migrations are idempotently registered for every retained version pair`() {
         val pairs = AppMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11, 11 to 12, 12 to 13),
+            listOf(
+                1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11,
+                11 to 12, 12 to 13, 13 to 14
+            ),
             pairs
         )
     }
@@ -503,6 +506,262 @@ class AppMigrationsTest {
                     "AND completed_at IS NOT NULL AND completed_at >= 1000 AND completed_at < 2000"
             )
         )
+    }
+
+    @Test
+    fun `migration 13 to 14 adds goals and habits and rewrites no stored value`() {
+        val db = open(13)
+        val before = counts(db)
+        val beforeTasks = db.rows(
+            "SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id"
+        )
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        builder.assertMatchesSchema(db, 14, "MIGRATION_13_14")
+
+        assertEquals("adding six tables moves no row", before, counts(db))
+        assertEquals(
+            "and changes no value in the work the new features count",
+            beforeTasks,
+            db.rows("SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id")
+        )
+        assertTrue(
+            "goals, habits, and the history rows of each — nothing else arrives",
+            db.tableNames().containsAll(
+                setOf(
+                    "goals", "goal_tasks", "goal_value_changes",
+                    "habits", "habit_checks", "habit_check_changes"
+                )
+            )
+        )
+        // An upgrade cannot invent an aim or a schedule the user never set, and it has to invent no
+        // progress either: the figures are computed from the task and interval rows that are already
+        // here, which is why this step reads and writes none of them.
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM goals"))
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM habits"))
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM habit_checks"))
+    }
+
+    @Test
+    fun `migration 13 to 14 applies twice without adding a duplicate index`() {
+        val db = open(13)
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        val marks = db.rows("PRAGMA index_list('habit_checks')").size
+        db.migrate(AppMigrations.MIGRATION_13_14)
+
+        assertEquals(marks, db.rows("PRAGMA index_list('habit_checks')").size)
+        builder.assertMatchesSchema(db, 14, "MIGRATION_13_14 applied twice")
+    }
+
+    @Test
+    fun `migration 13 to 14 makes one live mark per habit per day a database rule`() {
+        val db = open(13)
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        db.exec(habit("h1"))
+        db.exec(check("h1", "c1", day = 20_000L))
+
+        val rejected = runCatching { db.exec(check("h1", "c2", day = 20_000L)) }
+        assertTrue("a day marked twice must not be insertable", rejected.isFailure)
+        assertTrue(
+            "and it fails on the marker's unique index, not incidentally",
+            rejected.exceptionOrNull()?.message?.contains("UNIQUE") == true
+        )
+
+        // Taking the day back nulls the marker, so the slot is free again — and the retired row keeps
+        // its own local_day, which is what lets the correction history say when the mark stood.
+        db.exec("UPDATE habit_checks SET day_marker = NULL, is_deleted = 1 WHERE uuid = 'c1'")
+        db.exec(check("h1", "c2", day = 20_000L))
+        assertEquals("20000", db.firstCell("SELECT local_day FROM habit_checks WHERE uuid = 'c1'"))
+        assertNull(db.firstCell("SELECT day_marker FROM habit_checks WHERE uuid = 'c1'"))
+
+        // Two habits can be kept on the same day, because the rule is per habit rather than per day.
+        db.exec(habit("h2", title = "Read"))
+        db.exec(check("h2", "c3", day = 20_000L))
+        assertEquals(
+            listOf("c1", "c2", "c3"),
+            db.rows("SELECT uuid FROM habit_checks ORDER BY uuid").map { it[0] }
+        )
+        assertEquals(
+            "only the live marks count",
+            2L,
+            db.firstLong("SELECT COUNT(*) FROM habit_checks WHERE day_marker IS NOT NULL AND is_deleted = 0")
+        )
+    }
+
+    @Test
+    fun `migration 13 to 14 links a goal to a task it does not own and keeps the link after the task is gone`() {
+        val db = open(13)
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        nameTasks(db)
+        db.exec(goal("g1", type = "TASK_SET", target = 5))
+
+        // A link to a task that has not arrived yet is normal: an import or a sync pull can deliver the
+        // goal before the card, and nothing points at `tasks` to refuse it.
+        db.exec(link("g1", "task-not-here-yet", addedAt = 1L))
+        db.exec(link("g1", "task-completed", addedAt = 2L))
+        assertEquals(2L, db.firstLong("SELECT COUNT(*) FROM goal_tasks WHERE goal_uuid = 'g1'"))
+
+        // The same task named twice is the same request: the composite key refuses the second link, and
+        // a denominator that counted one piece of work twice would be a goal that can never be reached.
+        assertTrue(runCatching { db.exec(link("g1", "task-completed", addedAt = 3L)) }.isFailure)
+        assertEquals(2L, db.firstLong("SELECT COUNT(*) FROM goal_tasks WHERE goal_uuid = 'g1'"))
+
+        db.exec("DELETE FROM tasks WHERE uuid = 'task-todo'")
+        assertEquals(
+            "deleting a task takes no goal and no link with it",
+            2L,
+            db.firstLong("SELECT COUNT(*) FROM goal_tasks WHERE goal_uuid = 'g1'")
+        )
+        assertEquals(1L, db.firstLong("SELECT COUNT(*) FROM goals WHERE uuid = 'g1'"))
+    }
+
+    @Test
+    fun `a goal created after the upgrade counts work recorded before it`() {
+        val db = open(13)
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        nameTasks(db)
+        db.exec(goal("g1", type = "TASK_SET", target = 2))
+        db.exec(link("g1", "task-completed", addedAt = 1L))
+        db.exec(link("g1", "task-todo", addedAt = 2L))
+
+        // Exactly the statement the goal screen runs, against the schema the migration produces rather
+        // than against Room's generated code: the denominator counts both links, the numerator only the
+        // task that is actually finished, and the row that no longer exists would be reported as
+        // missing rather than dropped from the figure.
+        val progress = "SELECT COUNT(*), " +
+            "COALESCE(SUM(CASE WHEN t.is_deleted = 0 AND UPPER(t.status) IN ('COMPLETED', 'DONE') " +
+            "THEN 1 ELSE 0 END), 0), " +
+            "COALESCE(SUM(CASE WHEN t.uuid IS NULL THEN 1 ELSE 0 END), 0) " +
+            "FROM goal_tasks gt LEFT JOIN tasks t ON t.uuid = gt.task_uuid AND t.user_id = gt.user_id " +
+            "WHERE gt.goal_uuid = 'g1' AND gt.user_id = ${Seeder.USER_ID}"
+        assertEquals(listOf("2", "1", "0"), db.rows(progress).single())
+
+        db.exec("DELETE FROM tasks WHERE uuid = 'task-todo'")
+        assertEquals(
+            "and after the second task is gone the goal still asks for two, one of them finished",
+            listOf("2", "1", "1"),
+            db.rows(progress).single()
+        )
+    }
+
+    @Test
+    fun `a habit created after the upgrade can be marked on a day it predates`() {
+        val db = open(13)
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        // A measured interval from before the habit existed, which is the work a TIME_SPENT-shaped
+        // figure and a backdated mark both reach into.
+        db.exec(session("s1"))
+        db.exec(interval("s1", "i1", openMarker = null))
+        db.exec("UPDATE work_sessions SET ended_at = 2, local_day = 20000, duration_seconds = 1800 WHERE uuid = 'i1'")
+
+        db.exec(habit("h1", startDay = 19_000L))
+        db.exec(check("h1", "c1", day = 19_500L))
+
+        assertEquals(
+            "the mark needs no row in any new table other than its own",
+            listOf("19500"),
+            db.rows(
+                "SELECT local_day FROM habit_checks WHERE habit_uuid = 'h1' " +
+                    "AND user_id = ${Seeder.USER_ID} AND day_marker IS NOT NULL AND is_deleted = 0"
+            ).map { it[0] }
+        )
+        assertEquals(
+            "and the seconds a habit is asked for are already measurable in the old table",
+            1800L,
+            db.firstLong(
+                "SELECT COALESCE(SUM(duration_seconds), 0) FROM work_sessions " +
+                    "WHERE user_id = ${Seeder.USER_ID} AND local_day = 20000 AND is_deleted = 0"
+            )
+        )
+    }
+
+    @Test
+    fun `migration 13 to 14 gives every new row the profile it belongs to and nothing else`() {
+        val db = open(13)
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        db.exec("PRAGMA foreign_keys = ON")
+
+        mapOf(
+            "goals" to "INSERT INTO goals (uuid, user_id, title, type, target_value, created_at, updated_at) " +
+                "VALUES ('ghost-goal', 999, 'Nothing', 'TASK_COUNT', 5, 1, 1)",
+            "goal_tasks" to "INSERT INTO goal_tasks (goal_uuid, task_uuid, user_id, created_at, added_at) " +
+                "VALUES ('g1', 't1', 999, 1, 1)",
+            "goal_value_changes" to "INSERT INTO goal_value_changes " +
+                "(uuid, goal_uuid, user_id, field, created_at, updated_at) VALUES ('v1', 'g1', 999, 'target', 1, 1)",
+            "habits" to "INSERT INTO habits (uuid, user_id, title, frequency, start_day, created_at, updated_at) " +
+                "VALUES ('ghost-habit', 999, 'Run', 'DAILY', 1, 1, 1)",
+            "habit_checks" to "INSERT INTO habit_checks " +
+                "(uuid, habit_uuid, user_id, local_day, utc_offset_minutes, created_at, updated_at) " +
+                "VALUES ('c1', 'h1', 999, 20000, 60, 1, 1)",
+            "habit_check_changes" to "INSERT INTO habit_check_changes " +
+                "(uuid, check_uuid, habit_uuid, user_id, old_local_day, created_at, updated_at) " +
+                "VALUES ('k1', 'c1', 'h1', 999, 20000, 1, 1)"
+        ).forEach { (table, sql) ->
+            val rejected = runCatching { db.exec(sql) }
+            assertTrue("$table must refuse a profile that does not exist", rejected.isFailure)
+        }
+        assertEquals(
+            "so no query of a real profile can be reached by a row of an imaginary one",
+            0L,
+            db.firstLong("SELECT COUNT(*) FROM habits") + db.firstLong("SELECT COUNT(*) FROM goals")
+        )
+    }
+
+    @Test
+    fun `migration 13 to 14 leaves the sweep's candidate read seekable by profile`() {
+        val db = open(13)
+        db.migrate(AppMigrations.MIGRATION_13_14)
+        repeat(20) { index -> db.exec(habit("h$index")) }
+
+        assertEquals(
+            listOf("user_id", "remind_minute_of_day"),
+            db.rows("PRAGMA index_info('index_habits_user_id_remind_minute_of_day')").map { it[2] }
+        )
+        val plan = db.rows(
+            "EXPLAIN QUERY PLAN SELECT uuid FROM habits WHERE user_id = ${Seeder.USER_ID} " +
+                "AND is_deleted = 0 AND archived_at IS NULL AND remind_minute_of_day IS NOT NULL " +
+                "AND (reminded_on_day IS NULL OR reminded_on_day != 20000)"
+        ).flatten().joinToString(" ")
+        assertTrue(
+            "the sweep's one question per profile must be answered by an index, not by walking the " +
+                "table; the plan was: $plan",
+            !Regex("SCAN habits\\b").containsMatchIn(plan)
+        )
+    }
+
+    private fun habit(
+        uuid: String,
+        title: String = "Run",
+        startDay: Long = 19_000L,
+        userId: Long = Seeder.USER_ID
+    ) = "INSERT INTO habits (uuid, user_id, title, frequency, days_mask, start_day, remind_minute_of_day, " +
+        "created_at, updated_at) VALUES ('$uuid', $userId, '$title', 'DAILY', 0, $startDay, 420, 1, 1)"
+
+    private fun check(
+        habitUuid: String,
+        uuid: String,
+        day: Long,
+        userId: Long = Seeder.USER_ID
+    ) = "INSERT INTO habit_checks (uuid, habit_uuid, user_id, local_day, utc_offset_minutes, day_marker, " +
+        "created_at, updated_at) VALUES ('$uuid', '$habitUuid', $userId, $day, 60, $day, 1, 1)"
+
+    private fun goal(uuid: String, type: String, target: Long, userId: Long = Seeder.USER_ID) =
+        "INSERT INTO goals (uuid, user_id, title, type, target_value, created_at, updated_at) VALUES " +
+            "('$uuid', $userId, 'Aim', '$type', $target, 1, 1)"
+
+    private fun link(goalUuid: String, taskUuid: String, addedAt: Long, userId: Long = Seeder.USER_ID) =
+        "INSERT INTO goal_tasks (goal_uuid, task_uuid, user_id, created_at, added_at) VALUES " +
+            "('$goalUuid', '$taskUuid', $userId, 1, $addedAt)"
+
+    /**
+     * Gives the two seeded tasks the uuids the goal links name.
+     *
+     * The seeder writes rows the way an upgrade leaves them — the uuid column carries its default — so a
+     * test that links a goal to a task has to name it first, exactly as migration 6 to 7 did for a
+     * database that came from before uuids existed.
+     */
+    private fun nameTasks(db: SqliteTestDatabase) {
+        db.exec("UPDATE tasks SET uuid = 'task-completed' WHERE id = ${Seeder.COMPLETED_TASK_ID}")
+        db.exec("UPDATE tasks SET uuid = 'task-todo' WHERE id = ${Seeder.TODO_TASK_ID}")
     }
 
     private fun otherUser(id: Long) =

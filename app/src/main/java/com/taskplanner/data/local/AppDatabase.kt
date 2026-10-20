@@ -4,6 +4,12 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.taskplanner.data.model.Category
+import com.taskplanner.data.model.Goal
+import com.taskplanner.data.model.GoalTaskLink
+import com.taskplanner.data.model.GoalValueChange
+import com.taskplanner.data.model.Habit
+import com.taskplanner.data.model.HabitCheck
+import com.taskplanner.data.model.HabitCheckChange
 import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.Task
@@ -23,9 +29,15 @@ import com.taskplanner.data.model.WorkSession
         Reminder::class,
         TrackingSession::class,
         WorkSession::class,
-        WorkIntervalCorrection::class
+        WorkIntervalCorrection::class,
+        Goal::class,
+        GoalTaskLink::class,
+        GoalValueChange::class,
+        Habit::class,
+        HabitCheck::class,
+        HabitCheckChange::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -40,6 +52,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workSessionDao(): WorkSessionDao
     abstract fun workStatisticsDao(): WorkStatisticsDao
     abstract fun taskStatisticsDao(): TaskStatisticsDao
+    abstract fun goalDao(): GoalDao
+    abstract fun habitDao(): HabitDao
 
     companion object {
         const val NAME = "taskplanner.db"
