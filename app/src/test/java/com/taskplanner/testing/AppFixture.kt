@@ -11,6 +11,7 @@ import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.HabitDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
@@ -36,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.taskplanner.data.repository.GoalRepository
 import com.taskplanner.data.repository.GroupRepository
+import com.taskplanner.data.repository.HabitRepository
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
@@ -170,6 +172,10 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val goalRepository = GoalRepository(
         database, goalDao, taskDao, workStatisticsDao, sessionRepository, timeBase, workTicker
     )
+
+    /** A habit's figures come only from its own marks, so nothing else is needed to compute them. */
+    val habitDao: HabitDao = database.habitDao()
+    val habitRepository = HabitRepository(database, habitDao, sessionRepository, timeBase, workTicker)
 
     val taskRepository = TaskRepository(
         taskDao, sessionRepository, recurrenceRepository, reminderRepository, workTrackingRepository

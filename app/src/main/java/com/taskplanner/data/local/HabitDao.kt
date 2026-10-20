@@ -173,6 +173,20 @@ interface HabitDao {
     )
     fun observeAllLiveDays(habitUuid: String, userId: Long): Flow<List<Long>>
 
+    /**
+     * [liveDays] in its reactive shape: the same bare-column range read, re-run when a mark moves.
+     *
+     * Days rather than whole rows because the figures are arithmetic on days, and because a card list that
+     * watched [observeLiveChecks] would pull every column of the window for every habit on the screen to
+     * read one number off each.
+     */
+    @Query(
+        "SELECT local_day FROM habit_checks WHERE habit_uuid = :habitUuid AND user_id = :userId " +
+            "AND is_deleted = 0 AND day_marker IS NOT NULL " +
+            "AND local_day BETWEEN :fromInclusive AND :toInclusive ORDER BY local_day ASC"
+    )
+    fun observeLiveDays(habitUuid: String, userId: Long, fromInclusive: Long, toInclusive: Long): Flow<List<Long>>
+
     @Query(
         "SELECT COUNT(*) FROM habit_checks WHERE habit_uuid = :habitUuid AND user_id = :userId " +
             "AND is_deleted = 0 AND day_marker IS NOT NULL " +
@@ -299,8 +313,4 @@ interface HabitDao {
     suspend fun clearRemindedOnDay(userId: Long, day: Long, now: Long)
 
     // endregion
-
-    /** The signal the habits screen re-reads itself on: the moment anything in the profile's habits moved. */
-    @Query("SELECT COALESCE(MAX(updated_at), 0) FROM habits WHERE user_id = :userId")
-    fun observeChanges(userId: Long): Flow<Long>
 }

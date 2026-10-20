@@ -126,8 +126,9 @@ sealed class GoalWriteResult {
  *    can read.
  *
  * Every write takes the profile first and every read of a row by uuid checks that profile, so §16's
- * isolation holds for a goal the way it does for an interval: after an import two accounts can hold rows
- * under the same uuid, and the one that does not own a row cannot edit it.
+ * isolation holds for a goal the way it does for an interval. The place it really bites is the set: a task's
+ * uuid is not unique across profiles, so a goal that names one resolves it inside its own account and never
+ * reaches another profile's row of the same name.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
