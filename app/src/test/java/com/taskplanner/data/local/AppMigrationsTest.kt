@@ -227,7 +227,7 @@ class AppMigrationsTest {
         assertEquals(
             listOf(
                 1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11,
-                11 to 12, 12 to 13, 13 to 14, 14 to 15
+                11 to 12, 12 to 13, 13 to 14, 14 to 15, 15 to 16
             ),
             pairs
         )
@@ -846,6 +846,137 @@ class AppMigrationsTest {
             !Regex("SCAN insights\\b").containsMatchIn(plan)
         )
     }
+
+    @Test
+    fun `migration 15 to 16 adds the grants the reader earns and rewrites no stored value`() {
+        val db = open(15)
+        val before = counts(db)
+        val beforeTasks = db.rows(
+            "SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id"
+        )
+        db.migrate(AppMigrations.MIGRATION_15_16)
+        builder.assertMatchesSchema(db, 16, "MIGRATION_15_16")
+
+        assertEquals("adding one table moves no row", before, counts(db))
+        assertEquals(
+            "and changes nothing the grants are counted from",
+            beforeTasks,
+            db.rows("SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id")
+        )
+        // An upgrade earns nothing on its own: a grant is the record of a rule meeting its condition, and the
+        // rules have to look at the rows first. A freshly upgraded profile therefore opens an empty history.
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM achievements"))
+    }
+
+    @Test
+    fun `migration 15 to 16 applies twice without adding a duplicate index`() {
+        val db = open(15)
+        db.migrate(AppMigrations.MIGRATION_15_16)
+        val marks = db.rows("PRAGMA index_list('achievements')").size
+        db.migrate(AppMigrations.MIGRATION_15_16)
+
+        assertEquals(marks, db.rows("PRAGMA index_list('achievements')").size)
+        builder.assertMatchesSchema(db, 16, "MIGRATION_15_16 applied twice")
+    }
+
+    @Test
+    fun `migration 15 to 16 makes one grant per achievement per profile a database rule`() {
+        val db = open(15)
+        db.migrate(AppMigrations.MIGRATION_15_16)
+        db.exec(achievement("a1", key = "first_task", earnedDay = 20_000L, earnedAt = 1L))
+
+        // §11's "не начисляй достижение повторно" is a property of the schema here. A second grant of the same
+        // achievement is refused even though it carries a different date: the row that stands is the one with
+        // the date the reader earned it on, and nothing about the collision rewrites it.
+        val rejected = runCatching {
+            db.exec(achievement("a2", key = "first_task", earnedDay = 21_000L, earnedAt = 999L))
+        }
+        assertTrue("one achievement cannot be granted twice", rejected.isFailure)
+        assertTrue(
+            "and it fails on the profile-and-achievement index, not on the uuid",
+            rejected.exceptionOrNull()?.message?.contains(
+                "achievements.user_id, achievements.achievement_key"
+            ) == true
+        )
+        assertEquals(
+            "the original grant, with its own date, is what survives",
+            listOf("a1"),
+            db.rows("SELECT uuid FROM achievements").map { it[0] }
+        )
+
+        // A different achievement for the same profile, and the same achievement for a different profile, are
+        // both real grants: the rule is one-per-achievement, not one-per-reader.
+        db.exec(achievement("a3", key = "tasks_10", earnedDay = 20_001L, earnedAt = 2L))
+        db.exec(otherUser(999))
+        db.exec(achievement("a4", key = "first_task", userId = 999))
+        assertEquals(listOf("a1", "a3", "a4"), db.rows("SELECT uuid FROM achievements ORDER BY uuid").map { it[0] })
+    }
+
+    @Test
+    fun `migration 15 to 16 gives every grant the profile it belongs to and nothing else`() {
+        val db = open(15)
+        db.migrate(AppMigrations.MIGRATION_15_16)
+        db.exec("PRAGMA foreign_keys = ON")
+
+        val rejected = runCatching { db.exec(achievement("ghost", key = "first_task", userId = 999)) }
+        assertTrue("achievements must refuse a profile that does not exist", rejected.isFailure)
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM achievements"))
+    }
+
+    @Test
+    fun `migration 15 to 16 keeps a grant after the work that earned it is gone`() {
+        val db = open(15)
+        db.migrate(AppMigrations.MIGRATION_15_16)
+        db.exec("PRAGMA foreign_keys = ON")
+        db.exec(achievement("a1", key = "first_task", earnedDay = 20_000L))
+
+        // The grant names no task. It is a record of a count that was true on a day, so deleting the very task
+        // that first tipped the counter cannot take the achievement back — and a foreign key into `tasks` would
+        // have made the reader's history editable by anybody who archived their work.
+        db.exec("DELETE FROM tasks WHERE id = ${Seeder.COMPLETED_TASK_ID}")
+        assertEquals(1L, db.firstLong("SELECT COUNT(*) FROM achievements"))
+
+        // The profile is different: an account being removed takes its grants with it, because a grant is a
+        // reading of that account's work and there is nobody left it belongs to.
+        db.exec("DELETE FROM users WHERE id = ${Seeder.USER_ID}")
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM achievements"))
+    }
+
+    @Test
+    fun `migration 15 to 16 leaves the history read seekable by profile`() {
+        val db = open(15)
+        db.migrate(AppMigrations.MIGRATION_15_16)
+        repeat(30) { index ->
+            db.exec(
+                achievement(
+                    "a$index",
+                    key = "achievement_$index",
+                    earnedDay = 20_000L + index,
+                    earnedAt = index.toLong()
+                )
+            )
+        }
+
+        val plan = db.rows(
+            "EXPLAIN QUERY PLAN SELECT * FROM achievements WHERE user_id = ${Seeder.USER_ID} " +
+                "ORDER BY earned_at DESC, id DESC"
+        ).flatten().joinToString(" ")
+        assertTrue(
+            "the screen opens on the newest grants, so the ordering has to be sought rather than sorted out " +
+                "of every grant the profile holds; the plan was: $plan",
+            !Regex("SCAN achievements\\b").containsMatchIn(plan)
+        )
+    }
+
+    private fun achievement(
+        uuid: String,
+        key: String,
+        earnedDay: Long = 20_000L,
+        earnedAt: Long = 1L,
+        userId: Long = Seeder.USER_ID
+    ) = "INSERT INTO achievements (uuid, user_id, achievement_key, category, title, description, unit, " +
+        "target_value, progress_value, earned_day, earned_at) VALUES ('$uuid', $userId, '$key', 'BEGINNING', " +
+        "'First one done', '1 task completed', 'TASKS', 1, 1, $earnedDay, $earnedAt)"
 
     private fun insight(
         uuid: String,

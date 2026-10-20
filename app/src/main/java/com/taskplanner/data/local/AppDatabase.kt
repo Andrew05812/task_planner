@@ -3,6 +3,7 @@ package com.taskplanner.data.local
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.taskplanner.data.model.Achievement
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Goal
 import com.taskplanner.data.model.GoalTaskLink
@@ -37,9 +38,10 @@ import com.taskplanner.data.model.WorkSession
         Habit::class,
         HabitCheck::class,
         HabitCheckChange::class,
-        Insight::class
+        Insight::class,
+        Achievement::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -57,6 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun goalDao(): GoalDao
     abstract fun habitDao(): HabitDao
     abstract fun insightDao(): InsightDao
+    abstract fun achievementDao(): AchievementDao
 
     companion object {
         const val NAME = "taskplanner.db"

@@ -604,6 +604,48 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // One new table and its indices, and no change to any stored row. An achievement is a grant the
+            // profile earned from work that already lives in `tasks`, `goals`, `habits` and `work_sessions`, so
+            // an upgraded database can be scanned by the rules on its first pass — which is why the row carries
+            // no foreign key into the rows that triggered it and no `sync_state`. What it does carry is the
+            // number, its unit and its wording: a grant is a record of a moment, and none of that can be
+            // rebuilt once the counter moves.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `achievements` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
+                    "NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, " +
+                    "`achievement_key` TEXT NOT NULL, `category` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                    "`description` TEXT NOT NULL, `unit` TEXT NOT NULL, `target_value` INTEGER NOT NULL, " +
+                    "`progress_value` INTEGER NOT NULL, `earned_day` INTEGER NOT NULL, " +
+                    "`earned_at` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_achievements_user_id` " +
+                    "ON `achievements` (`user_id`)"
+            )
+            // The history is read newest-earned first, so the ordering is sought inside the profile rather than
+            // sorted out of every grant it holds.
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_achievements_user_id_earned_at` " +
+                    "ON `achievements` (`user_id`, `earned_at`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_achievements_uuid` " +
+                    "ON `achievements` (`uuid`)"
+            )
+            // "Never granted twice" as a database rule rather than a convention in the pass: one achievement is
+            // one grant per profile, and a second copy of it collides here before it can re-date the first.
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                    "`index_achievements_user_id_achievement_key` " +
+                    "ON `achievements` (`user_id`, `achievement_key`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -618,6 +660,7 @@ object AppMigrations {
         MIGRATION_11_12,
         MIGRATION_12_13,
         MIGRATION_13_14,
-        MIGRATION_14_15
+        MIGRATION_14_15,
+        MIGRATION_15_16
     )
 }

@@ -8,6 +8,7 @@ import com.taskplanner.data.auth.AuthRepository
 import com.taskplanner.data.backup.BackupRepository
 import com.taskplanner.data.calendar.CalendarRepository
 import com.taskplanner.data.habit.HabitReminderCoordinator
+import com.taskplanner.data.local.AchievementDao
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GoalDao
@@ -216,6 +217,15 @@ class AppFixture(private val context: Context) : AutoCloseable {
         database, insightDao, workloadRepository, taskStatisticsDao, workStatisticsDao, goalDao, habitDao,
         habitRepository, goalRepository, sessionRepository, timeBase, context
     )
+
+    /**
+     * The grants the reader earned: the schema v16 table.
+     *
+     * The dao is exposed rather than wrapped here because the rules that write it are built in the test that
+     * needs them — a grant depends on which reads a rule is allowed to make, and the fixture should not decide
+     * that for every test.
+     */
+    val achievementDao: AchievementDao = database.achievementDao()
 
     val taskRepository = TaskRepository(
         taskDao, sessionRepository, recurrenceRepository, reminderRepository, workTrackingRepository
