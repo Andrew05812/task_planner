@@ -40,6 +40,16 @@ enum class GoalType {
      */
     DEADLINE;
 
+    /**
+     * Whether this type's figure is answered by tasks the user named, rather than by the whole profile.
+     *
+     * The screens need the distinction to decide whether a goal has a set to show and add to at all; a
+     * count or time goal reads its figure out of everything the account holds, so a picker beside it would
+     * offer work that is already counted.
+     */
+    val namesTasks: Boolean
+        get() = this == TASK_SET || this == DEADLINE
+
     companion object {
         /** A row written by a newer build is read as a count rather than thrown away. */
         fun fromName(value: String?): GoalType =

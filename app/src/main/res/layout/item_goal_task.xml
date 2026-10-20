@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One task a goal names. The row is a way to the task, and the mark beside it is the goal's own answer:
+     the task keeps its single row everywhere else in the app, and nothing here is a copy of it. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="48dp"
+    android:orientation="horizontal"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="8dp">
+
+    <TextView
+        android:id="@+id/goalTaskTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textAppearance="?attr/textAppearanceBody1"
+        tools:text="Write the introduction" />
+
+    <ImageView
+        android:id="@+id/goalTaskDone"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="8dp"
+        android:contentDescription="@string/goal_task_done"
+        android:src="@drawable/ic_check_circle"
+        app:tint="@color/status_done"
+        tools:visibility="visible" />
+
+    <!-- Long-pressing the row takes the task out of the goal, which is a second action on the same row and
+         so gets its own invisible target rather than a visible button on every line. -->
+    <ImageButton
+        android:id="@+id/goalTaskUnlink"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/goal_unlink_confirm_title"
+        android:src="@drawable/ic_close"
+        app:tint="?android:attr/textColorSecondary" />
+
+</LinearLayout>

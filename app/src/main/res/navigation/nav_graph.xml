@@ -72,6 +72,11 @@
         <action
             android:id="@+id/action_profile_to_settings"
             app:destination="@id/navigation_settings" />
+        <!-- The aims are the account's own business, so they are opened from the account rather than from a
+             column of the task list — and only when there is an account to hold them. -->
+        <action
+            android:id="@+id/action_profile_to_goals"
+            app:destination="@id/navigation_goals" />
     </fragment>
 
     <fragment
@@ -128,5 +133,50 @@
         android:id="@+id/navigation_settings"
         android:name="com.taskplanner.ui.settings.SettingsFragment"
         android:label="@string/title_settings" />
+
+    <!-- What the profile is working toward. Its own screen rather than a block on the task list because a
+         goal is not a task: it is a figure the tasks answer to, and it is read from the account the way
+         settings are. -->
+    <fragment
+        android:id="@+id/navigation_goals"
+        android:name="com.taskplanner.ui.goals.GoalsFragment"
+        android:label="@string/title_goals"
+        tools:layout="@layout/fragment_goals">
+        <action
+            android:id="@+id/action_goals_to_goal_detail"
+            app:destination="@id/navigation_goal_detail" />
+        <action
+            android:id="@+id/action_goals_to_goal_editor"
+            app:destination="@id/navigation_goal_editor" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_goal_detail"
+        android:name="com.taskplanner.ui.goals.GoalDetailFragment"
+        android:label="@string/title_goal_detail"
+        tools:layout="@layout/fragment_goal_detail">
+        <argument
+            android:name="goalId"
+            app:argType="long" />
+        <action
+            android:id="@+id/action_goal_detail_to_goal_editor"
+            app:destination="@id/navigation_goal_editor" />
+        <action
+            android:id="@+id/action_goal_detail_to_task_detail"
+            app:destination="@id/navigation_task_detail" />
+    </fragment>
+
+    <!-- The one form for setting an aim and moving one. The id defaults to the value no device ever gave a
+         row, so the list's "add" button needs no second destination to open an empty form. -->
+    <fragment
+        android:id="@+id/navigation_goal_editor"
+        android:name="com.taskplanner.ui.goals.GoalEditorFragment"
+        android:label="@string/title_goal_editor"
+        tools:layout="@layout/fragment_goal_editor">
+        <argument
+            android:name="goalId"
+            android:defaultValue="-1L"
+            app:argType="long" />
+    </fragment>
 
 </navigation> 

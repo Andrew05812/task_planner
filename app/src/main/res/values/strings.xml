@@ -514,4 +514,116 @@
         <item quantity="one">%1$d of %2$d task</item>
         <item quantity="other">%1$d of %2$d tasks</item>
     </plurals>
+
+    <!-- Goals. The four types are one row that differs only in what it counts, so the words below name the
+         unit rather than describing four screens. The figure of a count or set goal is a plural because the
+         denominator decides the noun ("1 of 2 tasks" still says tasks), and the time goal is not because
+         both sides of it are already spelled out as a duration by WorkTimeFormat. -->
+    <string name="title_goals">Goals</string>
+    <string name="goal_add">Set a goal</string>
+    <string name="goal_edit">Edit the goal</string>
+    <string name="goals_scope_open">Live</string>
+    <string name="goals_scope_archived">Put away</string>
+    <string name="goals_empty_open">No goals yet. A goal counts work this app already measures, so setting
+        one changes nothing about the tasks themselves.</string>
+    <string name="goals_empty_archived">Nothing is put away. Archiving a goal takes it off the live list and
+        keeps everything it counted.</string>
+
+    <string name="goal_type_task_count">Tasks finished</string>
+    <string name="goal_type_task_set">Tasks named</string>
+    <string name="goal_type_time_spent">Time measured</string>
+    <string name="goal_type_deadline">Everything named, by a date</string>
+
+    <string name="goal_time_figure">%1$s of %2$s measured</string>
+
+    <plurals name="goal_count_figure">
+        <item quantity="one">%1$d of %2$d finished</item>
+        <item quantity="other">%1$d of %2$d finished</item>
+    </plurals>
+
+    <plurals name="goal_set_figure">
+        <item quantity="one">%1$d of %2$d task done</item>
+        <item quantity="other">%1$d of %2$d tasks done</item>
+    </plurals>
+
+    <!-- A link whose task row is gone still counts in the denominator, so the card says out loud why the
+         figure it prints can never reach its target by doing the work that is left. -->
+    <plurals name="goal_missing_note">
+        <item quantity="one">%1$d named task is no longer here</item>
+        <item quantity="other">%1$d named tasks are no longer here</item>
+    </plurals>
+
+    <string name="goal_state_no_target">No figure set</string>
+    <string name="goal_state_reached">Reached</string>
+    <string name="goal_state_late">Past its date</string>
+
+    <string name="goal_window_format">%1$s – %2$s</string>
+    <string name="goal_window_open">now</string>
+    <string name="goal_deadline_format">By %1$s</string>
+    <string name="goal_meta_joiner">"  ·  "</string>
+
+    <string name="goal_detail_tasks">Tasks this goal names</string>
+    <string name="goal_detail_history">How the aim changed</string>
+    <string name="goal_detail_empty_tasks">Nothing is named yet. Add the tasks this goal is about.</string>
+    <string name="goal_detail_empty_history">The target has not been moved since the goal was set.</string>
+    <string name="goal_task_missing">This task is no longer here</string>
+    <string name="goal_task_done">Finished</string>
+    <string name="goal_link_task">Add a task</string>
+    <string name="goal_unlink_confirm_title">Take this task out of the goal?</string>
+    <string name="goal_unlink_confirm_message">The task stays where it is. The goal stops asking for it, and
+        its figure moves with it.</string>
+    <string name="goal_unlink_confirm_yes">Take it out</string>
+    <string name="goal_unlinked_toast">The task is out of the goal. Its own row was not touched.</string>
+    <string name="goal_not_found">This goal is no longer here.</string>
+    <string name="goal_archive">Put this goal away</string>
+    <string name="goal_unarchive">Bring it back</string>
+    <string name="goal_delete">Throw this goal away</string>
+    <string name="goal_archived_toast">The goal is put away. Everything it counted is untouched.</string>
+    <string name="goal_unarchived_toast">The goal is back on the live list.</string>
+    <string name="goal_removed_toast">The goal is out of the list. Its tasks were not touched.</string>
+    <string name="goal_archived_note">This goal is put away. Its figure is still here, and nothing it counted
+        was changed.</string>
+    <string name="goal_delete_confirm_title">Throw this goal away?</string>
+    <string name="goal_delete_confirm_message">The goal and the record of its targets leave the list. The
+        tasks it named are untouched, and their rows stay in the database.</string>
+    <string name="goal_delete_confirm_yes">Throw it away</string>
+
+    <!-- The one line a history row prints: which of the goal\'s own figures moved, and from what to what.
+         Both values are the words the editor printed when they were written, which is why they are text. -->
+    <string name="goal_change_format">%1$s: %2$s → %3$s</string>
+    <string name="goal_change_when_format">%1$s — %2$s</string>
+    <string name="goal_change_unset">nothing</string>
+    <string name="goal_change_reason_format">— %1$s</string>
+    <string name="goal_change_no_reason">no reason given</string>
+    <string name="goal_field_title">Title</string>
+    <string name="goal_field_type">What it counts</string>
+    <string name="goal_field_target">Figure</string>
+    <string name="goal_field_window">Window</string>
+    <string name="goal_field_deadline">Date</string>
+
+    <string name="title_goal_detail">The goal</string>
+    <string name="title_goal_editor">Goal</string>
+    <string name="goal_editor_title_hint">What you are aiming at</string>
+    <string name="goal_editor_counts_label">What it counts</string>
+    <string name="goal_editor_target_hint">Figure to reach (optional)</string>
+    <string name="goal_editor_window_from_hint">From (yyyy-MM-dd)</string>
+    <string name="goal_editor_window_to_hint">To (yyyy-MM-dd)</string>
+    <string name="goal_editor_deadline_hint">By (yyyy-MM-dd HH:mm)</string>
+    <string name="goal_editor_reason_hint">Why it changed (optional)</string>
+    <string name="goal_save">Save the goal</string>
+    <string name="goal_saved">The goal is saved.</string>
+    <string name="goal_target_is_time">Seconds of measured work, for example 5400 for an hour and a half.</string>
+    <string name="goal_tasks_note">A goal that names tasks counts the ones you add here. Nothing is copied:
+        the task keeps its own row and its own screen.</string>
+    <string name="goal_bad_target">Write the figure as a whole number, or leave it empty.</string>
+    <string name="goal_bad_dates">The last day cannot fall before the first.</string>
+    <string name="goal_bad_day">Write the day as yyyy-MM-dd, for example 2026-10-01.</string>
+    <string name="goal_bad_instant">Write the date as yyyy-MM-dd HH:mm, for example 2026-12-31 23:59.</string>
+    <string name="goal_deadline_required">A goal that asks for everything by a date needs that date.</string>
+    <string name="goal_reject_not_found">This goal is no longer in your account, so nothing was written.</string>
+    <string name="goal_reject_blank_title">A goal needs a name before it can be saved.</string>
+    <string name="goal_reject_task">That task is not in this account, so the goal was not pointed at it.</string>
+    <string name="goal_no_profile">No profile is signed in, so there is nothing to save a goal to.</string>
+    <string name="goal_no_tasks_to_link">There is no open task left to name.</string>
+    <string name="goal_link_saved">The goal now counts that task.</string>
 </resources>

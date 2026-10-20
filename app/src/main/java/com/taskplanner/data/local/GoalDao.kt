@@ -38,6 +38,12 @@ data class GoalTaskRow(
     val addedAt: Long
 )
 
+/** One task the goal could still be pointed at: enough to choose it by, and nothing more. */
+data class GoalTaskCandidate(
+    val taskUuid: String,
+    val title: String
+)
+
 /**
  * The rows a goal owns — its own figures, its links, and the history of its targets.
  *
@@ -62,6 +68,26 @@ interface GoalDao {
 
     @Query("SELECT * FROM goals WHERE uuid = :uuid AND user_id = :userId AND is_deleted = 0")
     suspend fun getGoal(uuid: String, userId: Long): Goal?
+
+    /**
+     * The goal this device's row id names, for a screen opened by id.
+     *
+     * The uuid is what travels between devices and the local id is what a screen on this one resolves, so
+     * a detail destination needs this read the same way `tasks` does. `is_deleted = 0` keeps a tombstone
+     * off the screen: a goal that was thrown away has an account of its own, not a card.
+     */
+    @Query("SELECT * FROM goals WHERE user_id = :userId AND id = :goalId AND is_deleted = 0 LIMIT 1")
+    suspend fun getGoalById(userId: Long, goalId: Long): Goal?
+
+    /**
+     * The same row, watched.
+     *
+     * A list rather than a nullable single row, because Room gives a Flow of one item no "the row went
+     * away" emission to make — an empty list is the answer that says so. The detail screen reads it as
+     * "nothing here to show", which is also what a signed-out profile produces.
+     */
+    @Query("SELECT * FROM goals WHERE user_id = :userId AND id = :goalId AND is_deleted = 0")
+    fun observeGoalById(userId: Long, goalId: Long): Flow<List<Goal>>
 
     /**
      * The goals on the screen, open ones first by default.
@@ -153,6 +179,25 @@ interface GoalDao {
     fun observeTaskRows(goalUuid: String, userId: Long): Flow<List<GoalTaskRow>>
 
     /**
+     * The tasks this account could still name for this goal, newest activity first.
+     *
+     * A projection of two columns with a bound, not the task table: the picker behind "add a task" asks
+     * which work the goal should point at, and the whole row — its reminders, its repeat rule, its plan —
+     * has nothing to do with that question. Already-named tasks are excluded in SQL so the list the user
+     * reads is the list that can still be added, and the limit keeps a profile with thousands of open
+     * tasks from turning one tap into a screen of scrolling.
+     */
+    @Query(
+        "SELECT t.uuid AS taskUuid, t.title AS title FROM tasks t " +
+            "WHERE t.user_id = :userId AND t.is_deleted = 0 " +
+            "AND UPPER(t.status) NOT IN ('COMPLETED', 'DONE') " +
+            "AND t.uuid NOT IN (" +
+            "SELECT gt.task_uuid FROM goal_tasks gt WHERE gt.goal_uuid = :goalUuid AND gt.user_id = :userId) " +
+            "ORDER BY t.updated_at DESC LIMIT :limit"
+    )
+    suspend fun linkableTasks(goalUuid: String, userId: Long, limit: Int): List<GoalTaskCandidate>
+
+    /**
      * The two numbers a set goal is drawn from, in one scan of its links.
      *
      * `UPPER(status) IN ('COMPLETED', 'DONE')` is the same spelling rule the dashboard counts with and
@@ -213,6 +258,19 @@ interface GoalDao {
             "ORDER BY created_at ASC"
     )
     suspend fun valueChangesOf(goalUuid: String, userId: Long): List<GoalValueChange>
+
+    /**
+     * The same story, watched.
+     *
+     * The detail screen prints it under the figures, and an edit made in the editor has to appear there
+     * without the user leaving the screen and coming back: the row and its history are one transaction, so
+     * the two Flows are invalidated together and the card and its story move in the same frame.
+     */
+    @Query(
+        "SELECT * FROM goal_value_changes WHERE goal_uuid = :goalUuid AND user_id = :userId " +
+            "ORDER BY created_at ASC"
+    )
+    fun observeValueChanges(goalUuid: String, userId: Long): Flow<List<GoalValueChange>>
 
     @Query(
         "SELECT * FROM goal_value_changes WHERE user_id = :userId ORDER BY created_at DESC LIMIT :limit"

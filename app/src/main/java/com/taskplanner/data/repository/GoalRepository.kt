@@ -5,6 +5,7 @@ import com.taskplanner.data.calendar.CalendarMath
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.GoalSetProgress
+import com.taskplanner.data.local.GoalTaskCandidate
 import com.taskplanner.data.local.GoalTaskRow
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.WorkStatisticsDao
@@ -368,6 +369,19 @@ class GoalRepository @Inject constructor(
         return goalDao.linksOf(goalUuid, userId).map { it.taskUuid }
     }
 
+    /**
+     * What the goal could still be pointed at, for the screen's "add a task" list.
+     *
+     * Two columns of the profile's own open tasks, already-named ones left out and the rest cut off at
+     * [limit]: the question a picker asks is "which work", and answering it does not need a reminder rule,
+     * a plan, or a thousand rows the user will not scroll through. Profile-scoped like every other read
+     * here, so a uuid from another account cannot even appear as a choice.
+     */
+    suspend fun linkableTasks(goalUuid: String, limit: Int = 50): List<GoalTaskCandidate> {
+        val userId = sessionRepository.currentUserId() ?: return emptyList()
+        return goalDao.linkableTasks(goalUuid, userId, limit)
+    }
+
     /** The aim's own history — what the target was, in the order the user changed it. */
     suspend fun valueChangesOf(goalUuid: String): List<GoalValueChange> {
         val userId = sessionRepository.currentUserId() ?: return emptyList()
@@ -468,6 +482,52 @@ class GoalRepository @Inject constructor(
             val userId = user?.id
             if (userId == null) flowOf(emptyList()) else goalDao.observeTaskRows(goalUuid, userId)
         }
+
+    /** The story of one goal's targets, as the detail screen prints it. */
+    fun observeValueChanges(goalUuid: String): Flow<List<GoalValueChange>> =
+        sessionRepository.currentUser.flatMapLatest { user ->
+            val userId = user?.id
+            if (userId == null) flowOf(emptyList()) else goalDao.observeValueChanges(goalUuid, userId)
+        }
+
+    /**
+     * The goal a screen was opened on, by the row id this device gave it.
+     *
+     * The row and its figure come back together for the same reason the list hands over [GoalWithProgress]:
+     * a detail screen that read the target from one query and the progress from another could print "3 of 5"
+     * beside a figure that was measured against 4. Null is the answer for a goal this profile does not hold,
+     * including one it never owned.
+     */
+    fun observeGoalWithProgress(
+        goalId: Long,
+        zone: ZoneId = CalendarMath.systemZone()
+    ): Flow<GoalWithProgress?> = sessionRepository.currentUser.flatMapLatest { user ->
+        val userId = user?.id
+        if (userId == null) {
+            flowOf(null)
+        } else {
+            goalDao.observeGoalById(userId, goalId).flatMapLatest { rows ->
+                val goal = rows.firstOrNull()
+                if (goal == null) {
+                    flowOf(null)
+                } else {
+                    ticker.localDays(zone).flatMapLatest { day ->
+                        progressFlow(goal, userId, day, zone).map { GoalWithProgress(goal, it) }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The stored row a screen was opened on, with no figure beside it.
+     *
+     * The editor prefills from this and nothing else: it asks what the user typed last time, which is a
+     * question about the row, not about the work. Reading a progress figure here would put a number the
+     * editor cannot edit in the form beside the numbers it can.
+     */
+    suspend fun goalById(goalId: Long): Goal? =
+        sessionRepository.currentUserId()?.let { goalDao.getGoalById(it, goalId) }
 
     private fun observeGoals(
         open: Boolean,

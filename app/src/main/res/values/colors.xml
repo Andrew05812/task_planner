@@ -29,6 +29,9 @@
     <color name="status_in_progress">#FF2196F3</color>
     <color name="status_done">#FF4CAF50</color>
     <color name="status_paused">#FFFFA000</color>
+    <!-- The panel a state word sits on. Colourless by design: the state's own colour goes on the word, so
+         the panel only has to separate it from the card, on the light theme and the dark one. -->
+    <color name="state_badge_fill">#14000000</color>
     <color name="red">#FFFF0000</color>
 
     <!-- Swipe action panel -->

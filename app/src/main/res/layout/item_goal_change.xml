@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One recorded move of one of the goal's own figures: what changed, from what to what, and why the user
+     said it did. The values are the words the editor printed when they were written, which is why a row can
+     be read years later without knowing what type each field had at the time. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="6dp">
+
+    <TextView
+        android:id="@+id/goalChangeWhat"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceBody2"
+        tools:text="Figure: 40 → 20" />
+
+    <TextView
+        android:id="@+id/goalChangeWhen"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:textColor="?android:attr/textColorSecondary"
+        tools:text="Oct 15, 2026 — the deadline moved" />
+
+</LinearLayout>
