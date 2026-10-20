@@ -438,6 +438,17 @@
     <string name="reminder_body_category_format">Category: %1$s</string>
     <string name="reminder_deadline_format">%1$s, %2$s</string>
 
+    <!-- Habits: the daily ask, carried by the same alarms and the same shade as a task reminder.
+         A habit gets its own channel because a nudge about a day should not be as loud as a promise
+         about a minute, and because switching one off must not silence the other. -->
+    <string name="habit_reminder_channel_name">Habit reminders</string>
+    <string name="habit_reminder_channel_description">Tells you a habit is owed today, at the time you chose</string>
+    <string name="habit_reminder_subtitle">Habit</string>
+    <string name="habit_reminder_content">Time to keep this today</string>
+    <string name="habit_reminder_body_time_format">Asked at %1$s</string>
+    <string name="habit_reminder_body_week_format">%1$d of %2$d kept this week</string>
+    <string name="habit_reminder_action_mark">Keep it</string>
+
     <!-- The dashboard: one period's figures, drawn rather than listed. -->
     <string name="dashboard_trend_title">Days of the period</string>
     <string name="dashboard_trend_work">Time measured each day</string>

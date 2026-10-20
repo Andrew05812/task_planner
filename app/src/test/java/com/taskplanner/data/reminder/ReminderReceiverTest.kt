@@ -6,13 +6,22 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.data.calendar.CalendarMath
+import com.taskplanner.data.habit.HabitReminderIdentity
+import com.taskplanner.data.model.Habit
+import com.taskplanner.data.model.HabitFrequency
 import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.model.User
 import com.taskplanner.data.recurrence.RecurrenceCalculator
+import com.taskplanner.data.repository.HabitWriteResult
+import com.taskplanner.data.tracking.WorkTimeMath
 import com.taskplanner.testing.AppFixture
+import java.time.LocalDate
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -33,8 +42,12 @@ import org.robolectric.shadows.ShadowAlarmManager
  * announcement per minute, a button that finishes only its own task, and a device that wakes up with
  * its alarms put back the way the database says they should be.
  *
+ * The habit broadcasts are checked the same way, because they arrive over the same receiver: a habit's
+ * own alarm and a habit's two buttons, and the one reboot pass that puts both kinds of schedule back.
+ *
  * The receiver has no clock of its own — it asks the repositories for what is due now — so the rows
- * are placed relative to the wall clock instead of a faked one.
+ * are placed relative to the wall clock instead of a faked one. A habit is scheduled by a minute of the
+ * day rather than by an instant, so those tests park the app's clock where their schedule is readable.
  */
 @RunWith(RobolectricTestRunner::class)
 class ReminderReceiverTest {
@@ -53,16 +66,32 @@ class ReminderReceiverTest {
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
     }
 
+    @After
+    fun tearDown() {
+        // The fixture's two database threads have to be finished before the storage goes away. A query
+        // still running when this test ends is reported against whichever test runs next, and that test
+        // then fails for something this one did.
+        fixture.close()
+    }
+
     private fun now(): Long = System.currentTimeMillis()
 
-    private suspend fun send(action: String, reminderUuid: String? = null) =
-        ReminderReceiver.dispatch(
-            action,
-            reminderUuid,
-            fixture.reminderRepository,
-            fixture.taskRepository,
-            fixture.recurrenceRepository
-        )
+    private suspend fun send(
+        action: String,
+        reminderUuid: String? = null,
+        habitUuid: String? = null,
+        habitDay: Long = ReminderReceiver.NO_DAY
+    ) = ReminderReceiver.dispatch(
+        action,
+        reminderUuid,
+        habitUuid,
+        habitDay,
+        fixture.reminderRepository,
+        fixture.taskRepository,
+        fixture.recurrenceRepository,
+        fixture.habitRepository,
+        fixture.habitReminders
+    )
 
     /**
      * A reminder whose minute went by a couple of minutes ago — the state an alarm broadcast is sent
@@ -322,9 +351,200 @@ class ReminderReceiverTest {
         assertEquals(reminder.triggerAt, fixture.reminderDao.findByUuid(reminder.uuid)!!.triggerAt)
     }
 
+    // region habit broadcasts
+
+    /**
+     * Parks the app's clock five minutes past seven on the day the suite runs, and returns that instant.
+     *
+     * A habit is asked for at a minute of the *day*, so unlike the task rows above — which are placed
+     * relative to the real wall clock — a habit needs the clock parked where its schedule is readable.
+     * Everything a habit test then compares against is derived from this same instant.
+     */
+    private fun parkJustAfterSeven(): Long {
+        val zone = CalendarMath.systemZone()
+        val today = LocalDate.ofEpochDay(WorkTimeMath.epochDayOf(System.currentTimeMillis(), zone))
+        val parked = today.atTime(7, 5).atZone(zone).toInstant().toEpochMilli()
+        fixture.timeBase.shiftTo(parked)
+        return parked
+    }
+
+    private fun dayOf(instant: Long): Long = WorkTimeMath.epochDayOf(instant, CalendarMath.systemZone())
+
+    /** The same minute on the day after [instant], which is what a re-armed habit slot must hold. */
+    private fun nextMorning(instant: Long): Long =
+        LocalDate.ofEpochDay(dayOf(instant) + 1).atTime(7, 0)
+            .atZone(CalendarMath.systemZone()).toInstant().toEpochMilli()
+
+    private suspend fun habitOwnedBy(owner: User, title: String): Habit {
+        val uuid = when (
+            val result = fixture.habitRepository.create(
+                title = title,
+                frequency = HabitFrequency.DAILY,
+                startDay = dayOf(fixture.timeBase.wallMillis()) - 7,
+                remindMinuteOfDay = MORNING
+            )
+        ) {
+            is HabitWriteResult.Saved -> result.habitUuid
+            is HabitWriteResult.Rejected -> throw AssertionError("creation refused: ${result.reason}")
+        }
+        return fixture.habitDao.getHabit(uuid, owner.id)!!
+    }
+
+    private fun postedHabit(target: Habit): Notification? =
+        shadowOf(notifications).getNotification(HabitReminderIdentity.notificationIdOf(target.uuid))
+
+    private fun habitTrigger(target: Habit): Long? = shadowOf(alarms).scheduledAlarms
+        .firstOrNull { it.operation?.let { op -> shadowOf(op).requestCode } ==
+            HabitReminderIdentity.alarmRequestCodeOf(target.uuid) }
+        ?.triggerAtMs
+
+    /** The state a reboot leaves the whole device in: the rows are there, the wakeups are not. */
+    private fun loseEveryAlarm() {
+        shadowOf(alarms).scheduledAlarms.toList()
+            .forEach { alarms.cancel(it.operation!!) }
+    }
+
+    @Test
+    fun `the habit broadcast announces today and moves its alarm to tomorrow`() = runTest {
+        val user = fixture.signIn()
+        val parked = parkJustAfterSeven()
+        val day = dayOf(parked)
+        val habit = habitOwnedBy(user, "Run")
+
+        send(ReminderReceiver.ACTION_HABIT_DUE)
+
+        assertEquals("Run", postedHabit(habit)!!.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(
+            "the day that was told about is the day that stops being asked for",
+            day,
+            fixture.habitDao.getHabit(habit.uuid, user.id)!!.remindedOnDay
+        )
+        assertEquals(
+            "and the habit's one slot already holds tomorrow's minute",
+            nextMorning(parked),
+            habitTrigger(habit)
+        )
+    }
+
+    @Test
+    fun `the keep button marks the day the notice asked about and takes the notice down`() = runTest {
+        val user = fixture.signIn()
+        val parked = parkJustAfterSeven()
+        val day = dayOf(parked)
+        val habit = habitOwnedBy(user, "Stretch")
+        send(ReminderReceiver.ACTION_HABIT_DUE)
+        assertNotNull(postedHabit(habit))
+
+        send(ReminderReceiver.ACTION_HABIT_MARK, habitUuid = habit.uuid, habitDay = day)
+
+        assertEquals(
+            "the day the notice named, not the day the tap fell on",
+            listOf(day),
+            fixture.habitDao.liveDays(habit.uuid, user.id, day, day)
+        )
+        assertNull(postedHabit(habit))
+        assertEquals(habitTrigger(habit), nextMorning(parked))
+
+        send(ReminderReceiver.ACTION_HABIT_DUE)
+        assertEquals(
+            "a kept day is not asked about again by the next sweep",
+            0,
+            shadowOf(notifications).allNotifications.size
+        )
+    }
+
+    @Test
+    fun `the snooze button defers the habit's own slot and owes the day again`() = runTest {
+        val user = fixture.signIn()
+        val parked = parkJustAfterSeven()
+        val day = dayOf(parked)
+        val habit = habitOwnedBy(user, "Read")
+        send(ReminderReceiver.ACTION_HABIT_DUE)
+
+        send(ReminderReceiver.ACTION_HABIT_SNOOZE, habitUuid = habit.uuid, habitDay = day)
+
+        assertNull(postedHabit(habit))
+        assertNull(
+            "the note comes down, because the ask was postponed rather than answered",
+            fixture.habitDao.getHabit(habit.uuid, user.id)!!.remindedOnDay
+        )
+        assertEquals(
+            "the same slot now holds the promised ten minutes, not a second alarm beside it",
+            parked + SNOOZE,
+            habitTrigger(habit)
+        )
+
+        fixture.timeBase.shiftTo(parked + SNOOZE + MINUTE)
+        send(ReminderReceiver.ACTION_HABIT_DUE)
+        assertNotNull("and the deferred ask does arrive", postedHabit(habit))
+    }
+
+    @Test
+    fun `a habit button broadcast with nothing attached changes nothing`() = runTest {
+        val user = fixture.signIn()
+        val parked = parkJustAfterSeven()
+        val day = dayOf(parked)
+        val habit = habitOwnedBy(user, "Walk")
+        send(ReminderReceiver.ACTION_HABIT_DUE)
+
+        send(ReminderReceiver.ACTION_HABIT_MARK, habitUuid = null, habitDay = day)
+        send(ReminderReceiver.ACTION_HABIT_MARK, habitUuid = habit.uuid, habitDay = ReminderReceiver.NO_DAY)
+        send(ReminderReceiver.ACTION_HABIT_SNOOZE, habitUuid = habit.uuid)
+
+        assertNotNull(postedHabit(habit))
+        assertEquals(day, fixture.habitDao.getHabit(habit.uuid, user.id)!!.remindedOnDay)
+        assertTrue(fixture.habitDao.liveDays(habit.uuid, user.id, day, day).isEmpty())
+    }
+
+    @Test
+    fun `a habit button pressed by another profile only takes the notice down`() = runTest {
+        val first = fixture.signIn(name = "First", email = "first@example.com")
+        val parked = parkJustAfterSeven()
+        val day = dayOf(parked)
+        val habit = habitOwnedBy(first, "First profile habit")
+        send(ReminderReceiver.ACTION_HABIT_DUE)
+        assertNotNull(postedHabit(habit))
+
+        fixture.signIn(name = "Second", email = "second@example.com")
+        send(ReminderReceiver.ACTION_HABIT_MARK, habitUuid = habit.uuid, habitDay = day)
+
+        assertNull("only the notification goes away", postedHabit(habit))
+        assertTrue(
+            "the other profile's habit keeps its unmarked day",
+            fixture.habitDao.liveDays(habit.uuid, first.id, day, day).isEmpty()
+        )
+    }
+
+    @Test
+    fun `a reboot puts the habit schedules back beside the task alarms`() = runTest {
+        val user = fixture.signIn()
+        val parked = parkJustAfterSeven()
+        val habit = habitOwnedBy(user, "Meditate")
+        taskWithLeadTime(user.id, "Feed the fish", parked + DAY, 30)
+        loseEveryAlarm()
+        assertTrue(armedTriggers().isEmpty())
+
+        send(Intent.ACTION_BOOT_COMPLETED)
+
+        assertEquals(
+            "one rebuild, both kinds of schedule",
+            nextMorning(parked),
+            habitTrigger(habit)
+        )
+        assertTrue(
+            "the task lead time came back in the same pass",
+            armedTriggers().contains(parked + DAY - 30 * MINUTE)
+        )
+    }
+
+    // endregion
+
     private companion object {
         const val MINUTE = 60_000L
         const val DAY = 24 * 60 * MINUTE
         const val SNOOZE = ReminderScheduler.SNOOZE_MILLIS
+
+        /** Seven in the morning, in the minutes-after-midnight unit a habit row stores. */
+        const val MORNING = 7 * 60
     }
 }

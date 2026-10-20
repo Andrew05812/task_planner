@@ -19,6 +19,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -47,6 +48,14 @@ class WorkTrackingRepositoryTest {
     fun setUp() {
         val context: Context = ApplicationProvider.getApplicationContext()
         fixture = AppFixture(context)
+    }
+
+    @After
+    fun tearDown() {
+        // The fixture's two database threads have to be finished before the storage goes away. A query
+        // still running when this test ends is reported against whichever test runs next, and that test
+        // then fails for something this one did.
+        fixture.close()
     }
 
     /** Signs in and creates the two tasks the conflict tests need. */

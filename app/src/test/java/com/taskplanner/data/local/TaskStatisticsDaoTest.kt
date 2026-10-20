@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -64,6 +65,14 @@ class TaskStatisticsDaoTest {
     fun setUp() {
         val context: Context = ApplicationProvider.getApplicationContext()
         fixture = AppFixture(context)
+    }
+
+    @After
+    fun tearDown() {
+        // The fixture's two database threads have to be finished before the storage goes away. A query
+        // still running when this test ends is reported against whichever test runs next, and that test
+        // then fails for something this one did.
+        fixture.close()
     }
 
     /**

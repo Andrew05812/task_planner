@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.taskplanner.data.calendar.CalendarMath
 import com.taskplanner.data.habit.HabitAdherence
 import com.taskplanner.data.habit.HabitMath
+import com.taskplanner.data.habit.HabitReminderCoordinator
 import com.taskplanner.data.habit.HabitStreak
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.HabitDao
@@ -144,7 +145,8 @@ class HabitRepository @Inject constructor(
     private val habitDao: HabitDao,
     private val sessionRepository: SessionRepository,
     private val timeBase: TimeBase,
-    private val ticker: WorkTicker
+    private val ticker: WorkTicker,
+    private val reminders: HabitReminderCoordinator
 ) {
 
     /**
@@ -189,6 +191,10 @@ class HabitRepository @Inject constructor(
                 updatedAt = now
             )
         )
+        // A habit born with a minute is armed for its next owed day the moment it exists, so the editor
+        // does not have to remember to ask — and one born without a minute is answered the same way, by
+        // nothing being armed at all.
+        reminders.onScheduleChanged(uuid)
         return HabitWriteResult.Saved(uuid)
     }
 
@@ -233,6 +239,11 @@ class HabitRepository @Inject constructor(
                 updatedAt = now
             )
         )
+        // The schedule the alarm is derived from is the one the user just wrote: a minute moved to the
+        // evening, a weekday dropped from the mask, a window that ended — each changes the next owed
+        // instant, and re-arming from the stored row is the only way the alarm cannot disagree with the
+        // grid beside it.
+        reminders.onScheduleChanged(habitUuid)
         return HabitWriteResult.Saved(habitUuid)
     }
 
@@ -276,6 +287,10 @@ class HabitRepository @Inject constructor(
         )
         return try {
             habitDao.insertCheck(check)
+            // Keeping the day the habit is being asked about today answers the notice that is on screen,
+            // so it comes down. A mark for any other day leaves it standing: today is still owed, and a
+            // mark made for last week does not say so.
+            if (day == todayEpochDay()) reminders.onAskAnswered(habit.uuid)
             HabitWriteResult.Saved(habit.uuid)
         } catch (e: RuntimeException) {
             if (habitDao.liveMark(habit.uuid, userId, day) != null) {
@@ -374,6 +389,7 @@ class HabitRepository @Inject constructor(
                 )
                 habitDao.insertCheckChange(change(mark.uuid, habit.uuid, userId, fromDay, toDay, reason, now))
             }
+            if (toDay == todayEpochDay()) reminders.onAskAnswered(habit.uuid)
             HabitWriteResult.Saved(habit.uuid)
         } catch (e: MarkGoneException) {
             // Nothing live was on the day the move started from, so nothing moved and nothing is charged
@@ -706,6 +722,11 @@ class HabitRepository @Inject constructor(
         ownHabit(habitUuid, userId)
             ?: return HabitWriteResult.Rejected(HabitRejection.NOT_FOUND)
         database.withTransaction { block(habitUuid, userId, timeBase.wallMillis()) }
+        // The asking follows the row: a habit put away or thrown away stops making noise, and one brought
+        // back starts again at the next minute its schedule is owed. Outside the transaction, because an
+        // alarm and a notification are not database state — a write that rolls back must not have taken a
+        // wakeup away with it.
+        reminders.onScheduleChanged(habitUuid)
         return HabitWriteResult.Saved(habitUuid)
     }
 

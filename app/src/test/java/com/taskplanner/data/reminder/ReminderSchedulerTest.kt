@@ -3,6 +3,7 @@ package com.taskplanner.data.reminder
 import android.app.AlarmManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.data.habit.HabitReminderIdentity
 import com.taskplanner.data.model.Reminder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -149,6 +150,41 @@ class ReminderSchedulerTest {
             "an alarm that names no reminder cannot announce the wrong task",
             intent.extras == null || intent.extras!!.isEmpty
         )
+    }
+
+    @Test
+    fun `a habit's schedule arms a slot without needing a reminder row`() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        val slot = HabitReminderIdentity.alarmRequestCodeOf("habit-1")
+        val instant = System.currentTimeMillis() + HOUR
+
+        assertTrue(scheduler.armAt(slot, instant, ReminderReceiver.ACTION_HABIT_DUE))
+
+        val alarm = alarms().single()
+        assertEquals("the minute the habit's rule asked for", instant, alarm.triggerAtMs)
+        val shadow = shadowOf(alarm.operation)
+        assertEquals(slot, shadow.requestCode)
+        assertEquals(ReminderReceiver.ACTION_HABIT_DUE, shadow.savedIntent.action)
+        assertTrue(
+            "and it still carries nothing: the wake reads the profile's own rows",
+            shadow.savedIntent.extras == null || shadow.savedIntent.extras!!.isEmpty
+        )
+
+        assertTrue(scheduler.armAt(slot, instant + 2 * HOUR, ReminderReceiver.ACTION_HABIT_DUE))
+        assertEquals(
+            "the same slot is written over, not queued beside — a repeating schedule cannot stack alarms",
+            1,
+            alarms().size
+        )
+        assertEquals(instant + 2 * HOUR, alarms().single().triggerAtMs)
+
+        assertFalse(
+            "a minute already gone is not armed; the pass that finds it delivers it instead",
+            scheduler.armAt(slot, System.currentTimeMillis() - MINUTE, ReminderReceiver.ACTION_HABIT_DUE)
+        )
+
+        scheduler.cancelAt(slot, ReminderReceiver.ACTION_HABIT_DUE)
+        assertTrue("and a habit given up on takes its wakeup with it", alarms().isEmpty())
     }
 
     private companion object {
