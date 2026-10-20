@@ -13,6 +13,7 @@ import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.local.TaskStatisticsDao
 import com.taskplanner.data.local.TrackingSessionDao
 import com.taskplanner.data.local.UserDao
 import com.taskplanner.data.local.WorkSessionDao
@@ -24,6 +25,7 @@ import com.taskplanner.data.model.User
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
 import com.taskplanner.data.repository.CategoryRepository
+import com.taskplanner.data.repository.DashboardRepository
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
@@ -134,6 +136,9 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val workSessionDao: WorkSessionDao = database.workSessionDao()
     val workStatisticsDao: WorkStatisticsDao = database.workStatisticsDao()
 
+    /** The task-side aggregates the dashboard reads, straight from the same storage. */
+    val taskStatisticsDao: TaskStatisticsDao = database.taskStatisticsDao()
+
     val workTrackingRepository = WorkTrackingRepository(
         database, trackingSessionDao, workSessionDao, sessionRepository, timeBase, monotonicReference
     )
@@ -150,6 +155,12 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val workStatisticsRepository = WorkStatisticsRepository(
         workStatisticsDao, trackingSessionDao, workSessionDao, sessionRepository, timeBase,
         monotonicReference, workTicker
+    )
+
+    /** The dashboard's aggregates over the same storage and the same clocks. */
+    val dashboardRepository = DashboardRepository(
+        taskStatisticsDao, workSessionDao, trackingSessionDao, workStatisticsRepository,
+        sessionRepository, timeBase
     )
 
     val taskRepository = TaskRepository(

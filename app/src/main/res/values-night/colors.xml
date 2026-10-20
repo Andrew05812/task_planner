@@ -4,4 +4,23 @@
     <color name="background_dark">#FF1C1B1F</color>
     <color name="surface_dark">#FF1C1B1F</color>
     <color name="on_surface_dark">#FFE6E1E5</color>
+
+    <!-- Dashboard charts, dark. -->
+    <!-- The light theme's grey tracks would be invisible on a near-black card and its deepest shade would
+         read as background rather than as a quiet day, so the same ramp is anchored on the lighter accent
+         here. The levels stay ordered, which is the only thing the picture has to keep. -->
+    <color name="chart_bar">#FFD0BCFF</color>
+    <color name="chart_axis">#4D9E9E9E</color>
+    <color name="chart_track">#339E9E9E</color>
+    <color name="chart_heatmap_none">#1A9E9E9E</color>
+    <color name="chart_heatmap_1">#4D9A82CC</color>
+    <color name="chart_heatmap_2">#80AD94DB</color>
+    <color name="chart_heatmap_3">#B3C0ABE8</color>
+    <color name="chart_heatmap_4">#FFE8DEF8</color>
+    <color name="health_overdue">#FFCF6679</color>
+    <color name="health_due_today">#FFFFB74D</color>
+    <color name="health_due_week">#FF4DB6AC</color>
+    <color name="health_without_deadline">#FFBDBDBD</color>
+    <color name="health_in_progress">#FF64B5F6</color>
+    <color name="health_stale">#FFB39DDB</color>
 </resources> 

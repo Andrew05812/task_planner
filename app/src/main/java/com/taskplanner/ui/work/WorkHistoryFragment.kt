@@ -33,6 +33,7 @@ import com.taskplanner.databinding.DialogWorkRangeBinding
 import com.taskplanner.databinding.FragmentWorkHistoryBinding
 import com.taskplanner.databinding.ItemHistoryIntervalBinding
 import com.taskplanner.databinding.ItemWorkHistoryBinding
+import com.taskplanner.ui.util.labelRes
 import com.taskplanner.ui.util.WorkAdjustmentUi
 import com.taskplanner.ui.util.WorkInstantInput
 import com.taskplanner.ui.util.WorkTimeFormat
@@ -305,16 +306,6 @@ class WorkHistoryFragment : Fragment() {
 private fun WorkHistoryState.visibleDays(): Pair<LocalDate, LocalDate> {
     val range = period?.dayRange(LocalDate.now()) ?: customDays
     return LocalDate.ofEpochDay(range.first) to LocalDate.ofEpochDay(range.last)
-}
-
-/** The chip label for a period the repository can name. */
-private fun WorkPeriod.labelRes(): Int = when (this) {
-    WorkPeriod.TODAY -> R.string.history_period_today
-    WorkPeriod.YESTERDAY -> R.string.history_period_yesterday
-    WorkPeriod.THIS_WEEK -> R.string.history_period_this_week
-    WorkPeriod.LAST_WEEK -> R.string.history_period_last_week
-    WorkPeriod.THIS_MONTH -> R.string.history_period_this_month
-    WorkPeriod.LAST_MONTH -> R.string.history_period_last_month
 }
 
 /**

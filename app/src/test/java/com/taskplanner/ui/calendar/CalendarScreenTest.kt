@@ -793,19 +793,38 @@ class CalendarScreenTest {
             )
         }
 
-        val crowded = cells.first { taskRowsOf(it).isNotEmpty() }
-        taskRowsOf(crowded).forEach { chip ->
-            assertInside(width, chip)
+        // The crowded day is bound on its own and laid out at one column's width, rather than picked out of
+        // the grid above. A RecyclerView binds only the rows its viewport fits, so which days of a month are
+        // on screen at all is a fact about the date the test runs on: a cell that was never drawn has no
+        // width to measure, and a test that reads it passes on one day of the month and fails on the next.
+        val crowded = bindCell(cellFor(later))
+        val column = laidOutColumn(crowded.root, width)
+
+        val chips = chipsIn(crowded)
+        assertEquals("four tasks on the day, and a month cell promises three of them", 3, chips.size)
+        assertTrue("the fourth is said rather than vanished", crowded.cellMore.isVisible)
+        chips.forEach { chip ->
             assertTrue(
                 "a long title is cut short inside its cell rather than widening the column",
-                chip.left + chip.width <= crowded.width
+                chip.left + chip.width <= column
             )
         }
     }
 
-    private fun taskRowsOf(cell: View): List<View> {
-        val tasks = cell.findViewById<ViewGroup>(R.id.cellTasks) ?: return emptyList()
-        return (0 until tasks.childCount).map { tasks.getChildAt(it) }
+    /**
+     * Lays a detached cell out at the width one month column gets and the height its own bind asked for,
+     * so the geometry the test reads is the geometry the grid would have given it.
+     */
+    private fun laidOutColumn(cell: View, screenWidth: Int): Int {
+        val column = screenWidth / WEEK_COLUMNS
+        val height = cell.layoutParams.height
+        assertTrue("the month bind sizes its own cell before the screen lays it out", height > 0)
+        cell.measure(
+            View.MeasureSpec.makeMeasureSpec(column, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        )
+        cell.layout(0, 0, column, height)
+        return cell.width
     }
 
     private companion object {

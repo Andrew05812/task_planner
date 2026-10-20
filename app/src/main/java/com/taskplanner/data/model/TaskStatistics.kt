@@ -1,0 +1,66 @@
+package com.taskplanner.data.model
+
+/**
+ * The shapes the dashboard's task-side totals come back in.
+ *
+ * Same rule as the work totals in `WorkStatistics`: these are what SQLite produced, typed. A dashboard
+ * that wants "how many tasks are still open" gets one integer, not the profile's rows loaded into a
+ * list to be counted in Kotlin — which is the pattern this screen used to run on and the reason it is
+ * being rebuilt.
+ */
+
+/** How many non-tombstoned tasks carry one status spelling. */
+data class TaskStatusCount(
+    val status: String,
+    val count: Int
+)
+
+/**
+ * The open tasks of one profile, sorted into the states a user can act on.
+ *
+ * Every field is a count of the same rows under a different condition, produced by one scan: the
+ * dashboard shows them side by side, and reading them from separate queries at separate instants would
+ * let a task move out of "overdue" and into "open" between two of them, so the numbers would not add
+ * up to the same set.
+ *
+ * "Open" here means what the active list means: not completed, not archived, not tombstoned. An
+ * archived task with a deadline that passed is left out rather than counted — it is work the user put
+ * away on purpose, and a health panel that shouts about it would disagree with the screen the task is
+ * no longer on.
+ */
+data class TaskHealthCounts(
+    /** Open, has a deadline, and that deadline is already past. */
+    val overdue: Int,
+    /** Open, due between now and the end of today. */
+    val dueToday: Int,
+    /** Open, due after today and within the coming seven days. */
+    val dueThisWeek: Int,
+    /** Open with no deadline at all — neither late nor on time. */
+    val withoutDeadline: Int,
+    /** Open and marked as being worked on. */
+    val inProgress: Int,
+    /** Open and untouched since [staleBefore]. */
+    val stale: Int,
+    /** Every open row the panel counted. */
+    val open: Int
+)
+
+/** Completions on one local day, as the dashboard's trend bar reads them. */
+data class DailyCompletionCount(
+    val localDay: Long,
+    val count: Int
+)
+
+/**
+ * Whether a stored `status` spelling means the task is finished.
+ *
+ * One function because the answer is needed in two places that cannot see each other: `Converters`
+ * reading a row into [TaskStatus], and the dashboard's SQL deciding which rows are open. Older
+ * databases spell a completion `DONE` — every release since writes `COMPLETED`, and nothing rewrote the
+ * old rows, so both spellings are still data a real install can hold. A screen that counted only one of
+ * them would report a finished task as still open.
+ */
+fun isCompletedSpelling(status: String): Boolean =
+    status.uppercase(java.util.Locale.ROOT) in COMPLETED_SPELLINGS
+
+private val COMPLETED_SPELLINGS = setOf("COMPLETED", "DONE")

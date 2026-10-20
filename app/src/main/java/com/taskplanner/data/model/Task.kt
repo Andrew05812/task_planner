@@ -24,6 +24,11 @@ import kotlinx.parcelize.Parcelize
         Index(value = ["user_id", "end_time", "start_time"]),
         Index(value = ["category_id"]),
         Index(value = ["group_id"]),
+        // The dashboard asks "what did I finish in this window" for a period of days, and the answer
+        // has to be sought by completion rather than walked. `completed_at` is the only column that
+        // says when a task was finished — `updated_at` moves on any edit and `archived_at` says when
+        // the row left the list — so the window's two bounds need an index of their own.
+        Index(value = ["user_id", "completed_at"]),
         // A series instance is identified by (series, scheduled instant), so materialising the
         // same occurrence twice — after a retry, a restart, or a pull from another device —
         // collides here instead of leaving a duplicate task behind.

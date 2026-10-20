@@ -10,6 +10,7 @@ import com.taskplanner.data.local.LegacyDbRescuer
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.local.TaskStatisticsDao
 import com.taskplanner.data.local.TrackingSessionDao
 import com.taskplanner.data.local.UserDao
 import com.taskplanner.data.local.WorkSessionDao
@@ -73,4 +74,10 @@ object DatabaseModule {
     @Provides
     fun provideWorkStatisticsDao(database: AppDatabase): WorkStatisticsDao =
         database.workStatisticsDao()
+
+    /** The task-side aggregates the dashboard reads: the health counts, the status counts, and the
+     *  creation and completion figures of a period. */
+    @Provides
+    fun provideTaskStatisticsDao(database: AppDatabase): TaskStatisticsDao =
+        database.taskStatisticsDao()
 }

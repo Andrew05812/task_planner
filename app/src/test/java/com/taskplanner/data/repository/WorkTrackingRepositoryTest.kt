@@ -12,6 +12,8 @@ import com.taskplanner.data.tracking.ConflictResolution
 import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.data.tracking.WorkTimeMath
 import com.taskplanner.testing.AppFixture
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
@@ -77,6 +79,21 @@ class WorkTrackingRepositoryTest {
     private suspend fun startAfter(task: Task, forMillis: Long): TrackingOutcome {
         fixture.timeBase.advance(forMillis)
         return fixture.workTrackingRepository.start(task)
+    }
+
+    /**
+     * Puts the fixture's wall clock at noon of the day that clock is already on.
+     *
+     * The fixture takes the machine's instant as its starting point, and the scenario below runs for a
+     * quarter of an hour of clock time. A suite that happens to start within that quarter before midnight
+     * therefore measures the first stretch on one calendar day and asks for the figure on the next — and
+     * the read is right to answer that the earlier work is yesterday's. Parking at noon is the only way the
+     * test gets to assert the day it began on rather than the time of day the runner woke up at.
+     */
+    private fun parkAtNoon() {
+        val zone = ZoneId.systemDefault()
+        val day = Instant.ofEpochMilli(fixture.timeBase.wall).atZone(zone).toLocalDate()
+        fixture.timeBase.wall = day.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
     }
 
     @Test
@@ -518,9 +535,11 @@ class WorkTrackingRepositoryTest {
     /**
      * The tracking block's own read, on a real clock: the day label sleeps until tomorrow, and a
      * virtual-time scheduler skips that sleep instantly, so the flow would re-anchor its query forever
-     * instead of answering once. What is asserted stays the same.
+     * instead of answering once. What is asserted stays the same — and the clock is parked at noon first,
+     * because the quarter of an hour this scenario runs for must stay inside the day whose figure it claims.
      */
     fun `the task view carries the total, today, and the stretches, with the pause left out`() = runBlocking {
+        parkAtNoon()
         val (report, _) = signInWithTwoTasks()
         startAfter(report, 1_000L)
         fixture.timeBase.advance(120_000L)
