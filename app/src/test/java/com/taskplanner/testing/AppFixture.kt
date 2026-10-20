@@ -142,7 +142,7 @@ class AppFixture(private val context: Context) : AutoCloseable {
 
     val reminderRepository = ReminderRepository(
         reminderDao, taskDao, categoryDao, sessionRepository, reminderScheduler, reminderNotifier,
-        habitReminders
+        habitReminders, timeBase
     )
 
     // Declared before the task repository on purpose: finishing a task is what advances a series.
