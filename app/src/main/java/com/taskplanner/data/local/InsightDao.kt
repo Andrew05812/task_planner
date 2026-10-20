@@ -14,9 +14,15 @@ import kotlinx.coroutines.flow.Flow
  *
  * Nothing here is a record of the user's work, so the queries are few and narrow: a pass writes what it
  * found, the screen reads what is still being found, and the only answers a person can give are the four
- * feedback states. There is no update for a title or a basis, because a reading the reader has already seen
- * keeps the words it arrived with — a card that silently reworded itself would make yesterday's feedback
- * about a sentence nobody was shown.
+ * feedback states.
+ *
+ * What a pass may overwrite and what it may not is the whole design of this table. It re-states the claim
+ * — [refresh] writes the kind, the three pieces of wording, the sample, the confidence and the action,
+ * because a card that contradicted the rows it was computed from would be worse than a card that changed
+ * its sentence since the reader last saw it. What it never touches is the two things a pass cannot rebuild:
+ * when the reading first arrived, and what the reader said about it. The window and the rule are outside
+ * both groups, because they are the row's identity — a rule counting different days is a different reading,
+ * and it belongs on a different row.
  */
 @Dao
 interface InsightDao {
@@ -73,19 +79,36 @@ interface InsightDao {
         "UPDATE insights SET is_current = 0, updated_at = :now " +
             "WHERE user_id = :userId AND is_current = 1 AND last_seen_at < :passStartedAt"
     )
-    suspend fun markStale(userId: Long, passStartedAt: Long, now: Long)
+    suspend fun markStale(userId: Long, passStartedAt: Long, now: Long): Int
+
+    /**
+     * The rules the reader has already refused, and is therefore not being told again yet.
+     *
+     * "This is not true of me" is an answer about the reading, and the row it lands on is already off the
+     * offered list by the filter in [observeCurrent]. What that filter cannot do is stop the same rule from
+     * arriving next week with a new window and the same claim — which would teach the reader that the
+     * buttons do nothing. So a rejected rule key buys a silence here, measured from the moment the answer was
+     * given rather than from the window it was about, and it expires on its own: a month after the reader
+     * said this was not them, the profile may well have changed.
+     */
+    @Query(
+        "SELECT DISTINCT rule_key FROM insights WHERE user_id = :userId AND feedback = 'REJECTED' " +
+            "AND feedback_at IS NOT NULL AND feedback_at >= :since"
+    )
+    suspend fun rejectedRuleKeys(userId: Long, since: Long): List<String>
 
     /**
      * What the reader said about one insight.
      *
-     * Keyed on the uuid alone: the four answers are about the row, and a profile whose session went away
-     * mid-tap must not have the answer land on a row belonging to somebody else.
+     * Keyed on the uuid *and* the profile: the four answers are about the row, and a profile whose session
+     * went away mid-tap must not have the answer land on a row belonging to somebody else. The row count is
+     * what the caller reports back, so a screen can tell "recorded" apart from "there was nothing here".
      */
     @Query(
         "UPDATE insights SET feedback = :feedback, feedback_at = :at, updated_at = :at " +
             "WHERE uuid = :uuid AND user_id = :userId"
     )
-    suspend fun setFeedback(uuid: String, userId: Long, feedback: InsightFeedback, at: Long)
+    suspend fun setFeedback(uuid: String, userId: Long, feedback: InsightFeedback, at: Long): Int
 
     /**
      * The readings the current pass still stands behind, newest first.
@@ -122,11 +145,12 @@ interface InsightDao {
      *
      * A history is worth keeping, and an unbounded one is a table that grows with every pass of every rule
      * whether anyone looked or not. Only rows the rules stopped finding and the reader said nothing about
-     * fall out; anything with feedback is the user's own record and stays, however old the window is.
+     * fall out; anything with feedback is the user's own record and stays, however old the window is. The
+     * count is what left, so a pass can report the notebook it keeps rather than the one it threw away.
      */
     @Query(
         "DELETE FROM insights WHERE user_id = :userId AND is_current = 0 AND feedback IS NULL " +
             "AND period_to_day < :olderThanDay"
     )
-    suspend fun forgetUntouchedHistoryBefore(userId: Long, olderThanDay: Long)
+    suspend fun forgetUntouchedHistoryBefore(userId: Long, olderThanDay: Long): Int
 }

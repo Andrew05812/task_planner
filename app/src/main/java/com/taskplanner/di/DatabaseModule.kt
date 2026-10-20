@@ -7,6 +7,7 @@ import com.taskplanner.data.local.AppMigrations
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.HabitDao
+import com.taskplanner.data.local.InsightDao
 import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.LegacyDbRescuer
 import com.taskplanner.data.local.RecurrenceDao
@@ -90,4 +91,8 @@ object DatabaseModule {
 
     @Provides
     fun provideHabitDao(database: AppDatabase): HabitDao = database.habitDao()
+
+    /** The notebook of readings: the schema v15 table, written only by the pass that derives it. */
+    @Provides
+    fun provideInsightDao(database: AppDatabase): InsightDao = database.insightDao()
 }

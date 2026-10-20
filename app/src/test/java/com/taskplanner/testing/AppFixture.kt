@@ -13,6 +13,7 @@ import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.HabitDao
+import com.taskplanner.data.local.InsightDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
@@ -39,6 +40,7 @@ import kotlinx.coroutines.SupervisorJob
 import com.taskplanner.data.repository.GoalRepository
 import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.HabitRepository
+import com.taskplanner.data.repository.InsightRepository
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
@@ -191,6 +193,19 @@ class AppFixture(private val context: Context) : AutoCloseable {
         database, habitDao, sessionRepository, timeBase, workTicker, habitReminders
     )
 
+    /**
+     * The notebook of readings, wired after the two repositories it reads through.
+     *
+     * An insight pass takes its figures from the aggregates the dashboard and the goals and habits screens
+     * already use, so the fixture hands it the same repositories rather than a second set of queries — the
+     * number a reading states has to be the number the screen beside it states.
+     */
+    val insightDao: InsightDao = database.insightDao()
+    val insightRepository = InsightRepository(
+        database, insightDao, taskDao, taskStatisticsDao, workStatisticsDao, goalDao, habitDao,
+        habitRepository, goalRepository, sessionRepository, timeBase, context
+    )
+
     val taskRepository = TaskRepository(
         taskDao, sessionRepository, recurrenceRepository, reminderRepository, workTrackingRepository
     )
@@ -218,7 +233,14 @@ class AppFixture(private val context: Context) : AutoCloseable {
     /** The cloud-side merge rules, wired to this device's database: what a pull hands to Room. */
     val syncAppliers = SyncAppliers(taskDao, categoryDao, groupDao, recurrenceDao, reminderDao)
 
-    /** Signs in a local profile the way the profile screen does. */
+    /**
+     * Signs in a local profile the way the profile screen does.
+     *
+     * The address is part of the identity, not a label: `users.email` is unique and the insert replaces, so
+     * calling this twice on the default email does not add a second profile — it deletes the first one, and
+     * every cascade hanging off it takes that profile's rows with it. A test that wants two accounts has to
+     * name the second one differently.
+     */
     suspend fun signIn(name: String = "Test User", email: String = "test@example.com"): User =
         signInAs(User(email = email, name = name))
 

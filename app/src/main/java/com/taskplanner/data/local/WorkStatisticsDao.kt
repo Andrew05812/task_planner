@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import com.taskplanner.data.model.CategoryWorkSummary
 import com.taskplanner.data.model.DailyWorkSummary
+import com.taskplanner.data.model.EstimateComparison
 import com.taskplanner.data.model.TaskWorkSummary
 import com.taskplanner.data.model.WorkPeriodSummary
 import com.taskplanner.data.model.TaskTotalSeconds
@@ -172,6 +173,33 @@ interface WorkStatisticsDao {
             "AND completed_at IS NOT NULL AND completed_at >= :from AND completed_at < :to"
     )
     fun observeCompletedTasksInPeriod(userId: Long, from: Long, to: Long): Flow<Int>
+
+    /**
+     * The finished tasks of a window that carry an estimate, each with the time measured on it.
+     *
+     * Bounded twice over — by `index_tasks_user_id_completed_at` and by the window the caller names — and
+     * carrying four columns rather than a row of a task, because the reading this feeds has to name one
+     * example: "you estimate short" is a claim about a habit, and the habit is only checkable through the
+     * task that missed by the most. The measured total is a correlated scalar subquery rather than a join
+     * for the reason every other grouping here avoids joining `work_sessions`: joining would multiply the
+     * estimate rows by the number of intervals on each task, and the sum would then be a sum of pairs.
+     *
+     * `estimated_minutes > 0` keeps a zero the user typed out of the comparison: a plan of no minutes is not
+     * an estimate that was wrong, it is the absence of one, and reading it as a total miss would let the
+     * rule report the largest gap in the profile from a field nobody filled in.
+     */
+    @Query(
+        "SELECT t.id AS taskId, t.title AS title, t.estimated_minutes AS estimatedMinutes, " +
+            "COALESCE((SELECT SUM(w.duration_seconds) FROM work_sessions w " +
+            "WHERE w.task_id = t.id AND w.user_id = :userId AND w.ended_at IS NOT NULL " +
+            "AND w.is_deleted = 0), 0) AS measuredSeconds " +
+            "FROM tasks t " +
+            "WHERE t.user_id = :userId AND t.is_deleted = 0 AND t.estimated_minutes IS NOT NULL " +
+            "AND t.estimated_minutes > 0 AND UPPER(t.status) IN ('COMPLETED', 'DONE') " +
+            "AND t.completed_at IS NOT NULL AND t.completed_at >= :from AND t.completed_at < :to " +
+            "ORDER BY t.completed_at ASC"
+    )
+    suspend fun estimatedCompletions(userId: Long, from: Long, to: Long): List<EstimateComparison>
 
     /**
      * The trend for one task: one row per local day it was worked on inside the window.

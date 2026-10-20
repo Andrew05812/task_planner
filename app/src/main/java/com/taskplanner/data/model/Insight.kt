@@ -128,10 +128,14 @@ data class Insight(
     val id: Long = 0,
 
     /**
-     * Derived from the rule and the window rather than random.
+     * Stable identity used for cloud sync and imports; independent of the local row id.
+     *
+     * Derived from the account, the rule and the window rather than random.
      *
      * Two passes over the same window have to reach the same row — that is the whole of §7's "no repeats" —
-     * and an id computed from the key makes it so without a lookup that could race with itself.
+     * and an id computed from the key makes it so without a lookup that could race with itself. The account
+     * belongs in it because a rule's name and a week's bounds are the same words for both profiles on a
+     * shared device, and one account's reading must not occupy the other's address.
      */
     @ColumnInfo(name = "uuid")
     val uuid: String,
@@ -236,8 +240,15 @@ data class Insight(
         get() = feedback != InsightFeedback.REJECTED && feedback != InsightFeedback.HIDDEN
 
     companion object {
-        /** The one id this rule reaches for this window, so two passes cannot land on two rows. */
-        fun uuidFor(ruleKey: String, periodFromDay: Long, periodToDay: Long): String =
-            "insight-$ruleKey-$periodFromDay-$periodToDay"
+        /**
+         * The one id this rule reaches for this window in this account, so two passes cannot land on two rows.
+         *
+         * The profile is part of the id rather than only part of the composite index below it, because a
+         * rule's key and a window are the same words for every account on the device: two profiles that both
+         * have a pile of overdue high-priority work on the same day would otherwise compute one uuid and the
+         * second of them would find its reading refused by the first one's row.
+         */
+        fun uuidFor(userId: Long, ruleKey: String, periodFromDay: Long, periodToDay: Long): String =
+            "insight-$userId-$ruleKey-$periodFromDay-$periodToDay"
     }
 }

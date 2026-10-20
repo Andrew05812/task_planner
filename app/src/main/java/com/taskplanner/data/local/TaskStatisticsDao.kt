@@ -2,6 +2,7 @@ package com.taskplanner.data.local
 
 import androidx.room.Dao
 import androidx.room.Query
+import com.taskplanner.data.model.PriorityOverdueCounts
 import com.taskplanner.data.model.TaskHealthCounts
 import com.taskplanner.data.model.TaskStatusCount
 import kotlinx.coroutines.flow.Flow
@@ -100,6 +101,33 @@ interface TaskStatisticsDao {
         weekEnd: Long,
         staleBefore: Long
     ): Flow<TaskHealthCounts>
+
+    /**
+     * How much of what is overdue is work the user marked as important.
+     *
+     * The question the insight rules ask, and it is the one [healthCounts] cannot answer: that panel sorts
+     * the open rows by *when* they are due, while a reading about a pile of high-priority work needs the
+     * priority split of the same rows. Both are one scan of the same set, so the two figures can never
+     * describe two different databases — which is the reason this is a second aggregate rather than a
+     * second read of `TaskHealthCounts` folded in Kotlin.
+     *
+     * `UPPER(priority)` for the same reason the status spellings are folded: a row an import wrote as
+     * `high` is a high-priority task to every screen on the device, and a rule that missed it would be
+     * wrong about the reader's own week.
+     */
+    @Query(
+        "SELECT " +
+            "COALESCE(SUM(CASE WHEN UPPER(priority) = 'HIGH' THEN 1 ELSE 0 END), 0) AS highOpen, " +
+            "COALESCE(SUM(CASE WHEN UPPER(priority) = 'HIGH' AND due_date IS NOT NULL " +
+            "AND due_date < :now THEN 1 ELSE 0 END), 0) AS highOverdue, " +
+            "COALESCE(SUM(CASE WHEN due_date IS NOT NULL AND due_date < :now THEN 1 ELSE 0 END), 0) " +
+            "AS overdue, " +
+            "COUNT(*) AS open " +
+            "FROM tasks " +
+            "WHERE user_id = :userId AND is_deleted = 0 AND archived = 0 AND " +
+            "UPPER(status) NOT IN ('COMPLETED', 'DONE')"
+    )
+    suspend fun priorityOverdue(userId: Long, now: Long): PriorityOverdueCounts
 
     /** Tasks created inside a window — the "new this period" figure, counted rather than listed. */
     @Query(

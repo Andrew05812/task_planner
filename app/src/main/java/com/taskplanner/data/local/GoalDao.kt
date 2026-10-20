@@ -108,6 +108,28 @@ interface GoalDao {
     )
     fun observeArchivedGoals(userId: Long): Flow<List<Goal>>
 
+    /**
+     * The live goals whose date falls inside a stretch of days, soonest first.
+     *
+     * Asked for by a pass that reads a goal's remaining work against the days left to do it in, which is
+     * the only question about a goal that has to know the date before it knows the figure: a goal due in
+     * eleven months is not behind schedule yet, and reading its progress would say nothing about that. The
+     * bounds are instants rather than days because [com.taskplanner.data.model.Goal.deadlineAt] is stored as
+     * one, and the limit is here because a profile with forty dated goals should not have forty aggregates
+     * run over it to say that the nearest one needs attention.
+     */
+    @Query(
+        "SELECT * FROM goals WHERE user_id = :userId AND is_deleted = 0 AND archived_at IS NULL " +
+            "AND deadline_at IS NOT NULL AND deadline_at >= :fromMillis AND deadline_at < :toMillis " +
+            "ORDER BY deadline_at ASC LIMIT :limit"
+    )
+    suspend fun getGoalsDueBetween(
+        userId: Long,
+        fromMillis: Long,
+        toMillis: Long,
+        limit: Int
+    ): List<Goal>
+
     /** Everything the profile holds, tombstones included, for the account purge and for export. */
     @Query("SELECT * FROM goals WHERE user_id = :userId ORDER BY created_at ASC")
     suspend fun getAllForUser(userId: Long): List<Goal>

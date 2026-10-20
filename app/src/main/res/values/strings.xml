@@ -754,4 +754,73 @@
     <string name="habit_reject_already_marked">That day already stands as kept.</string>
     <string name="habit_reject_no_mark">There is no kept day there to take back or move.</string>
     <string name="habit_reject_target_taken">The day you moved to is already kept, so nothing was swapped.</string>
+
+    <!--
+        Intelligent insights (§7) and the workload reading (§8). The rules emit numbers and these are the
+        sentences those numbers become: a title that states the claim, a body that says it in the reader's
+        terms, and a basis that spells out the counts the reader can go and check. Nothing here asserts more
+        than a rule was given evidence for, and the one caveat §8 asks for — an approximate duration — is a
+        sentence rather than a footnote.
+    -->
+    <string name="insight_overload_title">High-priority work is past its deadline</string>
+    <string name="insight_overload_body">%1$d of the %2$d overdue tasks are high-priority, out of %3$d still open.</string>
+    <string name="insight_overload_basis">Counted now: %1$d high-priority tasks past their deadline, %2$d tasks open in total.</string>
+
+    <string name="insight_category_growth_title">Time spent on %1$s has grown</string>
+    <string name="insight_category_growth_body">%1$s more measured time than the week before: %2$s against %3$s.</string>
+    <string name="insight_category_growth_basis">%1$d measured stretches against %2$d, %3$s against %4$s.</string>
+
+    <string name="insight_estimate_gap_title">Finished work took longer than planned</string>
+    <string name="insight_estimate_gap_body">%1$d of %2$d estimated tasks ran past their estimate this month.</string>
+    <string name="insight_estimate_gap_basis">The largest gap was “%1$s”: %2$s planned, %3$s measured.</string>
+
+    <string name="insight_completion_weekday_title">Most of the work finishes on a %1$s</string>
+    <string name="insight_completion_weekday_body">%1$d of %2$d finished tasks landed on a %3$s.</string>
+    <string name="insight_completion_weekday_basis">A %1$s held %2$s of the completions counted over %3$d days.</string>
+
+    <string name="insight_completion_hours_title">Most of the work finishes around %1$s</string>
+    <string name="insight_completion_hours_body">%1$d of %2$d finished tasks were completed inside those two hours.</string>
+    <string name="insight_completion_hours_basis">%1$s of the completions counted over %2$d days fall between %3$s.</string>
+
+    <string name="insight_habit_miss_title">%1$s has days left in its week</string>
+    <string name="insight_habit_miss_body">%1$s of the %2$d days it asked for.</string>
+    <string name="insight_habit_miss_basis">%1$d of %2$d scheduled days carry a mark — %3$s kept.</string>
+
+    <string name="insight_goal_pace_title">“%1$s” needs about %2$s a day</string>
+    <string name="insight_goal_pace_body">%1$s left to go, and %2$s to do it in.</string>
+    <string name="insight_goal_pace_basis">%1$s counted of %2$s so far, over %3$s.</string>
+
+    <string name="insight_heavy_day_title">%1$s looks heavy</string>
+    <string name="insight_heavy_day_body">%1$s planned across %2$d tasks, against %3$s on a usual working day.</string>
+    <string name="insight_heavy_day_basis">That day is %1$s of the daily average, counted %2$s.</string>
+    <string name="insight_approximate_note"> Its lengths come from estimates, so the hours are approximate.</string>
+
+    <string name="insight_percent_format">%1$d%%</string>
+    <string name="insight_duration_hours_minutes">%1$d h %2$d min</string>
+    <string name="insight_hour_span">%1$s–%2$s</string>
+
+    <plurals name="insight_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="insight_hours">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="insight_goal_tasks">
+        <item quantity="one">%d task</item>
+        <item quantity="other">%d tasks</item>
+    </plurals>
+    <plurals name="insight_habit_missed_days">
+        <item quantity="one">%d day missed</item>
+        <item quantity="other">%d days missed</item>
+    </plurals>
+    <plurals name="insight_days_span">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <plurals name="insight_days_from_today">
+        <item quantity="one">%d day from today</item>
+        <item quantity="other">%d days from today</item>
+    </plurals>
 </resources>
