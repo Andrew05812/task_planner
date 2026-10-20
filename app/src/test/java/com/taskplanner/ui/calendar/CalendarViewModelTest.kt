@@ -235,6 +235,64 @@ class CalendarViewModelTest {
     }
 
     @Test
+    fun `a day another screen names opens the page on it, at the level it asked for`() {
+        // The overload panel and the heavy-day reading both count a particular day, and a "go and look"
+        // that lands on today is no answer at all. Three levels, three ways to be wrong.
+        val farDay = today.plusDays(9)
+
+        viewModel.focus(farDay, CalendarMode.WEEK)
+        awaitMode(CalendarMode.WEEK)
+        assertEquals(farDay, state.selected)
+        assertTrue(
+            "the week shown is a week that holds the day it was sent for, rather than the week the screen " +
+                "happened to be on",
+            state.cells.map { it.date }.contains(farDay)
+        )
+
+        viewModel.focus(farDay, CalendarMode.DAY)
+        awaitMode(CalendarMode.DAY)
+        assertEquals(
+            "the day view's page is the day itself, so it cannot be shown a day it is not holding",
+            listOf(farDay),
+            state.cells.map { it.date }
+        )
+
+        val nextMonth = today.plusDays(40)
+        viewModel.focus(nextMonth, CalendarMode.MONTH)
+        awaitMode(CalendarMode.MONTH)
+        assertEquals(nextMonth, state.selected)
+        assertEquals(
+            "and a month that did not move would leave the reader paging by hand to the day they were sent to",
+            YearMonth.from(nextMonth),
+            YearMonth.from(state.anchor)
+        )
+        assertTrue(state.cells.map { it.date }.contains(nextMonth))
+    }
+
+    @Test
+    fun `a named day that is already on the page does not move the page`() {
+        awaitMode(CalendarMode.MONTH)
+        val sameMonth = state.cells.first { it.inDisplayedMonth && it.date != today }.date
+        val anchor = state.anchor
+
+        viewModel.focus(sameMonth, CalendarMode.MONTH)
+        awaitUntil("the selection to follow the day it was sent") { state.selected == sameMonth }
+
+        assertEquals(
+            "the reader asked for a day, not for a different month: the page they are looking at already " +
+                "holds it, and moving the grid would take the neighbours off screen",
+            anchor,
+            state.anchor
+        )
+        // The same anchoring rule a mode change uses, reached from the other command: two copies of it
+        // would be two answers waiting to drift apart.
+        viewModel.setMode(CalendarMode.WEEK)
+        awaitMode(CalendarMode.WEEK)
+        assertEquals(sameMonth, state.selected)
+        assertTrue(state.cells.map { it.date }.contains(sameMonth))
+    }
+
+    @Test
     fun `paging a month replaces its grid instead of stacking a second one on it`() {
         awaitMode(CalendarMode.MONTH)
         val before = state.cells.map { it.date }

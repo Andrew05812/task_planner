@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One day of the window the panel reads. The bar is that day against the busiest one in the same window,
+     because a row measured against the day above it can be checked without arithmetic; the figure and the
+     count say what the bar is drawn from, and the estimate marker belongs to §8 — minutes that came from a
+     deadline rather than from hours the reader typed are not a measurement. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:paddingVertical="4dp">
+
+    <TextView
+        android:id="@+id/dayName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:textAppearance="?attr/textAppearanceBody2"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="Thu 4 Jun" />
+
+    <TextView
+        android:id="@+id/dayBusiest"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_goal_state"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="1dp"
+        android:text="@string/workload_busiest"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:textColor="@color/health_due_today"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/dayName"
+        app:layout_constraintStart_toEndOf="@id/dayName"
+        app:layout_constraintTop_toTopOf="@id/dayName"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/dayFigure"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceBody2"
+        app:layout_constraintBaseline_toBaselineOf="@id/dayName"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:text="10 h" />
+
+    <com.taskplanner.ui.components.StackedBarView
+        android:id="@+id/dayBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintEnd_toStartOf="@id/dayTasks"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/dayName" />
+
+    <TextView
+        android:id="@+id/dayTasks"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:textColor="?android:attr/textColorSecondary"
+        app:layout_constraintBaseline_toBaselineOf="@id/dayBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:text="2 tasks" />
+
+    <TextView
+        android:id="@+id/dayApprox"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="@string/workload_row_approximate"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:textColor="@color/health_due_today"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/dayBar"
+        tools:visibility="visible" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

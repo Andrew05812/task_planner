@@ -4,11 +4,27 @@ import androidx.room.Dao
 import androidx.room.Query
 import com.taskplanner.data.model.CategoryWorkSummary
 import com.taskplanner.data.model.DailyWorkSummary
+import com.taskplanner.data.model.EstimateComparison
 import com.taskplanner.data.model.TaskWorkSummary
 import com.taskplanner.data.model.WorkPeriodSummary
 import com.taskplanner.data.model.TaskTotalSeconds
 import com.taskplanner.data.model.WorkSession
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * The trend the work screens and the overload read both ask for: one row per local day the user actually
+ * worked, with nothing between them invented.
+ *
+ * Written once and given to both readings of it, because a baseline the panel watches and a baseline a rule
+ * computes have to be the same four weeks; two copies of a statement are two answers waiting to drift apart.
+ * The bound is half-open (`< :toDay`), as every period in this file is.
+ */
+internal const val DAILY_SERIES_QUERY: String =
+    "SELECT w.local_day AS localDay, COALESCE(SUM(w.duration_seconds), 0) AS seconds, " +
+        "COUNT(w.id) AS intervals FROM work_sessions w " +
+        "WHERE w.user_id = :userId AND w.local_day >= :fromDay AND w.local_day < :toDay " +
+        "AND w.ended_at IS NOT NULL AND w.is_deleted = 0 " +
+        "GROUP BY w.local_day ORDER BY w.local_day ASC"
 
 /**
  * Every total the work-tracking screens show, computed by SQLite.
@@ -31,6 +47,14 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface WorkStatisticsDao {
+
+    /** The trend, read once. */
+    @Query(DAILY_SERIES_QUERY)
+    suspend fun dailySeries(userId: Long, fromDay: Long, toDay: Long): List<DailyWorkSummary>
+
+    /** The same trend as a Flow, for the screen that stays on the window while the work moves under it. */
+    @Query(DAILY_SERIES_QUERY)
+    fun observeDailySeries(userId: Long, fromDay: Long, toDay: Long): Flow<List<DailyWorkSummary>>
 
     @Query(
         "SELECT COALESCE(SUM(duration_seconds), 0) FROM work_sessions " +
@@ -122,16 +146,6 @@ interface WorkStatisticsDao {
     )
     suspend fun workByCategory(userId: Long, fromDay: Long, toDay: Long): List<CategoryWorkSummary>
 
-    /** The trend: one row per local day the user actually worked, with nothing between them invented. */
-    @Query(
-        "SELECT w.local_day AS localDay, COALESCE(SUM(w.duration_seconds), 0) AS seconds, " +
-            "COUNT(w.id) AS intervals FROM work_sessions w " +
-            "WHERE w.user_id = :userId AND w.local_day >= :fromDay AND w.local_day < :toDay " +
-            "AND w.ended_at IS NOT NULL AND w.is_deleted = 0 " +
-            "GROUP BY w.local_day ORDER BY w.local_day ASC"
-    )
-    suspend fun dailySeries(userId: Long, fromDay: Long, toDay: Long): List<DailyWorkSummary>
-
     @Query(
         "SELECT AVG(duration_seconds) FROM work_sessions " +
             "WHERE user_id = :userId AND local_day >= :fromDay AND local_day < :toDay " +
@@ -172,6 +186,33 @@ interface WorkStatisticsDao {
             "AND completed_at IS NOT NULL AND completed_at >= :from AND completed_at < :to"
     )
     fun observeCompletedTasksInPeriod(userId: Long, from: Long, to: Long): Flow<Int>
+
+    /**
+     * The finished tasks of a window that carry an estimate, each with the time measured on it.
+     *
+     * Bounded twice over — by `index_tasks_user_id_completed_at` and by the window the caller names — and
+     * carrying four columns rather than a row of a task, because the reading this feeds has to name one
+     * example: "you estimate short" is a claim about a habit, and the habit is only checkable through the
+     * task that missed by the most. The measured total is a correlated scalar subquery rather than a join
+     * for the reason every other grouping here avoids joining `work_sessions`: joining would multiply the
+     * estimate rows by the number of intervals on each task, and the sum would then be a sum of pairs.
+     *
+     * `estimated_minutes > 0` keeps a zero the user typed out of the comparison: a plan of no minutes is not
+     * an estimate that was wrong, it is the absence of one, and reading it as a total miss would let the
+     * rule report the largest gap in the profile from a field nobody filled in.
+     */
+    @Query(
+        "SELECT t.id AS taskId, t.title AS title, t.estimated_minutes AS estimatedMinutes, " +
+            "COALESCE((SELECT SUM(w.duration_seconds) FROM work_sessions w " +
+            "WHERE w.task_id = t.id AND w.user_id = :userId AND w.ended_at IS NOT NULL " +
+            "AND w.is_deleted = 0), 0) AS measuredSeconds " +
+            "FROM tasks t " +
+            "WHERE t.user_id = :userId AND t.is_deleted = 0 AND t.estimated_minutes IS NOT NULL " +
+            "AND t.estimated_minutes > 0 AND UPPER(t.status) IN ('COMPLETED', 'DONE') " +
+            "AND t.completed_at IS NOT NULL AND t.completed_at >= :from AND t.completed_at < :to " +
+            "ORDER BY t.completed_at ASC"
+    )
+    suspend fun estimatedCompletions(userId: Long, from: Long, to: Long): List<EstimateComparison>
 
     /**
      * The trend for one task: one row per local day it was worked on inside the window.

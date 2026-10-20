@@ -88,3 +88,30 @@ data class TaskTotalSeconds(
     val taskId: Long,
     val seconds: Long
 )
+
+/**
+ * One finished task that was estimated, with the time actually measured on it.
+ *
+ * The pair is what the estimate rules need and what no single total can give: an average of planned against
+ * actual hides the one task the reader can go and look at, and a reading about estimating is only worth
+ * having if it can name an example. [measuredSeconds] is zero for a task nobody ever timed — the row still
+ * carries an estimate the user typed, and a rule that treated "not measured" as "took no time" would report
+ * every untracked task as a brilliant guess.
+ */
+data class EstimateComparison(
+    val taskId: Long,
+    val title: String,
+    val estimatedMinutes: Int,
+    val measuredSeconds: Long
+) {
+    /**
+     * The measured time in whole minutes, which is the unit both the estimate and every sentence about it
+     * are written in.
+     *
+     * A derived figure rather than a column, and floored rather than rounded: an estimate the reader wrote as
+     * 45 minutes is only overran when the measurement passed 45 of them, so rounding a 44-minute stretch up
+     * would turn a plan that held into a claimed miss.
+     */
+    val measuredMinutes: Int
+        get() = if (measuredSeconds <= 0L) 0 else (measuredSeconds / 60L).toInt()
+}

@@ -10,6 +10,7 @@ import com.taskplanner.data.model.GoalValueChange
 import com.taskplanner.data.model.Habit
 import com.taskplanner.data.model.HabitCheck
 import com.taskplanner.data.model.HabitCheckChange
+import com.taskplanner.data.model.Insight
 import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.Task
@@ -35,9 +36,10 @@ import com.taskplanner.data.model.WorkSession
         GoalValueChange::class,
         Habit::class,
         HabitCheck::class,
-        HabitCheckChange::class
+        HabitCheckChange::class,
+        Insight::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -54,6 +56,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskStatisticsDao(): TaskStatisticsDao
     abstract fun goalDao(): GoalDao
     abstract fun habitDao(): HabitDao
+    abstract fun insightDao(): InsightDao
 
     companion object {
         const val NAME = "taskplanner.db"

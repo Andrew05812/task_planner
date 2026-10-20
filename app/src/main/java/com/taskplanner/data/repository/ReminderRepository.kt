@@ -9,6 +9,7 @@ import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
+import com.taskplanner.data.tracking.TimeBase
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,6 +35,12 @@ import kotlinx.coroutines.flow.flowOf
  *
  * Nothing here invents a deadline: a task with no due instant has nothing to count back from, so it
  * cannot have reminders.
+ *
+ * A third rule is the one a reboot tests: **the repository asks one clock.** Every `now` below comes from
+ * [TimeBase.wallMillis], the same seam the habit coordinator is armed from, because the restore path hands
+ * its own `now` down to that coordinator — a repository that read the process clock instead would tell a
+ * habit its minute had not yet come on a day the app already considers morning, and re-arm a reminder for
+ * five minutes ago.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -44,7 +51,8 @@ class ReminderRepository @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val scheduler: ReminderScheduler,
     private val notifier: ReminderNotifier,
-    private val habitReminders: HabitReminderCoordinator
+    private val habitReminders: HabitReminderCoordinator,
+    private val timeBase: TimeBase
 ) {
 
     /** The lead times stored on one task, soonest fire first — what the editor ticks its chips from. */
@@ -79,7 +87,7 @@ class ReminderRepository @Inject constructor(
             retireTasks(listOf(subject.uuid))
             return false
         }
-        val now = System.currentTimeMillis()
+        val now = timeBase.wallMillis()
         val live = reminderDao.getLiveForTask(subject.uuid)
 
         val kept = if (offsets == null) {
@@ -125,7 +133,7 @@ class ReminderRepository @Inject constructor(
     /** Undoing the above: the lead times come back on the deadline the task has now. */
     suspend fun onTaskRestored(task: Task) {
         val dueAt = task.dueDate ?: return
-        val now = System.currentTimeMillis()
+        val now = timeBase.wallMillis()
         // The same rule as everywhere else: a minute the user has already been shown for this date
         // stays shown, so restoring a task does not repeat a notice they acted on.
         reminderDao.getLiveForTask(task.uuid).forEach { upsert(task, dueAt, it.offsetMinutes, now) }
@@ -145,7 +153,7 @@ class ReminderRepository @Inject constructor(
         val plainUuids = plain.map { it.uuid }
         if (plainUuids.isEmpty()) return
         plainUuids.forEach { uuid -> reminderDao.getLiveForTask(uuid).forEach { scheduler.cancel(it) } }
-        reminderDao.softDeleteForTasks(plainUuids, System.currentTimeMillis())
+        reminderDao.softDeleteForTasks(plainUuids, timeBase.wallMillis())
     }
 
     /** Retires the reminders of the listed tasks whatever their state — used when a series is deleted. */
@@ -153,7 +161,7 @@ class ReminderRepository @Inject constructor(
         val uuids = taskUuids.filter { it.isNotBlank() }
         if (uuids.isEmpty()) return
         uuids.forEach { uuid -> reminderDao.getLiveForTask(uuid).forEach { scheduler.cancel(it) } }
-        reminderDao.softDeleteForTasks(uuids, System.currentTimeMillis())
+        reminderDao.softDeleteForTasks(uuids, timeBase.wallMillis())
     }
 
     /**
@@ -167,7 +175,7 @@ class ReminderRepository @Inject constructor(
     suspend fun inheritForInstance(templateTaskUuid: String, instance: Task) {
         if (templateTaskUuid.isBlank() || instance.uuid.isBlank()) return
         val dueAt = instance.dueDate ?: return
-        val now = System.currentTimeMillis()
+        val now = timeBase.wallMillis()
         reminderDao.getLiveForTask(templateTaskUuid).forEach { source ->
             val created = Reminder(
                 uuid = Reminder.identity(instance.uuid, source.offsetMinutes),
@@ -192,7 +200,7 @@ class ReminderRepository @Inject constructor(
      * notifications on Thursday, and leaving them pending would put them back in front of every later
      * sweep.
      */
-    suspend fun deliverDue(now: Long = System.currentTimeMillis()): Int {
+    suspend fun deliverDue(now: Long = timeBase.wallMillis()): Int {
         val userId = sessionRepository.currentUserId() ?: return 0
         val earliest = now - ReminderScheduler.LATE_GRACE_MILLIS
         val stale = reminderDao.getLongOverdue(userId, earliest)
@@ -224,7 +232,7 @@ class ReminderRepository @Inject constructor(
      * and not the other would leave the user quietly missing the second. Returns the notices posted by
      * both.
      */
-    suspend fun rescheduleAll(now: Long = System.currentTimeMillis()): Int {
+    suspend fun rescheduleAll(now: Long = timeBase.wallMillis()): Int {
         val delivered = deliverDue(now)
         val userId = sessionRepository.currentUserId()
             ?: return habitReminders.rescheduleAll(now) + delivered
@@ -240,7 +248,7 @@ class ReminderRepository @Inject constructor(
      * The notification id comes from the reminder's uuid, which does not change, so the snoozed
      * reminder replaces the one on screen instead of leaving a second copy of it behind.
      */
-    suspend fun snooze(reminderUuid: String, now: Long = System.currentTimeMillis()): Boolean {
+    suspend fun snooze(reminderUuid: String, now: Long = timeBase.wallMillis()): Boolean {
         val reminder = reminderDao.findByUuid(reminderUuid) ?: return false
         taskDao.getTaskByUuid(reminder.taskUuid) ?: return false
         val trigger = now + ReminderScheduler.SNOOZE_MILLIS
@@ -266,7 +274,7 @@ class ReminderRepository @Inject constructor(
     suspend fun markHandledFromNotification(reminderUuid: String) {
         if (reminderUuid.isBlank()) return
         val reminder = reminderDao.findByUuid(reminderUuid) ?: return
-        reminderDao.markNotified(listOf(reminderUuid), System.currentTimeMillis())
+        reminderDao.markNotified(listOf(reminderUuid), timeBase.wallMillis())
         scheduler.cancel(reminder)
         notifier.cancel(reminder)
     }
@@ -331,7 +339,7 @@ class ReminderRepository @Inject constructor(
 
     private suspend fun retireOffset(taskUuid: String, offsetMinutes: Int) {
         val row = reminderDao.findByTaskAndOffset(taskUuid, offsetMinutes) ?: return
-        reminderDao.softDelete(row.uuid, System.currentTimeMillis())
+        reminderDao.softDelete(row.uuid, timeBase.wallMillis())
         scheduler.cancel(row)
     }
 }

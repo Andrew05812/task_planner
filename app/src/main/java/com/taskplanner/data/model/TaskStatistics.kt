@@ -52,6 +52,29 @@ data class DailyCompletionCount(
 )
 
 /**
+ * The open tasks sorted by how late they are and how much they matter, from one scan.
+ *
+ * The insight rules ask a question the dashboard's [TaskHealthCounts] does not: not "how much is overdue"
+ * but "how much of the overdue work is the work the user called important". Both are counts of the same
+ * rows, and both come out of the same pass over them, so the two screens cannot disagree about what is
+ * open by reading the table twice at two instants.
+ *
+ * [highOpen] is carried beside the overdue figures because a rule that says "three of your high-priority
+ * tasks are late" has to know how many there are in total; without it the sentence cannot be qualified, and
+ * a reading that cannot be checked against the list it came from is the kind §7 was written against.
+ */
+data class PriorityOverdueCounts(
+    /** Open tasks marked HIGH, late or not. */
+    val highOpen: Int = 0,
+    /** Open tasks marked HIGH whose deadline is already past. */
+    val highOverdue: Int = 0,
+    /** Every open task whose deadline is past, at any priority. */
+    val overdue: Int = 0,
+    /** Every open row the scan looked at. */
+    val open: Int = 0
+)
+
+/**
  * Whether a stored `status` spelling means the task is finished.
  *
  * One function because the answer is needed in two places that cannot see each other: `Converters`

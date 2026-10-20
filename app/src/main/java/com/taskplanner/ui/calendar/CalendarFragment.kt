@@ -14,6 +14,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.data.model.Task
 import com.taskplanner.databinding.FragmentCalendarBinding
 import dagger.hilt.android.AndroidEntryPoint
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +61,7 @@ class CalendarFragment : Fragment() {
             }
         )
         controller.bindControls()
+        openOnRequestedDay()
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -71,6 +73,24 @@ class CalendarFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /**
+     * Moves to the day another screen named, when it named one.
+     *
+     * The insights panel and the heavy-day reading count a particular day, and a "go and look" that opens the
+     * calendar on today makes the reader find the day again by hand. The graph's default is the day no device
+     * ever gave, so a calendar opened from the bottom bar — or from any destination that has no day in mind —
+     * is left to open the way it always did. A level this build cannot name is read as the month, which is the
+     * level the screen opens at anyway.
+     */
+    private fun openOnRequestedDay() {
+        val args = CalendarFragmentArgs.fromBundle(requireArguments())
+        if (args.dayEpoch < 0L) return
+        viewModel.focus(
+            LocalDate.ofEpochDay(args.dayEpoch),
+            CalendarMode.entries.firstOrNull { it.name == args.mode } ?: CalendarMode.MONTH
+        )
     }
 
     /** The editor for the task behind a chip, a block or a marker. */

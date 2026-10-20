@@ -215,14 +215,19 @@ class ReminderReceiverTest {
         val (task, reminder) = dueReminder(user.id, "Answer the call")
         send(ReminderReceiver.ACTION_REMINDER_DUE)
         val tappedAt = now()
+        // The tap is placed on the clock the app reads, which is the only clock the promised delay can be
+        // measured from: the fixture's clock stands still while the suite runs, so a window written against
+        // the real wall clock would be a window on a clock this repository no longer asks.
+        fixture.timeBase.shiftTo(tappedAt)
 
         send(ReminderReceiver.ACTION_SNOOZE, reminder.uuid)
 
         val snoozed = fixture.reminderDao.findByUuid(reminder.uuid)!!
         assertEquals(task.uuid, snoozed.taskUuid)
-        assertTrue(
+        assertEquals(
             "the new minute is the tap plus the promised delay",
-            snoozed.triggerAt in tappedAt + SNOOZE..now() + SNOOZE
+            tappedAt + SNOOZE,
+            snoozed.triggerAt
         )
         assertNull("pending again", snoozed.notifiedAt)
         assertNull(posted(reminder))
