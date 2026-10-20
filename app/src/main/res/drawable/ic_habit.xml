@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The habit marker: a day on the calendar with a check on it, the shape the app already means by "this day
+     was kept". Drawn in black like every other icon here, so the theme tints it and values-night needs no
+     second copy. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FF000000"
+        android:pathData="M19,3h-1V1h-2v2H8V1H6v2H5c-1.11,0 -1.99,0.9 -1.99,2L3,19c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2zM19,19H5V8h14v11z"/>
+    <path android:fillColor="#FF000000"
+        android:pathData="M16.53,11.06L15.47,10l-4.88,4.88l-2.12,-2.12l-1.06,1.06L10.59,17L16.53,11.06z"/>
+</vector>

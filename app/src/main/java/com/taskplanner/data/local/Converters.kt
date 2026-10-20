@@ -3,6 +3,8 @@ package com.taskplanner.data.local
 import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.taskplanner.data.model.GoalType
+import com.taskplanner.data.model.HabitFrequency
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.SyncState
@@ -140,4 +142,16 @@ class Converters {
 
     @TypeConverter
     fun fromWorkSource(value: WorkSource): String = value.name
+
+    @TypeConverter
+    fun toGoalType(value: String): GoalType = GoalType.fromName(value)
+
+    @TypeConverter
+    fun fromGoalType(value: GoalType): String = value.name
+
+    @TypeConverter
+    fun toHabitFrequency(value: String): HabitFrequency = HabitFrequency.fromName(value)
+
+    @TypeConverter
+    fun fromHabitFrequency(value: HabitFrequency): String = value.name
 } 

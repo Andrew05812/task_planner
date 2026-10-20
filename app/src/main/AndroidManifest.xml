@@ -35,13 +35,19 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Tapping a reminder opens the task it belongs to. singleTop delivers that link to the
-                 screen that is already showing instead of stacking a second copy of the app. -->
+            <!-- Tapping a reminder opens the task it belongs to, or the habit it is owed — a habit's
+                 reminder has no task behind it, so it points at the habit's own card. singleTop delivers
+                 that link to the screen that is already showing instead of stacking a second copy of the app. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="taskplanner" android:host="task" />
+                <!-- One attribute per tag, which is how Android's matcher is built anyway: it combines the
+                     data tags of a filter, so this still answers exactly the two links the app posts and no
+                     other host. -->
+                <data android:scheme="taskplanner" />
+                <data android:host="task" />
+                <data android:host="habit" />
             </intent-filter>
         </activity>
 

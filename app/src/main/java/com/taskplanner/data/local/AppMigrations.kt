@@ -407,6 +407,160 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Six new tables and their indices, and no change to any existing row. Goals and habits
+            // count work that already lives in `tasks` and `work_sessions`, so an upgraded database has
+            // everything the new features need to compute a figure on day one: the first goal a user
+            // writes can be a task they finished last month, and the first mark can be backdated —
+            // which is exactly why neither table stores a progress column that would have to be
+            // backfilled here, and why nothing in this step reads or rewrites a row of an older table.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `goals` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
+                    "NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, `title` TEXT NOT NULL, " +
+                    "`type` TEXT NOT NULL DEFAULT 'TASK_COUNT', `target_value` INTEGER NOT NULL, " +
+                    "`window_from_day` INTEGER, `window_to_day` INTEGER, `deadline_at` INTEGER, " +
+                    "`archived_at` INTEGER, `is_deleted` INTEGER NOT NULL DEFAULT 0, " +
+                    "`deleted_at` INTEGER, `sync_state` TEXT NOT NULL DEFAULT 'PENDING', " +
+                    "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_goals_user_id_is_deleted` " +
+                    "ON `goals` (`user_id`, `is_deleted`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_goals_uuid` ON `goals` (`uuid`)"
+            )
+
+            // The composite key is the whole rule of this table: a goal names a task once. There is no
+            // foreign key to `tasks`, the same reason `work_sessions` has none — the link is a record of
+            // what the user asked for, and it outlives the card, arrives before it from another device,
+            // and must not be taken away by an archive or a delete.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `goal_tasks` (`goal_uuid` TEXT NOT NULL, " +
+                    "`task_uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`added_at` INTEGER NOT NULL, PRIMARY KEY(`goal_uuid`, `task_uuid`), " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_goal_tasks_goal_uuid_added_at` " +
+                    "ON `goal_tasks` (`goal_uuid`, `added_at`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_goal_tasks_task_uuid` " +
+                    "ON `goal_tasks` (`task_uuid`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_goal_tasks_user_id` ON `goal_tasks` (`user_id`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `goal_value_changes` (`uuid` TEXT NOT NULL, " +
+                    "`goal_uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, `field` TEXT NOT NULL, " +
+                    "`old_value` TEXT, `new_value` TEXT, `reason` TEXT, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`uuid`), " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_goal_value_changes_goal_uuid_created_at` " +
+                    "ON `goal_value_changes` (`goal_uuid`, `created_at`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_goal_value_changes_user_id` " +
+                    "ON `goal_value_changes` (`user_id`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `habits` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
+                    "NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, `title` TEXT NOT NULL, " +
+                    "`frequency` TEXT NOT NULL DEFAULT 'DAILY', `days_mask` INTEGER NOT NULL DEFAULT 0, " +
+                    "`times_per_week` INTEGER, `start_day` INTEGER NOT NULL, `end_day` INTEGER, " +
+                    "`remind_minute_of_day` INTEGER, `reminded_on_day` INTEGER, `archived_at` INTEGER, " +
+                    "`is_deleted` INTEGER NOT NULL DEFAULT 0, `deleted_at` INTEGER, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_habits_user_id_is_deleted` " +
+                    "ON `habits` (`user_id`, `is_deleted`)"
+            )
+            // The six-hourly sweep asks this one question of every profile it visits, so the reminder
+            // minute has to be seekable with the profile rather than scanned for it.
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_habits_user_id_remind_minute_of_day` " +
+                    "ON `habits` (`user_id`, `remind_minute_of_day`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_habits_uuid` ON `habits` (`uuid`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `habit_checks` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
+                    "NOT NULL, `uuid` TEXT NOT NULL, `habit_uuid` TEXT NOT NULL, " +
+                    "`user_id` INTEGER NOT NULL, `local_day` INTEGER NOT NULL, " +
+                    "`utc_offset_minutes` INTEGER NOT NULL, `day_marker` INTEGER, " +
+                    "`is_deleted` INTEGER NOT NULL DEFAULT 0, `deleted_at` INTEGER, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            // One live mark per habit per day, as a database rule: `day_marker` is the nullable twin of
+            // `local_day` and is nulled when a mark is taken back, so retired rows stop colliding with
+            // anything while the live one keeps the day. This is the same marker-column pattern
+            // `index_work_sessions_user_id_open_marker` uses, for the same reason — Room's `@Index` has
+            // no WHERE clause, and an index written only here would leave the physical schema different
+            // from the schema Room exports.
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_habit_checks_habit_uuid_day_marker` " +
+                    "ON `habit_checks` (`habit_uuid`, `day_marker`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_habit_checks_user_id_local_day` " +
+                    "ON `habit_checks` (`user_id`, `local_day`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_habit_checks_habit_uuid_local_day` " +
+                    "ON `habit_checks` (`habit_uuid`, `local_day`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_habit_checks_uuid` " +
+                    "ON `habit_checks` (`uuid`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `habit_check_changes` (`uuid` TEXT NOT NULL, " +
+                    "`check_uuid` TEXT NOT NULL, `habit_uuid` TEXT NOT NULL, " +
+                    "`user_id` INTEGER NOT NULL, `old_local_day` INTEGER NOT NULL, " +
+                    "`new_local_day` INTEGER, `reason` TEXT, " +
+                    "`sync_state` TEXT NOT NULL DEFAULT 'PENDING', `created_at` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`uuid`), " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_habit_check_changes_check_uuid` " +
+                    "ON `habit_check_changes` (`check_uuid`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_habit_check_changes_habit_uuid_created_at` " +
+                    "ON `habit_check_changes` (`habit_uuid`, `created_at`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_habit_check_changes_user_id` " +
+                    "ON `habit_check_changes` (`user_id`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -419,6 +573,7 @@ object AppMigrations {
         MIGRATION_9_10,
         MIGRATION_10_11,
         MIGRATION_11_12,
-        MIGRATION_12_13
+        MIGRATION_12_13,
+        MIGRATION_13_14
     )
 }

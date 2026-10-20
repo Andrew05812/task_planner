@@ -438,6 +438,17 @@
     <string name="reminder_body_category_format">Category: %1$s</string>
     <string name="reminder_deadline_format">%1$s, %2$s</string>
 
+    <!-- Habits: the daily ask, carried by the same alarms and the same shade as a task reminder.
+         A habit gets its own channel because a nudge about a day should not be as loud as a promise
+         about a minute, and because switching one off must not silence the other. -->
+    <string name="habit_reminder_channel_name">Habit reminders</string>
+    <string name="habit_reminder_channel_description">Tells you a habit is owed today, at the time you chose</string>
+    <string name="habit_reminder_subtitle">Habit</string>
+    <string name="habit_reminder_content">Time to keep this today</string>
+    <string name="habit_reminder_body_time_format">Asked at %1$s</string>
+    <string name="habit_reminder_body_week_format">%1$d of %2$d kept this week</string>
+    <string name="habit_reminder_action_mark">Keep it</string>
+
     <!-- The dashboard: one period's figures, drawn rather than listed. -->
     <string name="dashboard_trend_title">Days of the period</string>
     <string name="dashboard_trend_work">Time measured each day</string>
@@ -503,4 +514,244 @@
         <item quantity="one">%1$d of %2$d task</item>
         <item quantity="other">%1$d of %2$d tasks</item>
     </plurals>
+
+    <!-- Goals. The four types are one row that differs only in what it counts, so the words below name the
+         unit rather than describing four screens. The figure of a count or set goal is a plural because the
+         denominator decides the noun ("1 of 2 tasks" still says tasks), and the time goal is not because
+         both sides of it are already spelled out as a duration by WorkTimeFormat. -->
+    <string name="title_goals">Goals</string>
+    <string name="goal_add">Set a goal</string>
+    <string name="goal_edit">Edit the goal</string>
+    <string name="goals_scope_open">Live</string>
+    <string name="goals_scope_archived">Put away</string>
+    <string name="goals_empty_open">No goals yet. A goal counts work this app already measures, so setting
+        one changes nothing about the tasks themselves.</string>
+    <string name="goals_empty_archived">Nothing is put away. Archiving a goal takes it off the live list and
+        keeps everything it counted.</string>
+
+    <string name="goal_type_task_count">Tasks finished</string>
+    <string name="goal_type_task_set">Tasks named</string>
+    <string name="goal_type_time_spent">Time measured</string>
+    <string name="goal_type_deadline">Everything named, by a date</string>
+
+    <string name="goal_time_figure">%1$s of %2$s measured</string>
+
+    <plurals name="goal_count_figure">
+        <item quantity="one">%1$d of %2$d finished</item>
+        <item quantity="other">%1$d of %2$d finished</item>
+    </plurals>
+
+    <plurals name="goal_set_figure">
+        <item quantity="one">%1$d of %2$d task done</item>
+        <item quantity="other">%1$d of %2$d tasks done</item>
+    </plurals>
+
+    <!-- A link whose task row is gone still counts in the denominator, so the card says out loud why the
+         figure it prints can never reach its target by doing the work that is left. -->
+    <plurals name="goal_missing_note">
+        <item quantity="one">%1$d named task is no longer here</item>
+        <item quantity="other">%1$d named tasks are no longer here</item>
+    </plurals>
+
+    <string name="goal_state_no_target">No figure set</string>
+    <string name="goal_state_reached">Reached</string>
+    <string name="goal_state_late">Past its date</string>
+
+    <string name="goal_window_format">%1$s – %2$s</string>
+    <string name="goal_window_open">now</string>
+    <string name="goal_deadline_format">By %1$s</string>
+    <string name="goal_meta_joiner">"  ·  "</string>
+
+    <string name="goal_detail_tasks">Tasks this goal names</string>
+    <string name="goal_detail_history">How the aim changed</string>
+    <string name="goal_detail_empty_tasks">Nothing is named yet. Add the tasks this goal is about.</string>
+    <string name="goal_detail_empty_history">The target has not been moved since the goal was set.</string>
+    <string name="goal_task_missing">This task is no longer here</string>
+    <string name="goal_task_done">Finished</string>
+    <string name="goal_link_task">Add a task</string>
+    <string name="goal_unlink_confirm_title">Take this task out of the goal?</string>
+    <string name="goal_unlink_confirm_message">The task stays where it is. The goal stops asking for it, and
+        its figure moves with it.</string>
+    <string name="goal_unlink_confirm_yes">Take it out</string>
+    <string name="goal_unlinked_toast">The task is out of the goal. Its own row was not touched.</string>
+    <string name="goal_not_found">This goal is no longer here.</string>
+    <string name="goal_archive">Put this goal away</string>
+    <string name="goal_unarchive">Bring it back</string>
+    <string name="goal_delete">Throw this goal away</string>
+    <string name="goal_archived_toast">The goal is put away. Everything it counted is untouched.</string>
+    <string name="goal_unarchived_toast">The goal is back on the live list.</string>
+    <string name="goal_removed_toast">The goal is out of the list. Its tasks were not touched.</string>
+    <string name="goal_archived_note">This goal is put away. Its figure is still here, and nothing it counted
+        was changed.</string>
+    <string name="goal_delete_confirm_title">Throw this goal away?</string>
+    <string name="goal_delete_confirm_message">The goal and the record of its targets leave the list. The
+        tasks it named are untouched, and their rows stay in the database.</string>
+    <string name="goal_delete_confirm_yes">Throw it away</string>
+
+    <!-- The one line a history row prints: which of the goal\'s own figures moved, and from what to what.
+         Both values are the words the editor printed when they were written, which is why they are text. -->
+    <string name="goal_change_format">%1$s: %2$s → %3$s</string>
+    <string name="goal_change_when_format">%1$s — %2$s</string>
+    <string name="goal_change_unset">nothing</string>
+    <string name="goal_change_no_reason">no reason given</string>
+    <string name="goal_field_title">Title</string>
+    <string name="goal_field_type">What it counts</string>
+    <string name="goal_field_target">Figure</string>
+    <string name="goal_field_window">Window</string>
+    <string name="goal_field_deadline">Date</string>
+
+    <string name="title_goal_detail">The goal</string>
+    <string name="title_goal_editor">Goal</string>
+    <string name="goal_editor_title_hint">What you are aiming at</string>
+    <string name="goal_editor_counts_label">What it counts</string>
+    <string name="goal_editor_target_hint">Figure to reach (optional)</string>
+    <string name="goal_editor_window_from_hint">From (yyyy-MM-dd)</string>
+    <string name="goal_editor_window_to_hint">To (yyyy-MM-dd)</string>
+    <string name="goal_editor_deadline_hint">By (yyyy-MM-dd HH:mm)</string>
+    <string name="goal_editor_reason_hint">Why it changed (optional)</string>
+    <string name="goal_save">Save the goal</string>
+    <string name="goal_saved">The goal is saved.</string>
+    <string name="goal_target_is_time">Seconds of measured work, for example 5400 for an hour and a half.</string>
+    <string name="goal_tasks_note">A goal that names tasks counts the ones you add here. Nothing is copied:
+        the task keeps its own row and its own screen.</string>
+    <string name="goal_bad_target">Write the figure as a whole number, or leave it empty.</string>
+    <string name="goal_bad_dates">The last day cannot fall before the first.</string>
+    <string name="goal_bad_day">Write the day as yyyy-MM-dd, for example 2026-10-01.</string>
+    <string name="goal_bad_instant">Write the date as yyyy-MM-dd HH:mm, for example 2026-12-31 23:59.</string>
+    <string name="goal_deadline_required">A goal that asks for everything by a date needs that date.</string>
+    <string name="goal_reject_not_found">This goal is no longer in your account, so nothing was written.</string>
+    <string name="goal_reject_blank_title">A goal needs a name before it can be saved.</string>
+    <string name="goal_reject_task">That task is not in this account, so the goal was not pointed at it.</string>
+    <string name="goal_no_profile">No profile is signed in, so there is nothing to save a goal to.</string>
+    <string name="goal_no_tasks_to_link">There is no open task left to name.</string>
+    <string name="goal_link_saved">The goal now counts that task.</string>
+
+    <!-- Habits. The words a habit card prints are the ones HabitCard picks, so the list and the detail
+         screen cannot tell different stories about one row; the window the percentage is read over is said
+         out loud beside it, because "75% kept" without its window is a figure nobody can check. -->
+    <string name="title_habits">Habits</string>
+    <string name="title_habit_detail">The habit</string>
+    <string name="title_habit_editor">Habit</string>
+    <string name="habits_scope_open">In progress</string>
+    <string name="habits_scope_archived">Put away</string>
+    <string name="habits_empty_open">No habit is being asked for yet. Start one and the days will fill in.</string>
+    <string name="habits_empty_archived">No habit has been put away.</string>
+    <string name="habit_add">Start a habit</string>
+    <string name="habit_edit">Change the schedule</string>
+    <string name="habit_day_hint">A day the schedule does not name can still be kept. A day outside the window
+        the habit covered, or one that has not arrived yet, cannot.</string>
+
+    <string name="habit_type_daily">Every day</string>
+    <string name="habit_type_weekdays">On chosen weekdays</string>
+    <string name="habit_type_times">A number of times each week</string>
+    <string name="habit_weekday_joiner">", "</string>
+    <plurals name="habit_times_per_week">
+        <item quantity="one">%d time a week</item>
+        <item quantity="other">%d times a week</item>
+    </plurals>
+
+    <plurals name="habit_streak_days">
+        <item quantity="one">%d day running</item>
+        <item quantity="other">%d days running</item>
+    </plurals>
+    <plurals name="habit_streak_weeks">
+        <item quantity="one">%d week running</item>
+        <item quantity="other">%d weeks running</item>
+    </plurals>
+    <plurals name="habit_best_days">
+        <item quantity="one">Longest %d day</item>
+        <item quantity="other">Longest %d days</item>
+    </plurals>
+    <plurals name="habit_best_weeks">
+        <item quantity="one">Longest %d week</item>
+        <item quantity="other">Longest %d weeks</item>
+    </plurals>
+    <string name="habit_streak_none">No series yet</string>
+    <string name="habit_week_figure">%1$d of %2$d this week</string>
+    <string name="habit_kept_format">%1$d%% kept</string>
+    <plurals name="habit_kept_window_format">
+        <item quantity="one">over the last %1$d day</item>
+        <item quantity="other">over the last %1$d days</item>
+    </plurals>
+    <string name="habit_kept_line_format">%1$s, %2$s</string>
+    <plurals name="habit_marks_format">
+        <item quantity="one">%1$d day kept in that window</item>
+        <item quantity="other">%1$d days kept in that window</item>
+    </plurals>
+
+    <string name="habit_state_kept">Kept today</string>
+    <string name="habit_state_owed">Owed today</string>
+    <string name="habit_window_format">Since %1$s</string>
+    <string name="habit_until_format">Until %1$s</string>
+    <string name="habit_reminder_format">Reminded at %1$s</string>
+    <string name="habit_meta_joiner">"  ·  "</string>
+
+    <string name="habit_detail_grid">The days it was kept</string>
+    <string name="habit_detail_history">How the marks changed</string>
+    <string name="habit_detail_empty_history">No mark has been taken back or moved.</string>
+    <string name="habit_this_week">This week</string>
+    <string name="habit_week_format">%1$s – %2$s</string>
+    <string name="habit_week_back">Look at the week before</string>
+    <string name="habit_week_forward">Look at the week after</string>
+    <string name="habit_keep">Keep today</string>
+    <string name="habit_correct">Correct this mark</string>
+    <string name="habit_mark_saved">The day is kept.</string>
+    <string name="habit_day_not_asked">That day is not one this habit asks for, but you can still keep it.</string>
+    <string name="habit_day_future">A day that has not arrived yet cannot be kept.</string>
+    <string name="habit_day_outside">This day lies outside the window the habit covered.</string>
+
+    <string name="habit_correct_title">Correct this mark</string>
+    <string name="habit_correct_stands">It stands on %1$s. Leave the day below empty to take it back.</string>
+    <string name="habit_correct_move_hint">Move to (yyyy-MM-dd)</string>
+    <string name="habit_correct_reason_hint">Why (optional)</string>
+    <string name="habit_correct_save">Apply</string>
+    <string name="habit_taken_back_toast">The mark is taken back. The day is recorded as corrected, not as never asked.</string>
+    <string name="habit_moved_toast">The mark has moved to the day you named.</string>
+    <string name="habit_change_taken_back">Took back %1$s</string>
+    <string name="habit_change_moved">Moved %1$s to %2$s</string>
+    <string name="habit_change_when_format">%1$s — %2$s</string>
+    <string name="habit_change_no_reason">no reason given</string>
+
+    <string name="habit_archive">Put this habit away</string>
+    <string name="habit_unarchive">Bring it back</string>
+    <string name="habit_delete">Throw this habit away</string>
+    <string name="habit_archived_toast">The habit is put away. Its days and its figures are untouched.</string>
+    <string name="habit_unarchived_toast">The habit is being asked for again.</string>
+    <string name="habit_removed_toast">The habit is gone. Its marks were retired with it.</string>
+    <string name="habit_archived_note">This habit is put away. Nothing is asked for, and every day kept is still here.</string>
+    <string name="habit_not_found">This habit is no longer here.</string>
+    <string name="habit_delete_confirm_title">Throw this habit away?</string>
+    <string name="habit_delete_confirm_message">The habit leaves the list and its kept days stop counting toward
+        anything. The rows and the record of their corrections stay in your account.</string>
+    <string name="habit_delete_confirm_yes">Throw it away</string>
+
+    <string name="habit_editor_title_hint">What you want to keep doing</string>
+    <string name="habit_editor_frequency_label">How often</string>
+    <string name="habit_editor_days_label">Which weekdays</string>
+    <string name="habit_editor_times_hint">Times a week (1 to 7)</string>
+    <string name="habit_editor_start_hint">From (yyyy-MM-dd)</string>
+    <string name="habit_editor_end_hint">Until (yyyy-MM-dd, empty to leave open)</string>
+    <string name="habit_editor_reminder_label">Reminder</string>
+    <string name="habit_editor_reminder_set">Remind me at %1$s</string>
+    <string name="habit_editor_reminder_none">No reminder</string>
+    <string name="habit_editor_reminder_clear">Clear the reminder</string>
+    <string name="habit_save">Save the habit</string>
+    <string name="habit_saved">The habit is saved.</string>
+    <string name="habit_bad_day">Write the day as yyyy-MM-dd, for example 2026-10-01.</string>
+    <string name="habit_bad_times">Write a whole number from 1 to 7, or ask for the habit in another way.</string>
+    <string name="habit_start_is_today">Left empty, the habit is asked for from today.</string>
+
+    <string name="habit_no_profile">No profile is signed in, so there is nothing to save a habit to.</string>
+    <string name="habit_reject_not_found">This habit is no longer in your account, so nothing was written.</string>
+    <string name="habit_reject_archived">This habit is put away. Bring it back before keeping a day on it.</string>
+    <string name="habit_reject_blank_title">A habit needs a name before it can be saved.</string>
+    <string name="habit_reject_empty_weekdays">A habit on chosen weekdays has to name at least one weekday.</string>
+    <string name="habit_reject_weekly_count">A habit counted by the week needs a number from 1 to 7.</string>
+    <string name="habit_reject_bad_window">The last day cannot fall before the first.</string>
+    <string name="habit_reject_bad_minute">The reminder time is not a minute of the day.</string>
+    <string name="habit_reject_day_outside">That day lies outside the window this habit covered, so it was not kept.</string>
+    <string name="habit_reject_day_future">That day has not arrived yet, so nothing was asserted about it.</string>
+    <string name="habit_reject_already_marked">That day already stands as kept.</string>
+    <string name="habit_reject_no_mark">There is no kept day there to take back or move.</string>
+    <string name="habit_reject_target_taken">The day you moved to is already kept, so nothing was swapped.</string>
 </resources>

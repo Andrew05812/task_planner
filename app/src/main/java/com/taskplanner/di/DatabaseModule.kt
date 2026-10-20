@@ -5,6 +5,8 @@ import androidx.room.Room
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.AppMigrations
 import com.taskplanner.data.local.CategoryDao
+import com.taskplanner.data.local.GoalDao
+import com.taskplanner.data.local.HabitDao
 import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.LegacyDbRescuer
 import com.taskplanner.data.local.RecurrenceDao
@@ -80,4 +82,12 @@ object DatabaseModule {
     @Provides
     fun provideTaskStatisticsDao(database: AppDatabase): TaskStatisticsDao =
         database.taskStatisticsDao()
+
+    /** Goals and habits, their marks and their correction history: the schema v14 tables, read through
+     *  the same database the rest of the profile lives in. */
+    @Provides
+    fun provideGoalDao(database: AppDatabase): GoalDao = database.goalDao()
+
+    @Provides
+    fun provideHabitDao(database: AppDatabase): HabitDao = database.habitDao()
 }

@@ -75,7 +75,7 @@ class StatisticsViewModelTest {
         Dispatchers.setMain(Executor { it.run() }.asCoroutineDispatcher())
         userId = runBlocking { fixture.signIn(email = "dashboard@example.com").id }
         // Midday, so a period that ends at the next midnight has room on both sides of the work seeded here.
-        fixture.timeBase.wall = at(LocalDate.now(), 12, 0)
+        fixture.timeBase.shiftTo(at(LocalDate.now(), 12, 0))
     }
 
     @After
@@ -258,7 +258,7 @@ class StatisticsViewModelTest {
 
         val plants = addTask("Water the plants")
         val answer = runBlocking {
-            fixture.timeBase.wall = at(day(), 11, 0)
+            fixture.timeBase.shiftTo(at(day(), 11, 0))
             // Through the production tracker, so the stretch carries the source and the day the reader groups
             // by rather than whatever a test found convenient to write.
             fixture.workTrackingRepository.recordManualInterval(plants, at(day(), 11, 0), at(day(), 11, 30))
@@ -301,7 +301,7 @@ class StatisticsViewModelTest {
         assertEquals(0f, figures().completionRate!!, 0f)
 
         runBlocking {
-            fixture.timeBase.wall = at(day(), 15, 0)
+            fixture.timeBase.shiftTo(at(day(), 15, 0))
             fixture.taskDao.updateTask(
                 report.copy(status = TaskStatus.COMPLETED, completedAt = at(day(), 15, 0))
             )
@@ -336,7 +336,7 @@ class StatisticsViewModelTest {
 
         // The clock crosses midnight while the screen is asleep in somebody's pocket, and the fragment asks
         // again on the way back — the two calls onResume makes.
-        fixture.timeBase.wall = at(worked.plusDays(1), 0, 5)
+        fixture.timeBase.shiftTo(at(worked.plusDays(1), 0, 5))
         viewModel.refreshDay()
 
         awaitUntil("the new day's window") { state().snapshot?.request?.onDay == day() }

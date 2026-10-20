@@ -22,6 +22,11 @@ import javax.inject.Singleton
  * [com.taskplanner.data.repository.ReminderRepository.deliverDue], which runs again on start-up, on a
  * profile switch, after a sync pull and from [ReminderSweepWorker]. Losing an alarm therefore delays a
  * reminder; it cannot lose one silently.
+ *
+ * The row-shaped [arm] is the convenience, and [armAt] is the seam: a wakeup needs an instant and a slot,
+ * which is all a habit's schedule has to offer it as well. Nothing below reads a `Reminder` column, so the
+ * same clock, the same exact-alarm fallback and the same blank intent serve a habit's repeating minute
+ * without that minute needing a row of its own.
  */
 @Singleton
 class ReminderScheduler @Inject constructor(
@@ -39,21 +44,46 @@ class ReminderScheduler @Inject constructor(
      * still armed as an allow-while-idle alarm — late, possibly by up to a window, but not dropped —
      * and the editor says so instead of promising a minute it cannot keep.
      */
-    fun arm(reminder: Reminder, now: Long = System.currentTimeMillis()): Boolean {
-        if (reminder.triggerAt <= now) return false
+    fun arm(reminder: Reminder, now: Long = System.currentTimeMillis()): Boolean = armAt(
+        reminder.alarmRequestCode(),
+        reminder.triggerAt,
+        ReminderReceiver.ACTION_REMINDER_DUE,
+        now
+    )
+
+    fun cancel(reminder: Reminder) =
+        cancelAt(reminder.alarmRequestCode(), ReminderReceiver.ACTION_REMINDER_DUE)
+
+    /**
+     * Arms the wakeup that [action] announces, at [instant], in [requestCode]'s slot.
+     *
+     * This is the same alarm the task reminders are armed with, asked for by the two things that
+     * actually decide it: when to wake and whose slot to wake in. A reminder row supplies both, and so
+     * does a habit's schedule — which is a minute and a rule rather than a row, and has no business in
+     * the `reminders` table — so the row-shaped wrapper above delegates here instead of the two of them
+     * each owning a copy of AlarmManager.
+     */
+    fun armAt(
+        requestCode: Int,
+        instant: Long,
+        action: String,
+        now: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (instant <= now) return false
         val manager = alarmManager ?: return false
-        val intent = alarmIntent(reminder)
+        val intent = alarmIntent(requestCode, action)
         if (canUseExactAlarms()) {
             // allow-while-idle is the variant that survives doze; the plain exact alarm does not.
-            manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, reminder.triggerAt, intent)
+            manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, instant, intent)
         } else {
-            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, reminder.triggerAt, intent)
+            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, instant, intent)
         }
         return true
     }
 
-    fun cancel(reminder: Reminder) {
-        alarmManager?.cancel(alarmIntent(reminder))
+    /** Takes the wakeup in [requestCode]'s slot off the clock. */
+    fun cancelAt(requestCode: Int, action: String) {
+        alarmManager?.cancel(alarmIntent(requestCode, action))
     }
 
     /** Whether this app may set alarms that fire at the minute the user chose. */
@@ -66,15 +96,15 @@ class ReminderScheduler @Inject constructor(
         }
 
     /**
-     * The alarm carries no task title, no id and nothing else: the receiver reads the database and
-     * delivers whatever is due. A broadcast that could not be forged into a wrong notification is not
+     * The alarm carries no task title, no habit, no id and nothing else: the receiver reads the database
+     * and delivers whatever is due. A broadcast that could not be forged into a wrong notification is not
      * a broadcast worth protecting, and the receiver is not exported, so only this app's own
      * PendingIntents and the system can reach it.
      */
-    private fun alarmIntent(reminder: Reminder): PendingIntent = PendingIntent.getBroadcast(
+    private fun alarmIntent(requestCode: Int, action: String): PendingIntent = PendingIntent.getBroadcast(
         context,
-        reminder.alarmRequestCode(),
-        Intent(context, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_REMINDER_DUE),
+        requestCode,
+        Intent(context, ReminderReceiver::class.java).setAction(action),
         // Immutable: the system must not be able to rewrite what the alarm delivers; update-current
         // keeps one reminder to one alarm when it is re-armed after a snooze or a moved deadline.
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT

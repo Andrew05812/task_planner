@@ -8,6 +8,7 @@ import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
 import com.taskplanner.testing.AppFixture
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -40,6 +41,14 @@ class ReminderRepositoryTest {
         fixture = AppFixture(context)
         alarmManager = context.getSystemService(AlarmManager::class.java)
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
+    }
+
+    @After
+    fun tearDown() {
+        // The fixture's two database threads have to be finished before the storage goes away. A query
+        // still running when this test ends is reported against whichever test runs next, and that test
+        // then fails for something this one did.
+        fixture.close()
     }
 
     private fun now(): Long = System.currentTimeMillis()

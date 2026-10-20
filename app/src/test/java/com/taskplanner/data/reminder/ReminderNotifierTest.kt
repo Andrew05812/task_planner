@@ -4,13 +4,20 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.text.format.DateFormat
 import androidx.test.core.app.ApplicationProvider
 import com.taskplanner.R
+import com.taskplanner.data.habit.HabitAdherence
+import com.taskplanner.data.habit.HabitReminderAction
+import com.taskplanner.data.habit.HabitReminderIdentity
 import com.taskplanner.data.model.Category
+import com.taskplanner.data.model.Habit
+import com.taskplanner.data.model.HabitFrequency
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
+import java.util.Date
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -28,6 +35,9 @@ import org.robolectric.Shadows.shadowOf
  *
  * The manager here is Robolectric's shadow, so posting is real and the posted record can be read
  * back — including the case that matters most, a device on which the user switched notifications off.
+ *
+ * Habit notices are read the same way, and the two kinds are compared where they must differ: a deadline
+ * is loud and a habit is not, and each opens the screen its own row lives on.
  */
 @RunWith(RobolectricTestRunner::class)
 class ReminderNotifierTest {
@@ -226,7 +236,196 @@ class ReminderNotifierTest {
         )
     }
 
+    // region habit notices
+
+    @Test
+    fun `the habit channel is created once and is quieter than a deadline`() {
+        notifier.ensureHabitChannel()
+        notifier.ensureHabitChannel()
+        notifier.ensureChannel()
+
+        val channels = shadowOf(manager).notificationChannels.map { it as NotificationChannel }
+        assertEquals(2, channels.size)
+        val habitChannel = channels.first { it.id == ReminderNotifier.HABIT_CHANNEL_ID }
+        val taskChannel = channels.first { it.id == ReminderNotifier.CHANNEL_ID }
+        assertEquals(context.getString(R.string.habit_reminder_channel_name), habitChannel.name.toString())
+        assertEquals(
+            "a daily nudge must be switchable off without muting a deadline, so the two live apart",
+            NotificationManager.IMPORTANCE_DEFAULT,
+            habitChannel.importance
+        )
+        assertEquals(
+            "and a deadline keeps its louder setting beside it",
+            NotificationManager.IMPORTANCE_HIGH,
+            taskChannel.importance
+        )
+    }
+
+    @Test
+    fun `a habit notice names the habit, the minute it asked for and the week it stands in`() {
+        val target = habit()
+
+        assertTrue(notifier.showHabit(target, DAY, TRIGGER, HabitAdherence(kept = 3, asked = 4)))
+
+        val notification = postedHabit(target)!!
+        assertEquals(target.title, notification.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(ReminderNotifier.HABIT_CHANNEL_ID, notification.channelId)
+        assertEquals(
+            context.getString(R.string.habit_reminder_subtitle),
+            notification.extras.getCharSequence(Notification.EXTRA_SUB_TEXT).toString()
+        )
+        assertEquals(
+            context.getString(R.string.habit_reminder_content),
+            notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        )
+        val clock = DateFormat.getTimeFormat(context).format(Date(TRIGGER))
+        assertEquals(
+            "the expanded text repeats the header's time rather than the sweep's, and adds the week",
+            listOf(
+                context.getString(R.string.habit_reminder_body_time_format, clock),
+                context.getString(R.string.habit_reminder_body_week_format, 3, 4)
+            ).joinToString("\n"),
+            notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString()
+        )
+        assertEquals(Notification.CATEGORY_REMINDER, notification.category)
+        assertEquals(
+            "a habit asks, it does not demand: it carries no raised priority beside a deadline's",
+            Notification.PRIORITY_DEFAULT,
+            notification.priority
+        )
+        assertEquals(ReminderNotifier.GROUP_KEY, notification.group)
+    }
+
+    @Test
+    fun `a habit that has asked for nothing this week shows no figure`() {
+        val target = habit()
+
+        notifier.showHabit(target, DAY, TRIGGER, HabitAdherence(kept = 0, asked = 0))
+
+        val bigText = postedHabit(target)!!.extras
+            .getCharSequence(Notification.EXTRA_BIG_TEXT).toString()
+        assertEquals(
+            "a zero kept of nothing asked would read as a failure the user never had to avoid",
+            context.getString(
+                R.string.habit_reminder_body_time_format,
+                DateFormat.getTimeFormat(context).format(Date(TRIGGER))
+            ),
+            bigText
+        )
+    }
+
+    @Test
+    fun `a habit notice offers keep it and snooze as separate intents`() {
+        val target = habit()
+
+        notifier.showHabit(target, DAY, TRIGGER, HabitAdherence(kept = 1, asked = 5))
+
+        val notification = postedHabit(target)!!
+        assertEquals(
+            listOf(
+                context.getString(R.string.habit_reminder_action_mark),
+                context.getString(R.string.reminder_action_snooze)
+            ),
+            notification.actions.map { it.title.toString() }
+        )
+        val slots = notification.actions.map { shadowOf(it.actionIntent).requestCode }
+        assertEquals(HabitReminderIdentity.requestCodeOf(target.uuid, HabitReminderAction.MARK), slots[0])
+        assertEquals(HabitReminderIdentity.requestCodeOf(target.uuid, HabitReminderAction.SNOOZE), slots[1])
+        assertEquals(
+            "a button may not overwrite the screen the notice opens from",
+            HabitReminderIdentity.requestCodeOf(target.uuid, HabitReminderAction.OPEN)
+                .let { it != slots[0] && it != slots[1] },
+            true
+        )
+
+        assertEquals(
+            ReminderReceiver.ACTION_HABIT_MARK,
+            shadowOf(notification.actions[0].actionIntent).savedIntent.action
+        )
+        assertEquals(
+            ReminderReceiver.ACTION_HABIT_SNOOZE,
+            shadowOf(notification.actions[1].actionIntent).savedIntent.action
+        )
+        notification.actions.forEach { action ->
+            val intent = shadowOf(action.actionIntent).savedIntent
+            assertEquals(
+                "the habit is named by its uuid, so a row deleted since still gets the right answer",
+                target.uuid,
+                intent.getStringExtra(ReminderReceiver.EXTRA_HABIT_UUID)
+            )
+            assertEquals(
+                "and the day the notice asked about, not the day the tap falls on",
+                DAY,
+                intent.getLongExtra(ReminderReceiver.EXTRA_HABIT_DAY, ReminderReceiver.NO_DAY)
+            )
+        }
+    }
+
+    @Test
+    fun `tapping a habit notice deep links to the habit it came from`() {
+        val target = habit()
+
+        notifier.showHabit(target, DAY, TRIGGER, null)
+
+        val content = shadowOf(postedHabit(target)!!.contentIntent)
+        assertEquals(HabitReminderIdentity.habitDeepLink(target.id), content.savedIntent.dataString)
+        assertEquals(
+            HabitReminderIdentity.requestCodeOf(target.uuid, HabitReminderAction.OPEN),
+            content.requestCode
+        )
+        assertEquals(
+            "a habit kept from the shade should leave its notice behind",
+            true,
+            postedHabit(target)!!.flags and Notification.FLAG_AUTO_CANCEL != 0
+        )
+    }
+
+    @Test
+    fun `notifications switched off posts no habit notice and tells the caller`() {
+        shadowOf(manager).setNotificationsEnabled(false)
+        val target = habit()
+
+        assertFalse(notifier.canPostNotifications())
+        assertFalse(
+            "a day the user could not see must stay un-announced instead of taking its note",
+            notifier.showHabit(target, DAY, TRIGGER, HabitAdherence(kept = 0, asked = 3))
+        )
+        assertNull(postedHabit(target))
+    }
+
+    @Test
+    fun `cancelling a habit clears its own notice only`() {
+        val first = habit("Stretch", "habit-a")
+        val second = habit("Read", "habit-b")
+        notifier.showHabit(first, DAY, TRIGGER, null)
+        notifier.showHabit(second, DAY, TRIGGER, null)
+
+        notifier.cancelHabit(first.uuid)
+
+        assertNull(postedHabit(first))
+        assertNotNull(postedHabit(second))
+    }
+
+    private fun habit(title: String = "Run", uuid: String = "habit-notify") = Habit(
+        id = 11,
+        uuid = uuid,
+        userId = 1,
+        title = title,
+        frequency = HabitFrequency.DAILY,
+        startDay = DAY - 30,
+        remindMinuteOfDay = 7 * 60
+    )
+
+    private fun postedHabit(target: Habit): Notification? =
+        shadowOf(manager).getNotification(HabitReminderIdentity.notificationIdOf(target.uuid))
+
+    // endregion
+
     private companion object {
         const val DUE = 1_800_000_000_000L
+
+        /** An arbitrary epoch day and the instant its scheduled minute falls on. */
+        const val DAY = 20_600L
+        const val TRIGGER = 1_800_000_000_000L
     }
 }

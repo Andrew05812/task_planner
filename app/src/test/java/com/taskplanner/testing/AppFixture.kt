@@ -7,9 +7,12 @@ import androidx.room.Room
 import com.taskplanner.data.auth.AuthRepository
 import com.taskplanner.data.backup.BackupRepository
 import com.taskplanner.data.calendar.CalendarRepository
+import com.taskplanner.data.habit.HabitReminderCoordinator
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
+import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.HabitDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
@@ -33,7 +36,9 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.taskplanner.data.repository.GoalRepository
 import com.taskplanner.data.repository.GroupRepository
+import com.taskplanner.data.repository.HabitRepository
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
@@ -107,6 +112,13 @@ class AppFixture(private val context: Context) : AutoCloseable {
     fun newSessionRepository(): SessionRepository = SessionRepository(userDao, prefs, sessionScope)
 
     /**
+     * The tracker's clocks under the test's control. A duration is only reproducible if the instant it
+     * was measured from is, and a clock change is one of the cases the feature has to answer for, so
+     * the fixture hands the repository a fake rather than the device clock.
+     */
+    val timeBase = FakeTimeBase(wall = System.currentTimeMillis(), monotonic = 0L)
+
+    /**
      * The real alarm and notification gateways, on Robolectric's shadows of them: reminders are
      * armed and posted for real in these tests, because "the row exists but nothing was scheduled"
      * is exactly the bug a fake would hide. Assertions read them through
@@ -114,20 +126,25 @@ class AppFixture(private val context: Context) : AutoCloseable {
      */
     val reminderScheduler = ReminderScheduler(context)
     val reminderNotifier = ReminderNotifier(context)
+
+    /**
+     * A habit's reminder is a rule rather than a row, so it borrows the task reminders' scheduler and
+     * notification bar and derives its own next owed minute from the habit row. Built before the reminder
+     * repository because rebuilding the alarms rebuilds both kinds together.
+     */
+    val habitDao: HabitDao = database.habitDao()
+    val habitReminders = HabitReminderCoordinator(
+        habitDao, sessionRepository, reminderScheduler, reminderNotifier, timeBase
+    )
+
     val reminderRepository = ReminderRepository(
-        reminderDao, taskDao, categoryDao, sessionRepository, reminderScheduler, reminderNotifier
+        reminderDao, taskDao, categoryDao, sessionRepository, reminderScheduler, reminderNotifier,
+        habitReminders
     )
 
     // Declared before the task repository on purpose: finishing a task is what advances a series.
     val recurrenceRepository =
         RecurrenceRepository(recurrenceDao, taskDao, sessionRepository, reminderRepository)
-
-    /**
-     * The tracker's clocks under the test's control. A duration is only reproducible if the instant it
-     * was measured from is, and a clock change is one of the cases the feature has to answer for, so
-     * the fixture hands the repository a fake rather than the device clock.
-     */
-    val timeBase = FakeTimeBase(wall = System.currentTimeMillis(), monotonic = 0L)
 
     /** Shared by the tracker and the statistics reader, the way the process shares one. */
     val monotonicReference = MonotonicReference(timeBase)
@@ -161,6 +178,17 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val dashboardRepository = DashboardRepository(
         taskStatisticsDao, workSessionDao, trackingSessionDao, workStatisticsRepository,
         sessionRepository, timeBase
+    )
+
+    /** Goals read the same aggregates the dashboard and the history screen write. */
+    val goalDao: GoalDao = database.goalDao()
+    val goalRepository = GoalRepository(
+        database, goalDao, taskDao, workStatisticsDao, sessionRepository, timeBase, workTicker
+    )
+
+    /** A habit's figures come only from its own marks, so nothing else is needed to compute them. */
+    val habitRepository = HabitRepository(
+        database, habitDao, sessionRepository, timeBase, workTicker, habitReminders
     )
 
     val taskRepository = TaskRepository(

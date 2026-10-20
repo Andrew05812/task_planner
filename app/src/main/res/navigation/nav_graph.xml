@@ -72,6 +72,16 @@
         <action
             android:id="@+id/action_profile_to_settings"
             app:destination="@id/navigation_settings" />
+        <!-- The aims are the account's own business, so they are opened from the account rather than from a
+             column of the task list — and only when there is an account to hold them. -->
+        <action
+            android:id="@+id/action_profile_to_goals"
+            app:destination="@id/navigation_goals" />
+        <!-- The routines are the account's own business for the same reason, and a habit reminder's deep link
+             lands inside this same screen from the profile's own stack. -->
+        <action
+            android:id="@+id/action_profile_to_habits"
+            app:destination="@id/navigation_habits" />
     </fragment>
 
     <fragment
@@ -128,5 +138,98 @@
         android:id="@+id/navigation_settings"
         android:name="com.taskplanner.ui.settings.SettingsFragment"
         android:label="@string/title_settings" />
+
+    <!-- What the profile is working toward. Its own screen rather than a block on the task list because a
+         goal is not a task: it is a figure the tasks answer to, and it is read from the account the way
+         settings are. -->
+    <fragment
+        android:id="@+id/navigation_goals"
+        android:name="com.taskplanner.ui.goals.GoalsFragment"
+        android:label="@string/title_goals"
+        tools:layout="@layout/fragment_goals">
+        <action
+            android:id="@+id/action_goals_to_goal_detail"
+            app:destination="@id/navigation_goal_detail" />
+        <action
+            android:id="@+id/action_goals_to_goal_editor"
+            app:destination="@id/navigation_goal_editor" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_goal_detail"
+        android:name="com.taskplanner.ui.goals.GoalDetailFragment"
+        android:label="@string/title_goal_detail"
+        tools:layout="@layout/fragment_goal_detail">
+        <argument
+            android:name="goalId"
+            app:argType="long" />
+        <action
+            android:id="@+id/action_goal_detail_to_goal_editor"
+            app:destination="@id/navigation_goal_editor" />
+        <action
+            android:id="@+id/action_goal_detail_to_task_detail"
+            app:destination="@id/navigation_task_detail" />
+    </fragment>
+
+    <!-- The one form for setting an aim and moving one. The id defaults to the value no device ever gave a
+         row, so the list's "add" button needs no second destination to open an empty form. -->
+    <fragment
+        android:id="@+id/navigation_goal_editor"
+        android:name="com.taskplanner.ui.goals.GoalEditorFragment"
+        android:label="@string/title_goal_editor"
+        tools:layout="@layout/fragment_goal_editor">
+        <argument
+            android:name="goalId"
+            android:defaultValue="-1L"
+            app:argType="long" />
+    </fragment>
+
+    <!-- The routines the profile is keeping. Its own screen rather than a block on the task list because a
+         habit is not a task: it is a schedule the days answer to, and it is read from the account the way
+         goals and settings are. -->
+    <fragment
+        android:id="@+id/navigation_habits"
+        android:name="com.taskplanner.ui.habits.HabitsFragment"
+        android:label="@string/title_habits"
+        tools:layout="@layout/fragment_habits">
+        <action
+            android:id="@+id/action_habits_to_habit_detail"
+            app:destination="@id/navigation_habit_detail" />
+        <action
+            android:id="@+id/action_habits_to_habit_editor"
+            app:destination="@id/navigation_habit_editor" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_habit_detail"
+        android:name="com.taskplanner.ui.habits.HabitDetailFragment"
+        android:label="@string/title_habit_detail"
+        tools:layout="@layout/fragment_habit_detail">
+        <argument
+            android:name="habitId"
+            app:argType="long" />
+        <!-- What a habit reminder opens: the habit that owed the day. The link is by row id rather than uuid
+             because it is resolved on the device that stored the row, exactly as a task link is, and the
+             scheduler that posts the notification only ever knows the id it read the habit from. -->
+        <deepLink
+            android:id="@+id/deepLink_habit_detail"
+            app:uri="taskplanner://habit/{habitId}" />
+        <action
+            android:id="@+id/action_habit_detail_to_habit_editor"
+            app:destination="@id/navigation_habit_editor" />
+    </fragment>
+
+    <!-- The one form for starting a habit and moving its schedule, in the same shape as the goal editor: an id
+         no device ever gave a row is how the graph says "a new habit". -->
+    <fragment
+        android:id="@+id/navigation_habit_editor"
+        android:name="com.taskplanner.ui.habits.HabitEditorFragment"
+        android:label="@string/title_habit_editor"
+        tools:layout="@layout/fragment_habit_editor">
+        <argument
+            android:name="habitId"
+            android:defaultValue="-1L"
+            app:argType="long" />
+    </fragment>
 
 </navigation> 

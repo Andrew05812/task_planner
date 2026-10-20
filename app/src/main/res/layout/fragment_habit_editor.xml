@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one form that starts a habit or moves one.
+     The fields are the schedule: how often the habit is asked for, which days or how many times, the window it
+     covers, and the minute of the day to be reminded at. Which days were kept is never here, because that is a
+     record of what the user did rather than something the form can set. The two day fields are written out in
+     full rather than picked from a control, the same way a corrected measurement is: a partly-specified control
+     fills in a day nobody named. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:paddingBottom="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/habit_editor_title_hint">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/habitEditorTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textCapSentences"
+                android:maxLines="2" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/habit_editor_frequency_label"
+            android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/habitEditorFrequencyGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorFrequencyDaily"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="@string/habit_type_daily" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorFrequencyWeekdays"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/habit_type_weekdays" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorFrequencyTimes"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/habit_type_times" />
+
+        </com.google.android.material.chip.ChipGroup>
+
+        <TextView
+            android:id="@+id/habitEditorDaysLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/habit_editor_days_label"
+            android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/habitEditorDaysGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorDayMon"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/day_short_mon" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorDayTue"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/day_short_tue" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorDayWed"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/day_short_wed" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorDayThu"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/day_short_thu" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorDayFri"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/day_short_fri" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorDaySat"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/day_short_sat" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/habitEditorDaySun"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/day_short_sun" />
+
+        </com.google.android.material.chip.ChipGroup>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/habitEditorTimesLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="@string/habit_editor_times_hint">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/habitEditorTimes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:maxLines="1" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:id="@+id/habitEditorWindowLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/goal_field_window"
+            android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/habit_editor_start_hint">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/habitEditorStart"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="date"
+                android:maxLines="1" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/habit_start_is_today"
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/habit_editor_end_hint">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/habitEditorEnd"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="date"
+                android:maxLines="1" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- A habit that is no longer being asked for has no minute left to be reminded at, so this whole
+             block — label and buttons together — is hidden rather than shown disabled: the third one is the
+             only thing that can hide the heading that introduced it. -->
+        <LinearLayout
+            android:id="@+id/habitEditorReminderGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/habit_editor_reminder_label"
+                android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/habitEditorReminder"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/habit_editor_reminder_none"
+                app:icon="@drawable/ic_reminder"
+                app:iconGravity="textStart"
+                tools:text="Remind me at 07:00" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/habitEditorReminderClear"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/habit_editor_reminder_clear"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/habitEditorSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/habit_save" />
+
+        <ProgressBar
+            android:id="@+id/habitEditorProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+    </LinearLayout>
+
+</androidx.core.widget.NestedScrollView>

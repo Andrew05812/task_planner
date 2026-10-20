@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The badge a goal card wears when its figure has a state worth naming, and the soft panel behind a
+     note. The fill is deliberately colourless — a translucent grey that reads on the light and the dark
+     card alike — because the state itself is carried by the word and by the colour of that word: "reached",
+     "past its date" and "no figure yet" are three sentences, and painting the panel in the state colour
+     would put white text on a light grey. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/state_badge_fill" />
+    <corners android:radius="4dp" />
+</shape>

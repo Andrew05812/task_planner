@@ -112,6 +112,19 @@ interface TaskDao {
     suspend fun getTaskByUuid(uuid: String): Task?
 
     /**
+     * Whether this profile owns a live task with [uuid] — the question a goal has to ask before it names
+     * one.
+     *
+     * The profile belongs in the statement rather than in a check on the row afterwards: after an import
+     * two accounts can hold the same uuid, and [getTaskByUuid]'s `LIMIT 1` then answers with whichever row
+     * SQLite happened to reach first. A caller that wants permission, not data, gets the honest answer.
+     */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM tasks WHERE uuid = :uuid AND user_id = :userId AND is_deleted = 0)"
+    )
+    suspend fun hasTaskForUser(userId: Long, uuid: String): Boolean
+
+    /**
      * The row a series materialised for one scheduled instant, tombstones and archive included:
      * a series has to tell "the instance is still open" apart from "there is no instance yet".
      */

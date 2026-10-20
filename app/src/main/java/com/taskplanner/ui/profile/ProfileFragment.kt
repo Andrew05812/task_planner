@@ -73,6 +73,14 @@ class ProfileFragment : Fragment() {
                 findNavController().navigate(R.id.action_profile_to_settings)
             }
 
+            openGoalsButton.setOnClickListener {
+                findNavController().navigate(R.id.action_profile_to_goals)
+            }
+
+            openHabitsButton.setOnClickListener {
+                findNavController().navigate(R.id.action_profile_to_habits)
+            }
+
             switchProfileButtonNoUser.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_profile_selection)
             }

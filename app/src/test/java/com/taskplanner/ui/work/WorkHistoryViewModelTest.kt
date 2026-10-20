@@ -129,11 +129,16 @@ class WorkHistoryViewModelTest {
      * Through the production tracker rather than by inserting rows, because the pause is the point: an
      * entry whose figures include the minute the user spent not working is a figure the screen never had
      * a right to print.
+     *
+     * The whole timeline moves to [startedAt], not the wall clock alone: what follows is measured by the
+     * tracker, and a one-clock jump is the clock change the tracker arbitrates away from the wall figure —
+     * so the stretch would come out the length the test asked for plus however late in the day the runner
+     * got here.
      */
     private fun measured(task: Task, day: Long, hour: Int, vararg stretches: Long): String {
         val startedAt = instantIn(day, hour)
         runBlocking {
-            fixture.timeBase.wall = startedAt
+            fixture.timeBase.shiftTo(startedAt)
             assertEquals(TrackingOutcome.STARTED, fixture.workTrackingRepository.start(task))
             stretches.forEachIndexed { index, seconds ->
                 fixture.timeBase.advance(seconds * 1_000L)
@@ -454,7 +459,7 @@ class WorkHistoryViewModelTest {
     fun `a stretch the timer still holds cannot be corrected here`() {
         val startedAt = instantIn(todayDay, 9)
         runBlocking {
-            fixture.timeBase.wall = startedAt
+            fixture.timeBase.shiftTo(startedAt)
             fixture.workTrackingRepository.start(report)
         }
         val open = runBlocking { fixture.workSessionDao.getAllForUser(userId).single { it.isOpen } }

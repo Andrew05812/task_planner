@@ -23,4 +23,6 @@
     <color name="health_without_deadline">#FFBDBDBD</color>
     <color name="health_in_progress">#FF64B5F6</color>
     <color name="health_stale">#FFB39DDB</color>
+    <!-- A light-grey wash would vanish on a near-black card; the same quiet panel is anchored on white here. -->
+    <color name="state_badge_fill">#1FFFFFFF</color>
 </resources> 

@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -79,6 +80,14 @@ class DashboardRepositoryTest {
         fixture = AppFixture(context)
     }
 
+    @After
+    fun tearDown() {
+        // The fixture's two database threads have to be finished before the storage goes away. A query
+        // still running when this test ends is reported against whichever test runs next, and that test
+        // then fails for something this one did.
+        fixture.close()
+    }
+
     /**
      * Four tasks and four measured stretches, spread so that no two figures in the snapshot can be
      * produced by the same window:
@@ -93,7 +102,7 @@ class DashboardRepositoryTest {
     private suspend fun seed(): User {
         val user = fixture.signIn()
         userId = user.id
-        fixture.timeBase.wall = at(today, 12, 0)
+        fixture.timeBase.shiftTo(at(today, 12, 0))
 
         val report = task("report", created = monday)
         val plants = task("plants", created = lastMonth)
@@ -386,7 +395,7 @@ class DashboardRepositoryTest {
     @Test
     fun `an account with nothing in it is an empty screen rather than a crash`() = runBlocking {
         fixture.signIn()
-        fixture.timeBase.wall = at(today, 12, 0)
+        fixture.timeBase.shiftTo(at(today, 12, 0))
 
         val snapshot = fixture.dashboardRepository.snapshot(request())!!
 
@@ -408,7 +417,7 @@ class DashboardRepositoryTest {
     fun `another profile's work and tasks stay in the other profile`() = runBlocking {
         val mine = seed()
         val other = fixture.signIn("Other", "other@example.com")
-        fixture.timeBase.wall = at(today, 12, 0)
+        fixture.timeBase.shiftTo(at(today, 12, 0))
         val theirs = task("their report", created = today, forProfile = other.id)
         work("i9", "s9", theirs, today, 5_000L)
 
@@ -505,7 +514,7 @@ class DashboardRepositoryTest {
     fun `a completion is credited to the day and the window its own instant falls in`() = runBlocking {
         val user = fixture.signIn()
         userId = user.id
-        fixture.timeBase.wall = at(today, 12, 0)
+        fixture.timeBase.shiftTo(at(today, 12, 0))
 
         // THIS_WEEK spans Monday 2026-06-01 to Sunday 2026-06-07: the window's `from` is Monday midnight and
         // its `to` the following Monday, so both bounds and the Wednesday they straddle are exact instants.
@@ -581,7 +590,7 @@ class DashboardRepositoryTest {
     fun `the health panel's every field tiles the open rows it was read from`() = runBlocking {
         val user = fixture.signIn()
         userId = user.id
-        fixture.timeBase.wall = at(today, 12, 0)
+        fixture.timeBase.shiftTo(at(today, 12, 0))
 
         // The four instants the repository derives for this Wednesday-anchored request, spelled the same way
         // it spells them so each boundary task lands exactly on the bound the SQL compares against.

@@ -1,5 +1,6 @@
 package com.taskplanner.data.repository
 
+import com.taskplanner.data.habit.HabitReminderCoordinator
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
@@ -42,7 +43,8 @@ class ReminderRepository @Inject constructor(
     private val categoryDao: CategoryDao,
     private val sessionRepository: SessionRepository,
     private val scheduler: ReminderScheduler,
-    private val notifier: ReminderNotifier
+    private val notifier: ReminderNotifier,
+    private val habitReminders: HabitReminderCoordinator
 ) {
 
     /** The lead times stored on one task, soonest fire first — what the editor ticks its chips from. */
@@ -215,14 +217,21 @@ class ReminderRepository @Inject constructor(
      * Anything whose minute came while the alarms were gone is delivered first, so waking the device
      * catches the user up instead of silently skipping the reminder that was due at three in the
      * morning.
+     *
+     * It rebuilds the habits' schedules in the same breath, because every trigger that calls this — a
+     * boot, a profile switch, a sync pull, a backup restore, the periodic sweep — is a moment when the
+     * alarms of the whole profile are known to be stale, and a rebuild that covered one kind of reminder
+     * and not the other would leave the user quietly missing the second. Returns the notices posted by
+     * both.
      */
     suspend fun rescheduleAll(now: Long = System.currentTimeMillis()): Int {
         val delivered = deliverDue(now)
-        val userId = sessionRepository.currentUserId() ?: return delivered
+        val userId = sessionRepository.currentUserId()
+            ?: return habitReminders.rescheduleAll(now) + delivered
         reminderDao.getLiveForUser(userId).forEach { reminder ->
             if (reminder.isPending) scheduler.arm(reminder, now)
         }
-        return delivered
+        return delivered + habitReminders.rescheduleAll(now)
     }
 
     /**
