@@ -12,16 +12,13 @@ import com.taskplanner.data.insight.GoalFigures
 import com.taskplanner.data.insight.HabitWindow
 import com.taskplanner.data.insight.InsightInputs
 import com.taskplanner.data.insight.InsightRules
-import com.taskplanner.data.insight.WorkloadMath
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.HabitDao
 import com.taskplanner.data.local.InsightDao
-import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.TaskStatisticsDao
 import com.taskplanner.data.local.WorkStatisticsDao
 import com.taskplanner.data.model.CategoryWorkSummary
-import com.taskplanner.data.model.DailyWorkSummary
 import com.taskplanner.data.model.Insight
 import com.taskplanner.data.model.InsightFeedback
 import com.taskplanner.data.tracking.TimeBase
@@ -69,7 +66,9 @@ data class InsightPass(
  *    aggregates, [InsightRules] turns them into typed findings, and only then are words put on them from
  *    `res/values/strings.xml`. A rule that returned a sentence could not be tested as arithmetic, and a
  *    finding whose wording was fixed inside the rules could not be re-stated when the app's phrasing changed
- *    — which is precisely what a stored history has to survive.
+ *    — which is precisely what a stored history has to survive. The one figure that arrives as a whole read
+ *    rather than as an aggregate is the workload: it comes from [WorkloadRepository], the same fortnight the
+ *    overload panel shows, so a day cannot be crowded on one screen and ordinary on the next.
  *  * **One rule, one window, one row.** A finding's uuid is derived from the account, the rule key and the
  *    window, so a pass that finds the same thing again reaches the row it wrote last time: the reading keeps
  *    the day it first arrived and the answer the reader gave, and the screen never shows one observation
@@ -87,7 +86,7 @@ data class InsightPass(
 class InsightRepository @Inject constructor(
     private val database: AppDatabase,
     private val insightDao: InsightDao,
-    private val taskDao: TaskDao,
+    private val workloadRepository: WorkloadRepository,
     private val taskStatisticsDao: TaskStatisticsDao,
     private val workStatisticsDao: WorkStatisticsDao,
     private val goalDao: GoalDao,
@@ -216,8 +215,12 @@ class InsightRepository @Inject constructor(
         val monthFrom = today - (MONTH_DAYS - 1)
         val monthStart = CalendarMath.startOfDay(LocalDate.ofEpochDay(monthFrom), zone)
         val windowEnd = CalendarMath.startOfDay(LocalDate.ofEpochDay(today + 1), zone)
-        val horizon = today + LOAD_HORIZON_DAYS
-        val baseline = baselineOf(workStatisticsDao.dailySeries(userId, monthFrom, today + 1))
+        // The load and the pace it is heavy against are read here rather than counted here. The overload panel
+        // shows the same fortnight, and a day the app calls crowded in one screen and ordinary in the next
+        // could not both be believed — so both figures come from WorkloadRepository, and the horizon it names
+        // is the horizon the goal rule is measured against too.
+        val load = workloadRepository.upcoming()
+        val horizon = load.toDay
         return InsightInputs(
             today = today,
             weekFromDay = weekFrom,
@@ -233,18 +236,9 @@ class InsightRepository @Inject constructor(
             ),
             habitWindows = habitWindows(userId, weekFrom, today),
             goalFigures = goalFigures(userId, today, zone, horizon),
-            upcomingLoad = WorkloadMath.dailyLoad(
-                taskDao.getWindowOnce(
-                    userId,
-                    CalendarMath.startOfDay(LocalDate.ofEpochDay(today), zone),
-                    CalendarMath.startOfDay(LocalDate.ofEpochDay(horizon + 1), zone)
-                ),
-                fromDay = today,
-                toDay = horizon,
-                zone = zone
-            ),
-            baselineDailyMinutes = baseline.first,
-            baselineMeasuredDays = baseline.second
+            upcomingLoad = load.days,
+            baselineDailyMinutes = load.baselineDailyMinutes,
+            baselineMeasuredDays = load.measuredDays
         )
     }
 
@@ -322,20 +316,6 @@ class InsightRepository @Inject constructor(
                 deadlineDay = deadlineDay
             )
         }
-    }
-
-    /**
-     * The daily average the profile has actually been measured on, over the month behind the pass.
-     *
-     * Only days carrying intervals count towards the average, which is what keeps a fortnight of rest from
-     * being read as a low baseline the reader is being told to beat. No measured days at all is no baseline,
-     * and a heavy day without one is a claim with nothing under it.
-     */
-    private fun baselineOf(series: List<DailyWorkSummary>): Pair<Int, Int> {
-        val days = series.count { it.intervals > 0 && it.seconds > 0L }
-        if (days == 0) return 0 to 0
-        val totalMinutes = series.fold(0L) { acc, day -> acc + day.seconds } / SECONDS_PER_MINUTE
-        return (totalMinutes / days).toInt() to days
     }
 
     private fun forProfile(read: (Long) -> Flow<List<Insight>>): Flow<List<Insight>> =
@@ -524,9 +504,6 @@ class InsightRepository @Inject constructor(
         /** The windows the rules count over. A month is four whole weeks rather than a calendar one. */
         private const val WEEK_DAYS = 7L
         private const val MONTH_DAYS = 28
-
-        /** How far ahead the load is read: two weeks of the reader's own plans. */
-        private const val LOAD_HORIZON_DAYS = 14L
 
         /** How long a refused rule stays quiet, measured from the answer rather than from its window. */
         private const val REJECTION_SILENCE_MILLIS = 30L * 24 * 3_600_000L

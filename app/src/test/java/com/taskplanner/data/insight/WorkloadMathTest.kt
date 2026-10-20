@@ -63,12 +63,12 @@ class WorkloadMathTest {
         )
 
     private fun loadOf(vararg tasks: Task): List<DayLoad> =
-        WorkloadMath.dailyLoad(
+        WorkloadMath.fold(
             tasks.toList(),
             fromDay = monday.toEpochDay(),
             toDay = thursday.toEpochDay(),
             zone = zone
-        )
+        ).days
 
     @Test
     fun `a stated block charges the day it was planned for with the hours it names`() {
@@ -127,7 +127,7 @@ class WorkloadMathTest {
 
     @Test
     fun `the estimate of a task that also names its hours is not charged twice`() {
-        val load = WorkloadMath.dailyLoad(
+        val load = WorkloadMath.fold(
             listOf(
                 Task(
                     id = 4L,
@@ -143,7 +143,7 @@ class WorkloadMathTest {
             fromDay = monday.toEpochDay(),
             toDay = thursday.toEpochDay(),
             zone = zone
-        )
+        ).days
 
         assertEquals("the block the user stated is the better figure", listOf(60), load.map { it.minutes })
         assertFalse("and it is not a guess", load.first().approximate)
@@ -180,7 +180,7 @@ class WorkloadMathTest {
 
     @Test
     fun `a block that starts before the window and ends after it is charged in full to the days it covers`() {
-        val load = WorkloadMath.dailyLoad(
+        val load = WorkloadMath.fold(
             listOf(
                 Task(
                     id = 5L,
@@ -194,7 +194,7 @@ class WorkloadMathTest {
             fromDay = tuesday.toEpochDay(),
             toDay = wednesday.toEpochDay(),
             zone = zone
-        )
+        ).days
 
         assertEquals(
             "the whole of Tuesday and the part of Wednesday the block ran into, nothing of Monday",
@@ -207,5 +207,77 @@ class WorkloadMathTest {
     @Test
     fun `an empty profile has no load on any day`() {
         assertTrue(loadOf().isEmpty())
+    }
+
+    // -- what the same fold says about the rows it counted -------------------------------------------
+
+    @Test
+    fun `the priority split covers exactly the rows that landed in the window`() {
+        val fold = WorkloadMath.fold(
+            listOf(
+                deadline(monday, priority = Priority.HIGH),
+                block(tuesday, tuesday),
+                deadline(wednesday, priority = Priority.LOW),
+                deadline(LocalDate.of(2026, 6, 30), priority = Priority.HIGH)
+            ),
+            fromDay = monday.toEpochDay(),
+            toDay = thursday.toEpochDay(),
+            zone = zone
+        )
+
+        assertEquals(PriorityLoad(high = 1, medium = 1, low = 1), fold.priorities)
+        assertEquals(
+            "the row outside the window is not this reading's business, so it is not in its split either",
+            3,
+            fold.priorities.total
+        )
+    }
+
+    @Test
+    fun `a row charged to two days is one row in the split`() {
+        val fold = WorkloadMath.fold(
+            listOf(block(tuesday, wednesday, endHour = 2)),
+            fromDay = monday.toEpochDay(),
+            toDay = thursday.toEpochDay(),
+            zone = zone
+        )
+
+        assertEquals("two days carry the block", 2, fold.days.size)
+        assertEquals("and it is still one piece of work", 1, fold.priorities.total)
+    }
+
+    @Test
+    fun `the fold names the rows that put a day on the calendar without stating a length`() {
+        val fold = WorkloadMath.fold(
+            listOf(
+                block(monday, monday, endHour = 11),
+                deadline(tuesday),
+                deadline(wednesday, estimate = 30)
+            ),
+            fromDay = monday.toEpochDay(),
+            toDay = thursday.toEpochDay(),
+            zone = zone
+        )
+
+        assertEquals(
+            "the bare deadline is the only row whose hours nobody said — an estimate is a stated length, " +
+                "even a guessed one, and a block is a measured one",
+            1,
+            fold.lengthUnknownTasks
+        )
+    }
+
+    @Test
+    fun `an empty window folds to no days, no priorities and no unknown lengths`() {
+        val fold = WorkloadMath.fold(
+            emptyList(),
+            fromDay = monday.toEpochDay(),
+            toDay = thursday.toEpochDay(),
+            zone = zone
+        )
+
+        assertEquals(emptyList<DayLoad>(), fold.days)
+        assertEquals(PriorityLoad(), fold.priorities)
+        assertEquals(0, fold.lengthUnknownTasks)
     }
 }

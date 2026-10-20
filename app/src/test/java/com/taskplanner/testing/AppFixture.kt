@@ -45,6 +45,7 @@ import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
+import com.taskplanner.data.repository.WorkloadRepository
 import com.taskplanner.data.repository.WorkStatisticsRepository
 import com.taskplanner.data.repository.WorkTrackingRepository
 import com.taskplanner.data.tracking.MonotonicReference
@@ -194,6 +195,14 @@ class AppFixture(private val context: Context) : AutoCloseable {
     )
 
     /**
+     * The overload read, on the calendar's own window query and the tracker's own daily series.
+     *
+     * Built before the insight repository because the insights are handed its figures: a heavy day named by a
+     * rule and a heavy day shown by the panel have to be the same day, counted from the same rows.
+     */
+    val workloadRepository = WorkloadRepository(taskDao, workStatisticsDao, sessionRepository, timeBase)
+
+    /**
      * The notebook of readings, wired after the two repositories it reads through.
      *
      * An insight pass takes its figures from the aggregates the dashboard and the goals and habits screens
@@ -202,7 +211,7 @@ class AppFixture(private val context: Context) : AutoCloseable {
      */
     val insightDao: InsightDao = database.insightDao()
     val insightRepository = InsightRepository(
-        database, insightDao, taskDao, taskStatisticsDao, workStatisticsDao, goalDao, habitDao,
+        database, insightDao, workloadRepository, taskStatisticsDao, workStatisticsDao, goalDao, habitDao,
         habitRepository, goalRepository, sessionRepository, timeBase, context
     )
 
