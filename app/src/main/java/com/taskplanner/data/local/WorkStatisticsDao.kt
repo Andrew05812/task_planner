@@ -162,6 +162,18 @@ interface WorkStatisticsDao {
     suspend fun completedTasksInPeriod(userId: Long, from: Long, to: Long): Int
 
     /**
+     * The same count as a Flow, for the reads that stay on screen while the work moves: a goal aimed at
+     * twenty finishes has to answer "how many now" the instant one of them is completed, un-completed or
+     * thrown away, and a signal the caller has to poll would be a figure the user could be shown wrong.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM tasks " +
+            "WHERE user_id = :userId AND is_deleted = 0 AND UPPER(status) IN ('COMPLETED', 'DONE') " +
+            "AND completed_at IS NOT NULL AND completed_at >= :from AND completed_at < :to"
+    )
+    fun observeCompletedTasksInPeriod(userId: Long, from: Long, to: Long): Flow<Int>
+
+    /**
      * The trend for one task: one row per local day it was worked on inside the window.
      *
      * A window rather than a single day because the screen that reads "today" also has to be right at

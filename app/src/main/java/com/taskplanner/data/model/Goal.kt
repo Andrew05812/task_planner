@@ -31,7 +31,8 @@ enum class GoalType {
     TIME_SPENT,
 
     /**
-     * Nothing is counted; the linked tasks either are all finished before [deadlineAt] or they are not.
+     * The named set answered by a date: reached when everything it names is finished, late when that has
+     * not happened by [Goal.deadlineAt], which this type cannot be saved without.
      *
      * It is a type rather than a flag on another type because the screen has to say something different
      * when the date passes: a count goal that ran out of time is behind, a deadline goal that ran out of
@@ -114,7 +115,15 @@ data class Goal(
     @ColumnInfo(name = "window_to_day")
     val windowToDay: Long? = null,
 
-    /** UTC epoch millis of the date the goal was set for. Only [GoalType.DEADLINE] reads it. */
+    /**
+     * UTC epoch millis of the date the goal was set for.
+     *
+     * [GoalType.DEADLINE] cannot be saved without it — that date is the whole question the type asks — and
+     * the other three may carry one, in which case it is the date their progress reads as late against.
+     * An instant is stored rather than a day because the picker hands over an instant, and the day the
+     * screen prints comes from reading it back in the user's zone, the same way every other date in this
+     * schema is derived.
+     */
     @ColumnInfo(name = "deadline_at")
     val deadlineAt: Long? = null,
 
@@ -239,7 +248,10 @@ data class GoalValueChange(
     @ColumnInfo(name = "user_id")
     val userId: Long,
 
-    /** Which of the goal's own figures moved: `target`, `window`, `deadline` or `title`. */
+    /**
+     * Which of the goal's own figures moved: one of [FIELD_TITLE], [FIELD_TYPE], [FIELD_TARGET],
+     * [FIELD_WINDOW] or [FIELD_DEADLINE].
+     */
     @ColumnInfo(name = "field")
     val field: String,
 
@@ -261,4 +273,26 @@ data class GoalValueChange(
 
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis()
-)
+) {
+    companion object {
+        /**
+         * The fields a row can speak about, named once here so neither the writer nor the screen has to
+         * retype a literal — and so a field the editor gains cannot silently become a history row nobody
+         * knows how to print.
+         *
+         * The values are the words stored in `field`, which export and sync carry between devices:
+         * constants rather than an enum, because the column stays plain text that a newer build can read
+         * without knowing every name an older one wrote.
+         */
+        const val FIELD_TITLE = "title"
+        const val FIELD_TYPE = "type"
+        const val FIELD_TARGET = "target"
+        const val FIELD_WINDOW = "window"
+        const val FIELD_DEADLINE = "deadline"
+
+        /** Every field the history can hold, in the order the editor shows its own fields. */
+        val FIELDS: List<String> = listOf(
+            FIELD_TITLE, FIELD_TYPE, FIELD_TARGET, FIELD_WINDOW, FIELD_DEADLINE
+        )
+    }
+}

@@ -9,6 +9,7 @@ import com.taskplanner.data.backup.BackupRepository
 import com.taskplanner.data.calendar.CalendarRepository
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
+import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
@@ -33,6 +34,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.taskplanner.data.repository.GoalRepository
 import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
@@ -161,6 +163,12 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val dashboardRepository = DashboardRepository(
         taskStatisticsDao, workSessionDao, trackingSessionDao, workStatisticsRepository,
         sessionRepository, timeBase
+    )
+
+    /** Goals read the same aggregates the dashboard and the history screen write. */
+    val goalDao: GoalDao = database.goalDao()
+    val goalRepository = GoalRepository(
+        database, goalDao, taskDao, workStatisticsDao, sessionRepository, timeBase, workTicker
     )
 
     val taskRepository = TaskRepository(

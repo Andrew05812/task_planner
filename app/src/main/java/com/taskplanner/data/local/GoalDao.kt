@@ -116,11 +116,24 @@ interface GoalDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertLink(link: GoalTaskLink): Long
 
-    @Query("DELETE FROM goal_tasks WHERE goal_uuid = :goalUuid AND task_uuid = :taskUuid")
-    suspend fun removeLink(goalUuid: String, taskUuid: String)
+    /**
+     * Drops one name from a goal's set.
+     *
+     * `user_id` is in the predicate rather than checked by the caller: two accounts that imported each
+     * other's data can hold a goal and a task under the same two uuids, and unlinking must only ever be
+     * able to undo the caller's own link.
+     */
+    @Query(
+        "DELETE FROM goal_tasks WHERE goal_uuid = :goalUuid AND task_uuid = :taskUuid " +
+            "AND user_id = :userId"
+    )
+    suspend fun removeLink(goalUuid: String, taskUuid: String, userId: Long)
 
-    @Query("SELECT * FROM goal_tasks WHERE goal_uuid = :goalUuid ORDER BY added_at ASC")
-    suspend fun linksOf(goalUuid: String): List<GoalTaskLink>
+    /** The uuids a goal names, in the order the user put them — the editor's current selection. */
+    @Query(
+        "SELECT * FROM goal_tasks WHERE goal_uuid = :goalUuid AND user_id = :userId ORDER BY added_at ASC"
+    )
+    suspend fun linksOf(goalUuid: String, userId: Long): List<GoalTaskLink>
 
     /**
      * The goal's own set, as the screen shows it: title, whether it is finished, and whether it still
@@ -156,6 +169,24 @@ interface GoalDao {
     )
     suspend fun setProgress(goalUuid: String, userId: Long): GoalSetProgress
 
+    /**
+     * The same two numbers as a Flow, so a set goal re-reads itself the moment one of its tasks is
+     * finished, cancelled or thrown away.
+     *
+     * This is what makes the recomputation §5 asks for automatic rather than scheduled: the join runs
+     * again when `tasks` moves, so there is no event a writer could miss and no cached figure left
+     * standing behind the change.
+     */
+    @Query(
+        "SELECT COUNT(*) AS linked, " +
+            "COALESCE(SUM(CASE WHEN t.is_deleted = 0 AND UPPER(t.status) IN ('COMPLETED', 'DONE') " +
+            "THEN 1 ELSE 0 END), 0) AS completed, " +
+            "COALESCE(SUM(CASE WHEN t.uuid IS NULL THEN 1 ELSE 0 END), 0) AS missing " +
+            "FROM goal_tasks gt LEFT JOIN tasks t ON t.uuid = gt.task_uuid AND t.user_id = gt.user_id " +
+            "WHERE gt.goal_uuid = :goalUuid AND gt.user_id = :userId"
+    )
+    fun observeSetProgress(goalUuid: String, userId: Long): Flow<GoalSetProgress>
+
     /** The goals that name a given task, for the task's own screen. */
     @Query(
         "SELECT g.* FROM goals g JOIN goal_tasks gt ON gt.goal_uuid = g.uuid " +
@@ -189,8 +220,4 @@ interface GoalDao {
     suspend fun recentValueChanges(userId: Long, limit: Int): List<GoalValueChange>
 
     // endregion
-
-    /** The signal the goal screen re-reads itself on: the moment anything in the profile's tasks moved. */
-    @Query("SELECT COALESCE(MAX(updated_at), 0) FROM goals WHERE user_id = :userId")
-    fun observeChanges(userId: Long): Flow<Long>
 }
