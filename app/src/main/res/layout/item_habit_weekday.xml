@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The weekday a column of the habit grid belongs to. Written in the reader's own short form and in the
+     order their calendar opens on, so the column under it is the day the schedule names rather than a position
+     in a table nobody reads. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:layout_margin="2dp"
+    android:gravity="center"
+    android:textAppearance="?attr/textAppearanceCaption"
+    android:textColor="?android:attr/textColorSecondary"
+    tools:text="Mon" />

@@ -49,6 +49,15 @@ data class HabitFigures(
     val thisWeek: HabitAdherence,
     /** The same share over the window the read covered. */
     val period: HabitAdherence,
+    /**
+     * How many days [period] was drawn from.
+     *
+     * The window the caller asked for and the window the habit can answer about are not always the same
+     * length: a habit begun yesterday has no yesterday-before-its-start to be asked about, and its share is
+     * read over the two days it lived through. The caption beside a percentage has to name the second
+     * number, so the read states the span it used rather than leaving the screen to assume the one it requested.
+     */
+    val periodDays: Int,
     /** Live marks inside the window the read covered, which is what the two shares were computed from. */
     val marks: Int
 ) {
@@ -439,6 +448,16 @@ class HabitRepository @Inject constructor(
     suspend fun habit(habitUuid: String): Habit? =
         sessionRepository.currentUserId()?.let { ownHabit(habitUuid, it) }
 
+    /**
+     * The stored row a screen was opened on, with no figures beside it.
+     *
+     * The editor prefills from this and nothing else: it asks what the user chose last time, which is a
+     * question about the row. Reading the streak or the percentage here would put numbers the editor cannot
+     * edit in the form beside the ones it can.
+     */
+    suspend fun habitById(habitId: Long): Habit? =
+        sessionRepository.currentUserId()?.let { habitDao.getHabitById(it, habitId) }
+
     /** Whether [day] stands as kept, for a screen that only needs the button's state. */
     suspend fun isMarked(habitUuid: String, day: Long): Boolean {
         val userId = sessionRepository.currentUserId() ?: return false
@@ -544,6 +563,45 @@ class HabitRepository @Inject constructor(
             if (userId == null) flowOf(emptyList()) else habitDao.observeAllLiveDays(habitUuid, userId)
         }
 
+    /** Which days were asserted and which were walked back, oldest first, as a Flow. */
+    fun observeCheckChanges(habitUuid: String): Flow<List<HabitCheckChange>> =
+        sessionRepository.currentUser.flatMapLatest { user ->
+            val userId = user?.id
+            if (userId == null) flowOf(emptyList()) else habitDao.observeCheckChanges(habitUuid, userId)
+        }
+
+    /**
+     * The habit a screen was opened on — by the row id this device gave it — with the figures under it.
+     *
+     * This is the read a habit notification's link resolves to, so it has to hand over the row and its
+     * figures together: a screen that printed a series from one query and a percentage from another could
+     * show a habit that had just been edited as two different habits. Null is the answer for a habit this
+     * profile does not hold, which includes one it never owned.
+     */
+    fun observeHabitWithFigures(
+        habitId: Long,
+        periodFromDay: Long,
+        periodToDay: Long = todayEpochDay(),
+        zone: ZoneId = CalendarMath.systemZone()
+    ): Flow<HabitWithFigures?> = sessionRepository.currentUser.flatMapLatest { user ->
+        val userId = user?.id
+        if (userId == null) {
+            flowOf(null)
+        } else {
+            habitDao.observeHabitById(userId, habitId).flatMapLatest { rows ->
+                val habit = rows.firstOrNull()
+                if (habit == null) {
+                    flowOf(null)
+                } else {
+                    ticker.localDays(zone).flatMapLatest { day ->
+                        figuresFlow(habit, userId, periodFromDay, periodToDay, day.toEpochDay())
+                            .map { figures -> HabitWithFigures(habit, figures) }
+                    }
+                }
+            }
+        }
+    }
+
     private fun observeHabits(
         open: Boolean,
         periodFromDay: Long,
@@ -609,6 +667,7 @@ class HabitRepository @Inject constructor(
             streak = HabitMath.streak(habit, marked, today, firstDay),
             thisWeek = HabitMath.weekProgress(habit, marked, today, firstDay),
             period = HabitMath.adherence(habit, marked, from, to, firstDay),
+            periodDays = (to - from + 1).coerceAtLeast(0L).toInt(),
             marks = marked.size
         )
     }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The same panel with a ring, for the one day in the week the habit is being read on. The ring is drawn in
+     the chart colour rather than in a state colour because it says which day is today and nothing about whether
+     it was kept: the number's own colour still answers that, and the two have to be readable at once. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/state_badge_fill" />
+    <stroke android:width="2dp" android:color="@color/chart_bar" />
+    <corners android:radius="6dp" />
+</shape>

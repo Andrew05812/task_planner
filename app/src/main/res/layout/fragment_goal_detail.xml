@@ -185,6 +185,16 @@
 
         <!-- The set is short by design — a goal names the handful of tasks it is about — so it is drawn
              into this column instead of given a RecyclerView that scrolls inside a scroll view. -->
+        <TextView
+            android:id="@+id/goalTasksNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="2dp"
+            android:text="@string/goal_tasks_note"
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:textColor="?android:attr/textColorSecondary" />
+
         <LinearLayout
             android:id="@+id/goalTasksList"
             android:layout_width="match_parent"

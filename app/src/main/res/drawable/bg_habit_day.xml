@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The panel one day of the habit's week is written on. The fill is deliberately colourless — the same
+     translucent panel the goal badge uses, readable on the light and the dark card alike — because the state of
+     the day is carried by the number's own colour: kept, owed, not asked for, and outside the window are four
+     sentences, and painting the panel in each of them would put a grid of coloured tiles where a reader has to
+     compare seven days at a glance. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/state_badge_fill" />
+    <corners android:radius="6dp" />
+</shape>

@@ -42,6 +42,25 @@ interface HabitDao {
     suspend fun getHabit(uuid: String, userId: Long): Habit?
 
     /**
+     * The habit this device's row id names, watched.
+     *
+     * A habit notification links by id rather than by uuid because the link is resolved on the device that
+     * stored the row, exactly as a task link is. The list shape is Room's: a Flow of a single nullable row
+     * has no emission for "the habit went away", and a detail screen has to be able to see that.
+     */
+    @Query("SELECT * FROM habits WHERE user_id = :userId AND id = :habitId AND is_deleted = 0")
+    fun observeHabitById(userId: Long, habitId: Long): Flow<List<Habit>>
+
+    /**
+     * The same row, once, without waiting for it.
+     *
+     * The editor prefills from this: what the user typed last time is a question about the row, and a form
+     * that subscribed to a Flow would be holding figures it neither shows nor edits.
+     */
+    @Query("SELECT * FROM habits WHERE user_id = :userId AND id = :habitId AND is_deleted = 0 LIMIT 1")
+    suspend fun getHabitById(userId: Long, habitId: Long): Habit?
+
+    /**
      * The habits on the screen: those still being asked for, oldest first.
      *
      * Creation order rather than title order, because a habit list is read as a timeline of what the user
@@ -241,6 +260,19 @@ interface HabitDao {
             "ORDER BY created_at ASC"
     )
     suspend fun checkChangesOf(habitUuid: String, userId: Long): List<HabitCheckChange>
+
+    /**
+     * The same account, watched.
+     *
+     * The habit's detail screen prints its story under the grid, and a mark made or walked back there has to
+     * appear in that story without the user leaving the screen. Room's invalidation tracker re-runs this with
+     * the figures, so the grid, the percentage and the account of the change are one write's answer.
+     */
+    @Query(
+        "SELECT * FROM habit_check_changes WHERE habit_uuid = :habitUuid AND user_id = :userId " +
+            "ORDER BY created_at ASC"
+    )
+    fun observeCheckChanges(habitUuid: String, userId: Long): Flow<List<HabitCheckChange>>
 
     @Query(
         "SELECT * FROM habit_check_changes WHERE check_uuid = :checkUuid AND user_id = :userId " +

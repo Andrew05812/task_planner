@@ -2,6 +2,7 @@ package com.taskplanner.ui.goals
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.annotation.ColorRes
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
@@ -79,8 +80,8 @@ class GoalsAdapter(
          * each of those three ideas from the task list and the dashboard. Borrowing them is the point: a
          * reader who has learned that red means a date has passed should not have to learn it again here.
          */
-        @StringRes
-        private fun stateColorRes(labelRes: Int): Int = when (labelRes) {
+        @ColorRes
+        private fun stateColorRes(@StringRes labelRes: Int): Int = when (labelRes) {
             R.string.goal_state_reached -> R.color.status_done
             R.string.goal_state_late -> R.color.health_overdue
             else -> R.color.status_todo

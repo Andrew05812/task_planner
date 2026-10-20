@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.ColorRes
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
@@ -116,6 +117,9 @@ class GoalDetailFragment : Fragment() {
                     // lost rather than as a type that never names any.
                     val namesTasks = progress?.goal?.type?.namesTasks == true
                     binding.goalTasksTitle.isVisible = namesTasks
+                    // The note explains what the set underneath it does not do — copy a task — so it belongs
+                    // with the heading and disappears with it for the types that name no tasks at all.
+                    binding.goalTasksNote.isVisible = namesTasks
                     binding.goalHistoryTitle.isVisible = progress != null
                     // A goal whose row is gone has no figures to show, and a screen that kept the card up
                     // with the last numbers it saw would be reporting a goal that no longer exists.
@@ -286,7 +290,8 @@ class GoalDetailFragment : Fragment() {
         }
     }
 
-    private fun stateColorRes(labelRes: Int): Int = when (labelRes) {
+    @ColorRes
+    private fun stateColorRes(@StringRes labelRes: Int): Int = when (labelRes) {
         R.string.goal_state_reached -> R.color.status_done
         R.string.goal_state_late -> R.color.health_overdue
         else -> R.color.status_todo
