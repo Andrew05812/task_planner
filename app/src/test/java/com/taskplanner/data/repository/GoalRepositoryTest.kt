@@ -951,7 +951,15 @@ class GoalRepositoryTest {
     }
 
     companion object {
-        private const val TIMEOUT_MILLIS = 5_000L
+        /**
+         * How long a watch is given to draw a frame.
+         *
+         * Generous on purpose: the wait is a ceiling on a slow runner, not part of the proof. What the test
+         * claims is that a frame appeared *after* the write and no re-subscription happened, and a machine
+         * that is busy with three other Gradle tasks still has to be able to fail with the assertion it
+         * names rather than with a timeout.
+         */
+        private const val TIMEOUT_MILLIS = 10_000L
         private const val POLL_MILLIS = 10L
     }
 }
