@@ -561,6 +561,49 @@ object AppMigrations {
         }
     }
 
+    val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // One new table and its indices, and no change to any stored row. An insight is a reading of
+            // work that already lives in `tasks`, `work_sessions`, `habits` and `goals`, so an upgraded
+            // database has everything the rules need for their first pass on day one — which is also why
+            // this table carries no progress column, no foreign key into the rows it counted, and no
+            // `sync_state`: a second device derives its own reading rather than being handed one.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `insights` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
+                    "NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, " +
+                    "`rule_key` TEXT NOT NULL, `kind` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                    "`body` TEXT NOT NULL, `basis` TEXT NOT NULL, `period_from_day` INTEGER NOT NULL, " +
+                    "`period_to_day` INTEGER NOT NULL, `sample_size` INTEGER NOT NULL, " +
+                    "`confidence` INTEGER NOT NULL, `action_type` TEXT, `action_ref` TEXT, " +
+                    "`first_seen_at` INTEGER NOT NULL, `last_seen_at` INTEGER NOT NULL, " +
+                    "`is_current` INTEGER NOT NULL DEFAULT 1, `feedback` TEXT, `feedback_at` INTEGER, " +
+                    "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION " +
+                    "ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_insights_user_id` ON `insights` (`user_id`)"
+            )
+            // The list is offered newest-observed first, so the ordering is sought inside the profile rather
+            // than sorted out of every reading it ever held.
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_insights_user_id_last_seen_at` " +
+                    "ON `insights` (`user_id`, `last_seen_at`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_insights_uuid` ON `insights` (`uuid`)"
+            )
+            // "No repeats" as a database rule rather than a convention in the pass: one rule counted over
+            // one window is one row, and a second copy of that reading collides here before it can reach
+            // the screen. The uuid is derived from the same four values, so the pair never disagrees.
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                    "`index_insights_user_id_rule_key_period_from_day_period_to_day` " +
+                    "ON `insights` (`user_id`, `rule_key`, `period_from_day`, `period_to_day`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -574,6 +617,7 @@ object AppMigrations {
         MIGRATION_10_11,
         MIGRATION_11_12,
         MIGRATION_12_13,
-        MIGRATION_13_14
+        MIGRATION_13_14,
+        MIGRATION_14_15
     )
 }

@@ -227,7 +227,7 @@ class AppMigrationsTest {
         assertEquals(
             listOf(
                 1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11,
-                11 to 12, 12 to 13, 13 to 14
+                11 to 12, 12 to 13, 13 to 14, 14 to 15
             ),
             pairs
         )
@@ -727,6 +727,136 @@ class AppMigrationsTest {
             !Regex("SCAN habits\\b").containsMatchIn(plan)
         )
     }
+
+    @Test
+    fun `migration 14 to 15 adds the readings the rules keep and rewrites no stored value`() {
+        val db = open(14)
+        val before = counts(db)
+        val beforeTasks = db.rows(
+            "SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id"
+        )
+        db.migrate(AppMigrations.MIGRATION_14_15)
+        builder.assertMatchesSchema(db, 15, "MIGRATION_14_15")
+
+        assertEquals("adding one table moves no row", before, counts(db))
+        assertEquals(
+            "and changes nothing the new readings are computed from",
+            beforeTasks,
+            db.rows("SELECT id, title, status, user_id, is_deleted, completed_at FROM tasks ORDER BY id")
+        )
+        // An upgrade raises no recommendation on its own: every insight is a reading of work the rules have
+        // to look at first, so a fresh table is empty until the app is opened and the pass runs.
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM insights"))
+    }
+
+    @Test
+    fun `migration 14 to 15 applies twice without adding a duplicate index`() {
+        val db = open(14)
+        db.migrate(AppMigrations.MIGRATION_14_15)
+        val marks = db.rows("PRAGMA index_list('insights')").size
+        db.migrate(AppMigrations.MIGRATION_14_15)
+
+        assertEquals(marks, db.rows("PRAGMA index_list('insights')").size)
+        builder.assertMatchesSchema(db, 15, "MIGRATION_14_15 applied twice")
+    }
+
+    @Test
+    fun `migration 14 to 15 makes one reading per rule and window a database rule`() {
+        val db = open(14)
+        db.migrate(AppMigrations.MIGRATION_14_15)
+        db.exec(insight("i1", rule = "busy_thursday", from = 20_000L, toDay = 20_006L))
+
+        // The same rule counting the same days again is the repeat §7 forbids, and it fails on the composite
+        // index rather than incidentally — the pass refreshes the row it already left instead.
+        val rejected = runCatching {
+            db.exec(insight("i2", rule = "busy_thursday", from = 20_000L, toDay = 20_006L))
+        }
+        assertTrue("a rule cannot say one window twice", rejected.isFailure)
+        assertTrue(
+            "and it fails on the rule-and-window index, not on the uuid",
+            rejected.exceptionOrNull()?.message?.contains(
+                "insights.user_id, insights.rule_key, insights.period_from_day, insights.period_to_day"
+            ) == true
+        )
+
+        // The next week is a different reading of a different window, and an insight about another rule for
+        // the same days is a different thing being said — both have to be storable.
+        db.exec(insight("i3", rule = "busy_thursday", from = 20_007L, toDay = 20_013L))
+        db.exec(insight("i4", rule = "overdue_high_priority", from = 20_000L, toDay = 20_006L))
+        assertEquals(3L, db.firstLong("SELECT COUNT(*) FROM insights"))
+
+        // And a profile is part of the key: two accounts on one device can each be told the same thing about
+        // their own tasks, and neither of them owns the other's row.
+        db.exec(otherUser(999))
+        db.exec(insight("i5", rule = "busy_thursday", from = 20_000L, toDay = 20_006L, userId = 999))
+        assertEquals(
+            listOf("i1", "i3", "i4", "i5"),
+            db.rows("SELECT uuid FROM insights ORDER BY uuid").map { it[0] }
+        )
+    }
+
+    @Test
+    fun `migration 14 to 15 gives every reading the profile it was found under and nothing else`() {
+        val db = open(14)
+        db.migrate(AppMigrations.MIGRATION_14_15)
+        db.exec("PRAGMA foreign_keys = ON")
+
+        val rejected = runCatching {
+            db.exec(insight("ghost", rule = "busy_thursday", from = 20_000L, toDay = 20_006L, userId = 999))
+        }
+        assertTrue("insights must refuse a profile that does not exist", rejected.isFailure)
+        assertEquals(0L, db.firstLong("SELECT COUNT(*) FROM insights"))
+    }
+
+    @Test
+    fun `migration 14 to 15 starts a reading current without being told to`() {
+        val db = open(14)
+        db.migrate(AppMigrations.MIGRATION_14_15)
+        // The insert names neither column: a row a pass writes is being written by a pass that found it, so
+        // "current" is its default state rather than a flag every writer has to remember to set.
+        db.exec(insight("i1", rule = "busy_thursday", from = 20_000L, toDay = 20_006L))
+
+        assertEquals("1", db.firstCell("SELECT is_current FROM insights WHERE uuid = 'i1'"))
+        assertNull("and the reader has not answered it yet", db.firstCell("SELECT feedback FROM insights"))
+
+        db.exec("UPDATE insights SET is_current = 0 WHERE uuid = 'i1'")
+        assertEquals(
+            "a retired reading keeps its words for the history",
+            "9 of 14 finished tasks landed before 18:00",
+            db.rows("SELECT basis FROM insights WHERE uuid = 'i1'")[0][0]
+        )
+    }
+
+    @Test
+    fun `migration 14 to 15 leaves the offered read seekable by profile`() {
+        val db = open(14)
+        db.migrate(AppMigrations.MIGRATION_14_15)
+        repeat(30) { index ->
+            db.exec(insight("i$index", rule = "rule$index", from = 20_000L + index, toDay = 20_006L + index))
+        }
+
+        val plan = db.rows(
+            "EXPLAIN QUERY PLAN SELECT * FROM insights WHERE user_id = ${Seeder.USER_ID} " +
+                "AND is_current = 1 AND (feedback IS NULL OR feedback IN ('ACCEPTED', 'USEFUL')) " +
+                "ORDER BY last_seen_at DESC, id DESC"
+        ).flatten().joinToString(" ")
+        assertTrue(
+            "the screen's opening read must be answered by an index rather than by walking every reading " +
+                "the profile ever had; the plan was: $plan",
+            !Regex("SCAN insights\\b").containsMatchIn(plan)
+        )
+    }
+
+    private fun insight(
+        uuid: String,
+        rule: String,
+        from: Long,
+        toDay: Long,
+        userId: Long = Seeder.USER_ID
+    ) = "INSERT INTO insights (uuid, user_id, rule_key, kind, title, body, basis, period_from_day, " +
+        "period_to_day, sample_size, confidence, first_seen_at, last_seen_at, created_at, updated_at) " +
+        "VALUES ('$uuid', $userId, '$rule', 'PATTERN', 'Evenings', 'Most of it got finished early.', " +
+        "'9 of 14 finished tasks landed before 18:00', $from, $toDay, 14, 60, 1, 1, 1, 1)"
 
     private fun habit(
         uuid: String,

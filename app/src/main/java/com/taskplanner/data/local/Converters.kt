@@ -5,6 +5,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.taskplanner.data.model.GoalType
 import com.taskplanner.data.model.HabitFrequency
+import com.taskplanner.data.model.InsightAction
+import com.taskplanner.data.model.InsightFeedback
+import com.taskplanner.data.model.InsightKind
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.SyncState
@@ -154,4 +157,25 @@ class Converters {
 
     @TypeConverter
     fun fromHabitFrequency(value: HabitFrequency): String = value.name
+
+    @TypeConverter
+    fun toInsightKind(value: String): InsightKind = InsightKind.fromName(value)
+
+    @TypeConverter
+    fun fromInsightKind(value: InsightKind): String = value.name
+
+    // Both of these answer for a nullable column, so the pair is written with nullable signatures: Room
+    // only calls the converter when the column holds text, and "no action" and "no answer given" are real
+    // states the screen has to be able to tell from an unknown one.
+    @TypeConverter
+    fun toInsightAction(value: String?): InsightAction? = InsightAction.fromName(value)
+
+    @TypeConverter
+    fun fromInsightAction(value: InsightAction?): String? = value?.name
+
+    @TypeConverter
+    fun toInsightFeedback(value: String?): InsightFeedback? = InsightFeedback.fromName(value)
+
+    @TypeConverter
+    fun fromInsightFeedback(value: InsightFeedback?): String? = value?.name
 } 
