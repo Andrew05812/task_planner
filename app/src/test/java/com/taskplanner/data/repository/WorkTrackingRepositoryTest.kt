@@ -89,11 +89,18 @@ class WorkTrackingRepositoryTest {
      * therefore measures the first stretch on one calendar day and asks for the figure on the next — and
      * the read is right to answer that the earlier work is yesterday's. Parking at noon is the only way the
      * test gets to assert the day it began on rather than the time of day the runner woke up at.
+     *
+     * Both clocks move, because this is a day anchor and not a clock change: the stretches below are made
+     * by the live tracker, and a wall-only jump would leave the two clocks the tracker measures between
+     * disagreeing by exactly the jump — which [com.taskplanner.data.tracking.WorkTimeMath] reports as the
+     * monotonic figure, so the test would be asserting a duration inflated by how late in the day Gradle
+     * happened to reach it. The clock-change case is a different scenario, and it is run on purpose with
+     * `shiftWall` further down this file.
      */
     private fun parkAtNoon() {
         val zone = ZoneId.systemDefault()
         val day = Instant.ofEpochMilli(fixture.timeBase.wall).atZone(zone).toLocalDate()
-        fixture.timeBase.wall = day.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        fixture.timeBase.shiftTo(day.atTime(12, 0).atZone(zone).toInstant().toEpochMilli())
     }
 
     @Test

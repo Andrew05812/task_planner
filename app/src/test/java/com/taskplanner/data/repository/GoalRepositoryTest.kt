@@ -79,7 +79,7 @@ class GoalRepositoryTest {
     private suspend fun seed(): User {
         val user = fixture.signIn()
         userId = user.id
-        fixture.timeBase.wall = at(today, 12, 0)
+        fixture.timeBase.shiftTo(at(today, 12, 0))
         return user
     }
 

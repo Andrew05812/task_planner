@@ -123,7 +123,7 @@ class DashboardWindowBenchmarkTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val fixture = AppFixture(context).also { opened.add(it) }
         val userId = runBlocking { fixture.signIn(email = "bench-$size@example.com").id }
-        fixture.timeBase.wall = at(today, 12, 0)
+        fixture.timeBase.shiftTo(at(today, 12, 0))
         val db = fixture.database.openHelper.writableDatabase
         db.execSQL(
             "INSERT INTO categories (id, uuid, name, color, icon, user_id, created_at, updated_at) VALUES " +
