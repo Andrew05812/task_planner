@@ -12,7 +12,7 @@ import java.util.Locale
 /**
  * What a grant counted, so a stored number keeps its meaning after the rule that wrote it changes.
  *
- * The unit belongs on the row rather than being looked up from the rule because §11 asks for the achievement
+ * The unit belongs on the row rather than being looked up from the rule because §7 asks for the achievement
  * to be remembered, and a memory that reads "100" and has to ask a live rule what 100 means is only a memory
  * while the rule still agrees. A rule that is later retuned from 100 tasks to 100 hours would otherwise
  * rewrite the sentence under the reader's own history.
@@ -29,6 +29,12 @@ enum class AchievementUnit {
 
     /** Habits kept, as a count of habits rather than of days. */
     HABITS,
+
+    /** Days a habit was marked, counted over every habit the profile has. */
+    MARKS,
+
+    /** Measured intervals of work closed out, counted as intervals rather than as their length. */
+    SESSIONS,
 
     /** Consecutive scheduled days one habit was kept across. */
     STREAK_DAYS,
@@ -57,17 +63,17 @@ enum class AchievementUnit {
 }
 
 /**
- * The four families §11 asks the achievements to be organised into, plus the shelf unknown text is put on.
+ * The four families §7 asks the achievements to be organised into, plus the shelf unknown text is put on.
  *
  * The families are about *what kind of claim* the achievement makes rather than which feature raised it, which
  * is what makes the grouping survive a new rule: a streak of any length is steadiness, a count of any size is
- * volume. A screen sorted by feature would have to be rewritten every time a rule is added, and §11 asks for
+ * volume. A screen sorted by feature would have to be rewritten every time a rule is added, and §7 asks for
  * exactly the opposite.
  *
- * [BEGINNING] is a first time (a task finished, a goal reached, a project closed). [STEADINESS] is a thing kept
- * up across days. [VOLUME] is a quantity reached. [MILESTONE] is a whole arc completed — the goal or habit the
- * profile carried through, rather than the first one it ever carried. [OTHER] exists for a row whose family this
- * build does not know.
+ * [BEGINNING] is a first time (a task finished, a session measured, a habit day kept, a goal reached, a
+ * project closed). [STEADINESS] is a thing kept up across days. [VOLUME] is a quantity reached. [MILESTONE] is
+ * a whole arc completed — the goal or habit the profile carried through, rather than the first one it ever
+ * carried. [OTHER] exists for a row whose family this build does not know.
  */
 enum class AchievementCategory {
     BEGINNING,
@@ -94,12 +100,12 @@ enum class AchievementCategory {
  *
  * The row is a record of a moment rather than a live calculation, which is the whole difference between this
  * table and `insights`. An insight is a reading the rules may stop agreeing with, so it carries `is_current`
- * and a pass retires it. An achievement happened: §11 asks for the date it was earned and for a history, and
+ * and a pass retires it. An achievement happened: §7 asks for the date it was earned and for a history, and
  * neither of them can be rebuilt from today's rows once the counter that produced them moves. So the number,
  * its unit, its target and the two sentences the reader were shown are all written down and never derived
  * again.
  *
- * Nothing here is a nudge. There is no `notified_at`, no "unseen" flag and no badge counter, because §11 ends
+ * Nothing here is a nudge. There is no `notified_at`, no "unseen" flag and no badge counter, because §7 ends
  * with the instruction not to turn the app into an intrusive game: an achievement is offered on the screen the
  * reader opens, and it does not message them, does not count up how long they have avoided it, and does not
  * expire.
@@ -152,6 +158,18 @@ data class Achievement(
     /** Which rule earned this, as a stable name: the address the no-repeat index is keyed on. */
     @ColumnInfo(name = "achievement_key")
     val achievementKey: String,
+
+    /**
+     * Which edition of that rule handed this out.
+     *
+     * A rule's condition is allowed to be retuned — "50 tasks" may become "50 tasks in a calendar quarter" —
+     * and the row has to be able to say which version of the app's thinking the reader's history holds. It is
+     * a version rather than a copy of the condition because the condition is already here in the three figures
+     * under it: the unit, the target and the reading that met it. A row written before any rule changed is
+     * version 1, which is what lets the column be added without a backfill.
+     */
+    @ColumnInfo(name = "rule_version", defaultValue = "1")
+    val ruleVersion: Int = 1,
 
     /** Which of [AchievementCategory] the reader's history is filed under. */
     @ColumnInfo(name = "category")

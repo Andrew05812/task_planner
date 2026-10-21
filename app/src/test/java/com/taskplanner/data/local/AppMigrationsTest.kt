@@ -880,6 +880,21 @@ class AppMigrationsTest {
     }
 
     @Test
+    fun `migration 15 to 16 remembers which edition of a rule handed each grant out`() {
+        val db = open(15)
+        db.migrate(AppMigrations.MIGRATION_15_16)
+        // A grant written without a version was written by the rules as they stand: the default is the whole
+        // point of the column being there from the first release, rather than added later with a backfill
+        // nobody can check.
+        db.exec(achievement("a1", key = "first_task"))
+        assertEquals(1L, db.firstLong("SELECT rule_version FROM achievements WHERE uuid = 'a1'"))
+        // And it is data, not a constant: a retuned rule hands its own grants out under its own edition, and
+        // the history the reader already has keeps saying which edition made it.
+        db.exec(achievementVersioned("a2", key = "tasks_10", ruleVersion = 3))
+        assertEquals(3L, db.firstLong("SELECT rule_version FROM achievements WHERE uuid = 'a2'"))
+    }
+
+    @Test
     fun `migration 15 to 16 makes one grant per achievement per profile a database rule`() {
         val db = open(15)
         db.migrate(AppMigrations.MIGRATION_15_16)
@@ -977,6 +992,12 @@ class AppMigrationsTest {
     ) = "INSERT INTO achievements (uuid, user_id, achievement_key, category, title, description, unit, " +
         "target_value, progress_value, earned_day, earned_at) VALUES ('$uuid', $userId, '$key', 'BEGINNING', " +
         "'First one done', '1 task completed', 'TASKS', 1, 1, $earnedDay, $earnedAt)"
+
+    /** The same row with the edition of the rule that handed it out spelled out, for the version tests. */
+    private fun achievementVersioned(uuid: String, key: String, ruleVersion: Long) =
+        "INSERT INTO achievements (uuid, user_id, achievement_key, rule_version, category, title, description, " +
+            "unit, target_value, progress_value, earned_day, earned_at) VALUES ('$uuid', ${Seeder.USER_ID}, " +
+            "'$key', $ruleVersion, 'VOLUME', 'Ten done', '12 tasks completed', 'TASKS', 10, 12, 20000, 2)"
 
     private fun insight(
         uuid: String,

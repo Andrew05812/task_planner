@@ -61,6 +61,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun insightDao(): InsightDao
     abstract fun achievementDao(): AchievementDao
 
+    /** The lifetime totals the achievement rules are judged against; reads only. */
+    abstract fun achievementStatsDao(): AchievementStatsDao
+
     companion object {
         const val NAME = "taskplanner.db"
     }

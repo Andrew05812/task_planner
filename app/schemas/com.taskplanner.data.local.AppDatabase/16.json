@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 16,
-    "identityHash": "34cd2ff915abe55e002f2b23dab62e56",
+    "identityHash": "cd8ac87814d0e86aa3ae81e816252354",
     "entities": [
       {
         "tableName": "tasks",
@@ -2264,7 +2264,7 @@
       },
       {
         "tableName": "achievements",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, `achievement_key` TEXT NOT NULL, `category` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `unit` TEXT NOT NULL, `target_value` INTEGER NOT NULL, `progress_value` INTEGER NOT NULL, `earned_day` INTEGER NOT NULL, `earned_at` INTEGER NOT NULL, FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, `achievement_key` TEXT NOT NULL, `rule_version` INTEGER NOT NULL DEFAULT 1, `category` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `unit` TEXT NOT NULL, `target_value` INTEGER NOT NULL, `progress_value` INTEGER NOT NULL, `earned_day` INTEGER NOT NULL, `earned_at` INTEGER NOT NULL, FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -2289,6 +2289,13 @@
             "columnName": "achievement_key",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "ruleVersion",
+            "columnName": "rule_version",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
           },
           {
             "fieldPath": "category",
@@ -2403,7 +2410,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '34cd2ff915abe55e002f2b23dab62e56')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cd8ac87814d0e86aa3ae81e816252354')"
     ]
   }
 }

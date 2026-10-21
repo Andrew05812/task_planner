@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.AppMigrations
 import com.taskplanner.data.local.AchievementDao
+import com.taskplanner.data.local.AchievementStatsDao
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.HabitDao
@@ -100,4 +101,12 @@ object DatabaseModule {
     /** Grants the reader earned, with the reading each was granted on: the schema v16 table. */
     @Provides
     fun provideAchievementDao(database: AppDatabase): AchievementDao = database.achievementDao()
+
+    /**
+     * The counters a grant is judged against: totals over the rows the reader already has, aggregated in
+     * SQLite, with no table of its own.
+     */
+    @Provides
+    fun provideAchievementStatsDao(database: AppDatabase): AchievementStatsDao =
+        database.achievementStatsDao()
 }

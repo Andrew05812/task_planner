@@ -615,7 +615,8 @@ object AppMigrations {
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS `achievements` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
                     "NOT NULL, `uuid` TEXT NOT NULL, `user_id` INTEGER NOT NULL, " +
-                    "`achievement_key` TEXT NOT NULL, `category` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                    "`achievement_key` TEXT NOT NULL, `rule_version` INTEGER NOT NULL DEFAULT 1, " +
+                    "`category` TEXT NOT NULL, `title` TEXT NOT NULL, " +
                     "`description` TEXT NOT NULL, `unit` TEXT NOT NULL, `target_value` INTEGER NOT NULL, " +
                     "`progress_value` INTEGER NOT NULL, `earned_day` INTEGER NOT NULL, " +
                     "`earned_at` INTEGER NOT NULL, " +

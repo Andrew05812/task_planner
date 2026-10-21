@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 /**
  * The grants a profile has earned.
  *
- * Three things shape this interface, and all three come from §11. **A grant is written once**: the pass asks
+ * Three things shape this interface, and all three come from §7. **A grant is written once**: the pass asks
  * [insertOrIgnore] and a row that already exists is refused by the unique index, keeping its original date, so
  * "не начисляй достижение повторно" does not depend on the pass remembering anything. **A grant is never
  * amended or deleted by the app**: there is no update or delete statement here at all, because the reader's

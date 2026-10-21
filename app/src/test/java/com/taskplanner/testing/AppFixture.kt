@@ -9,6 +9,7 @@ import com.taskplanner.data.backup.BackupRepository
 import com.taskplanner.data.calendar.CalendarRepository
 import com.taskplanner.data.habit.HabitReminderCoordinator
 import com.taskplanner.data.local.AchievementDao
+import com.taskplanner.data.local.AchievementStatsDao
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GoalDao
@@ -29,6 +30,7 @@ import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.User
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
+import com.taskplanner.data.repository.AchievementRepository
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.DashboardRepository
 import java.util.concurrent.LinkedBlockingQueue
@@ -226,6 +228,20 @@ class AppFixture(private val context: Context) : AutoCloseable {
      * that for every test.
      */
     val achievementDao: AchievementDao = database.achievementDao()
+
+    /**
+     * The engine behind those grants: the rules, the lifetime counters they are judged against, and the pass
+     * that writes what they met.
+     *
+     * Wired after the goal and habit repositories for the same reason the insights are: two of the counters
+     * ("was this goal reached", "how long did that habit run") are answered by the arithmetic those screens
+     * already run, so a test that grants an achievement is testing the same figure the card beside it shows.
+     */
+    val achievementStatsDao: AchievementStatsDao = database.achievementStatsDao()
+    val achievementRepository = AchievementRepository(
+        database, achievementDao, achievementStatsDao, goalDao, habitDao, goalRepository, habitRepository,
+        sessionRepository, workTicker, timeBase, context
+    )
 
     val taskRepository = TaskRepository(
         taskDao, sessionRepository, recurrenceRepository, reminderRepository, workTrackingRepository
