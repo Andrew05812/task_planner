@@ -46,6 +46,7 @@ import com.taskplanner.data.repository.HabitRepository
 import com.taskplanner.data.repository.InsightRepository
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
+import com.taskplanner.data.repository.ReportRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.TaskRepository
 import com.taskplanner.data.repository.WorkloadRepository
@@ -242,6 +243,21 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val achievementRepository = AchievementRepository(
         database, achievementDao, achievementStatsDao, goalDao, habitDao, goalRepository, habitRepository,
         sessionRepository, workTicker, timeBase, context
+    )
+
+    /**
+     * The report, on the same daos, the same two figure-owning repositories and the same clocks.
+     *
+     * Nothing new is consulted: a report's completions come from the same bounded read the dashboard draws
+     * its bars from, its measured time from the same interval totals the work screens sum, its goal and habit
+     * figures from the same arithmetic the cards run, and its grants from the rows the pass wrote. That is the
+     * point of wiring it here rather than building a parallel reporting store — a number the report prints has
+     * to be the number the screen beside it prints, or one of the two is wrong.
+     */
+    val reportRepository = ReportRepository(
+        database, taskStatisticsDao, workStatisticsDao, workSessionDao, trackingSessionDao, goalDao, habitDao,
+        categoryDao, insightDao, achievementDao, goalRepository, habitRepository, sessionRepository, timeBase,
+        workTicker
     )
 
     val taskRepository = TaskRepository(
