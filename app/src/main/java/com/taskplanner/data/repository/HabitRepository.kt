@@ -650,8 +650,16 @@ class HabitRepository @Inject constructor(
      * Pure, and shared by the suspend and the reactive path: one place where the four questions a card
      * asks are answered, so the number a test reads out of [figuresOf] is the same number the screen will
      * be handed for the same marks.
+     *
+     * Public for the one caller that holds the days before it holds a habit: a report reads every mark the
+     * profile made inside its window in one statement and works out each habit's figures from that set,
+     * because one query per habit would be one query per card over rows the first query already returned.
+     * Such a caller owes [marked] the same four filters [readDays] applies — live, not tombstoned, this
+     * profile's, and nothing before [Habit.startDay] — or the figures describe work the cards refuse to
+     * count. The start-day filter is the one a batch read cannot express in its `WHERE` clause, because the
+     * day each mark may be credited from belongs to the habit rather than to the mark.
      */
-    private fun figuresOf(
+    fun figuresOf(
         habit: Habit,
         marked: Set<Long>,
         today: Long,

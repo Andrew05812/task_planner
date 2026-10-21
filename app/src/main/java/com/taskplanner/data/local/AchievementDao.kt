@@ -72,10 +72,11 @@ interface AchievementDao {
      * month's report wants the grants that fall inside that month *in that zone*, and converting the period to
      * instants here would re-apply whichever zone this build happens to run in.
      *
-     * §10's report is the caller this was written for and it arrives later in this stage, so nothing in the app
-     * reads it yet. What it does to a window — both ends inclusive, the order a printed section wants, rows
-     * belonging to another profile kept out — is stated and tested here rather than left to be discovered when
-     * the report starts relying on it.
+     * §6's report is the caller this was written for: [com.taskplanner.data.repository.ReportRepository]
+     * reads a period's grants with it. What it does to a window — both ends inclusive, the order a printed
+     * section wants, rows belonging to another profile kept out — is stated here and proved by the storage
+     * tests in `AchievementRepositoryTest`, so a report's achievement section is built on a read somebody
+     * checked rather than on one discovered while wiring the page.
      */
     @Query(
         "SELECT * FROM achievements WHERE user_id = :userId AND earned_day >= :fromDay " +
@@ -86,12 +87,26 @@ interface AchievementDao {
     /**
      * How many grants landed in the window, without handing the caller rows to count.
      *
-     * The same window as [earnedBetween] and the same reason for it; a report's summary line asks for the count
-     * while its section asks for the rows, and one of the two should not have to load the other.
+     * The same window as [earnedBetween] and the same reason for it. §6's report reads both shapes for one
+     * period: its achievements section lists the rows it prints, and its comparison with the window before
+     * needs only how many grants fell there — a count for the window whose rows nobody is going to name, so
+     * neither caller loads what the other one wants.
      */
     @Query(
         "SELECT COUNT(*) FROM achievements WHERE user_id = :userId AND earned_day >= :fromDay " +
             "AND earned_day <= :toDay"
     )
     suspend fun countEarnedBetween(userId: Long, fromDay: Long, toDay: Long): Int
+
+    /**
+     * The signal a report watches so it cannot go stale behind somebody's back.
+     *
+     * A grant is written once and never edited, which makes `earned_at` the whole story of the table: the
+     * newest one moves exactly when a card arrives. Following it means a pass that hands something out reaches
+     * an open report in the same frame it reached the table, which is the §10.2 promise — no report showing
+     * last week's achievements as this week's — and it costs one indexed scalar rather than a re-read of the
+     * rows on every tick.
+     */
+    @Query("SELECT COALESCE(MAX(earned_at), 0) FROM achievements WHERE user_id = :userId")
+    fun observeChanges(userId: Long): Flow<Long>
 }

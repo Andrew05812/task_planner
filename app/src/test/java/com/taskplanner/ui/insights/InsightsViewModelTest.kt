@@ -127,6 +127,19 @@ class InsightsViewModelTest {
     /** Waits for the screen to answer, since the pass and Room's first frame both land on their own threads. */
     private fun awaitLoaded() = awaitUntil("the readings to arrive") { !state().isLoading }
 
+    /**
+     * Waits for the screen to be loaded *and* to be holding the reading the seeded pile produces.
+     *
+     * [awaitLoaded] is not enough for a test that then names a card, and CI found the difference: `!isLoading`
+     * says the pass finished and a frame arrived, and the frame Room delivers first can be the one it read
+     * before that pass wrote. The screen catches up a frame later, so a test asserting at the earlier one was
+     * racing its own fixture — which is why this waits for the card itself. The assertions that follow stay
+     * exactly as they were; only the moment they are allowed to run at has become the one they describe.
+     */
+    private fun awaitPileRead() = awaitUntil("the notebook to hold the reading the pile raised") {
+        !state().isLoading && state().insights.any { it.ruleKey == "high-priority-overload" }
+    }
+
     private fun awaitUntil(what: String, condition: () -> Boolean) {
         fixture.awaitIdle()
         val deadline = System.currentTimeMillis() + 10_000
@@ -143,7 +156,7 @@ class InsightsViewModelTest {
     fun `the screen's own pass fills the list it is reading`() = runBlocking {
         overduePile()
 
-        awaitLoaded()
+        awaitPileRead()
         assertTrue("the rule the pile raises", keys().contains("high-priority-overload"))
         val card = state().insights.single { it.ruleKey == "high-priority-overload" }
         assertEquals(InsightKind.FACT, card.kind)
@@ -164,7 +177,7 @@ class InsightsViewModelTest {
     fun `the panel holds the same fortnight the heavy-day rule was measured on`() = runBlocking {
         overduePile()
 
-        awaitLoaded()
+        awaitPileRead()
         val shown = requireNotNull(state().workload)
         val computed = fixture.workloadRepository.upcoming().also { fixture.awaitIdle() }
 
@@ -202,7 +215,7 @@ class InsightsViewModelTest {
     @Test
     fun `the history switch reads the retired readings rather than filtering the live ones`() = runBlocking {
         overduePile()
-        awaitLoaded()
+        awaitPileRead()
         assertTrue(keys().contains("high-priority-overload"))
 
         // The pile is worked off through the task side of the app, and the retry runs the pass the reader
@@ -230,7 +243,7 @@ class InsightsViewModelTest {
     @Test
     fun `a rejected reading leaves the list the answer takes effect in`() = runBlocking {
         overduePile()
-        awaitLoaded()
+        awaitPileRead()
         val card = state().insights.single { it.ruleKey == "high-priority-overload" }
 
         viewModel.answer(card.uuid, InsightFeedback.REJECTED)
@@ -249,7 +262,7 @@ class InsightsViewModelTest {
     @Test
     fun `an accepted reading stays where it is, marked`() = runBlocking {
         overduePile()
-        awaitLoaded()
+        awaitPileRead()
         val card = state().insights.single { it.ruleKey == "high-priority-overload" }
 
         viewModel.answer(card.uuid, InsightFeedback.ACCEPTED)
@@ -278,7 +291,7 @@ class InsightsViewModelTest {
     @Test
     fun `another profile's readings are not in this list`() = runBlocking {
         overduePile()
-        awaitLoaded()
+        awaitPileRead()
         // A row written under a different account, put on disk directly: the isolation the list has to show is
         // the one the read enforces, and a screen that asked for every insight would print this one under the
         // wrong profile.
@@ -312,7 +325,7 @@ class InsightsViewModelTest {
     @Test
     fun `the screen writes nothing but the answer it was given`() = runBlocking {
         overduePile()
-        awaitLoaded()
+        awaitPileRead()
         val card = state().insights.single { it.ruleKey == "high-priority-overload" }
         val before = workSignature()
 
@@ -341,7 +354,7 @@ class InsightsViewModelTest {
     @Test
     fun `a read the clock refused is said out loud and retrying asks the same question again`() = runBlocking {
         overduePile()
-        awaitLoaded()
+        awaitPileRead()
         assertTrue(keys().contains("high-priority-overload"))
 
         val flaky = FlakyTimeBase(fixture.timeBase)
@@ -359,7 +372,7 @@ class InsightsViewModelTest {
 
         flaky.failing = false
         viewModel.retry()
-        awaitUntil("the retry to land") { state().insights.isNotEmpty() }
+        awaitUntil("the retry to land with the reading back") { keys().contains("high-priority-overload") }
         assertNull("a read that came back leaves no complaint behind", state().error)
         assertNull("and neither does the pass that was asked for again", state().passError)
         assertTrue(keys().contains("high-priority-overload"))
@@ -369,7 +382,7 @@ class InsightsViewModelTest {
     @Test
     fun `a pass the clock refused keeps the cards it could not refresh and says so`() = runBlocking {
         overduePile()
-        awaitLoaded()
+        awaitPileRead()
         assertTrue(keys().contains("high-priority-overload"))
 
         // The window is read off a sound clock: only the analysis is asked for on the clock that refuses, which
@@ -390,7 +403,10 @@ class InsightsViewModelTest {
 
         flaky.failing = false
         viewModel.retry()
-        awaitUntil("the retry to finish the analysis") { !state().isLoading && state().passError == null }
+        awaitUntil("the retry to finish the analysis with the notebook intact") {
+            !state().isLoading && state().passError == null &&
+                keys().contains("high-priority-overload")
+        }
         assertNull("a pass that came back takes its complaint with it", state().passError)
         assertTrue("and the notebook is still the one the reader was looking at",
             keys().contains("high-priority-overload"))

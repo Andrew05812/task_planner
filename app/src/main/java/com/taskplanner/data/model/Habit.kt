@@ -254,6 +254,20 @@ data class HabitCheck(
 }
 
 /**
+ * One live mark, named by its habit and its day and by nothing else.
+ *
+ * The shape a profile-wide window read returns, where the row itself is not wanted: the report's habit
+ * section asks which habits were kept between two days, and pulling a [HabitCheck] for each of them would
+ * carry the uuid, the offset frozen at measurement, the tombstone columns and four timestamps to read two
+ * figures off. [localDay] is the day the mark was made on in the zone the user was in when they made it,
+ * exactly as [HabitCheck.localDay] states it, so grouping these rows by day agrees with the cards.
+ */
+data class HabitMarkedDay(
+    val habitUuid: String,
+    val localDay: Long
+)
+
+/**
  * The record that a mark was taken back or moved, and what it was before.
  *
  * A mark is a fact the user asserted on a day, and un-asserting it is worth as much history as correcting
