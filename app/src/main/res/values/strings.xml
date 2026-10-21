@@ -885,4 +885,116 @@
     <string name="workload_no_baseline">No measured work behind these days, so nothing here is a comparison.</string>
     <string name="workload_busiest">Busiest</string>
     <string name="workload_row_approximate">Estimated lengths</string>
+
+    <!--
+        Achievements (§7). Two strings per achievement: the title the reader sees on the card, and the
+        condition that card states while it is still locked. The number a grant was handed out on is not in
+        these — it is assembled once, from the figure and the plural belonging to the unit the rule counts, so
+        a rule that counts a new kind of thing needs a plural rather than a new sentence in the renderer.
+        Titles are stored on the row when it is granted, which is what lets one be reworded later without
+        rewriting the history that already carries it.
+    -->
+    <string name="achievement_basis">Earned with %1$s.</string>
+    <plurals name="achievement_unit_tasks">
+        <item quantity="one">%d task</item>
+        <item quantity="other">%d tasks</item>
+    </plurals>
+    <plurals name="achievement_unit_goals">
+        <item quantity="one">%d goal</item>
+        <item quantity="other">%d goals</item>
+    </plurals>
+    <plurals name="achievement_unit_projects">
+        <item quantity="one">%d project</item>
+        <item quantity="other">%d projects</item>
+    </plurals>
+    <plurals name="achievement_unit_habits">
+        <item quantity="one">%d habit kept for a week</item>
+        <item quantity="other">%d habits kept for a week</item>
+    </plurals>
+    <plurals name="achievement_unit_marks">
+        <item quantity="one">%d habit day</item>
+        <item quantity="other">%d habit days</item>
+    </plurals>
+    <plurals name="achievement_unit_sessions">
+        <item quantity="one">%d measured session</item>
+        <item quantity="other">%d measured sessions</item>
+    </plurals>
+    <plurals name="achievement_unit_streak_days">
+        <item quantity="one">%d day in a row</item>
+        <item quantity="other">%d days in a row</item>
+    </plurals>
+    <plurals name="achievement_unit_active_days">
+        <item quantity="one">%d day of use</item>
+        <item quantity="other">%d days of use</item>
+    </plurals>
+    <plurals name="achievement_unit_hours">
+        <item quantity="one">%d hour of measured work</item>
+        <item quantity="other">%d hours of measured work</item>
+    </plurals>
+    <plurals name="achievement_unit_other">
+        <item quantity="one">%d</item>
+        <item quantity="other">%d</item>
+    </plurals>
+
+    <!-- The beginnings: the first time a thing happened, so the condition speaks of one rather than of a count. -->
+    <string name="achievement_first_task_title">First one done</string>
+    <string name="achievement_first_task_condition">Finish the first task.</string>
+    <string name="achievement_first_session_title">The first session</string>
+    <string name="achievement_first_session_condition">Close out the first work session.</string>
+    <string name="achievement_first_habit_mark_title">A habit kept once</string>
+    <string name="achievement_first_habit_mark_condition">Mark a habit on its first day.</string>
+    <string name="achievement_first_goal_title">First goal reached</string>
+    <string name="achievement_first_goal_condition">Carry the first goal to its target.</string>
+    <string name="achievement_first_project_title">A project closed</string>
+    <string name="achievement_first_project_condition">Finish every task in one project.</string>
+
+    <!--
+        Steadiness: the days the app was actually used, and the runs a habit was kept for. The day family is
+        written as "leave measured work on N days" because that is the figure behind it — a day the profile has
+        no interval on is not counted, and a day with two of them counts once.
+    -->
+    <string name="achievement_active_days_3_title">Three days of work</string>
+    <string name="achievement_active_days_3_condition">Leave measured work on 3 different days.</string>
+    <string name="achievement_active_days_7_title">A week of use</string>
+    <string name="achievement_active_days_7_condition">Leave measured work on 7 different days.</string>
+    <string name="achievement_active_days_14_title">Two weeks of use</string>
+    <string name="achievement_active_days_14_condition">Leave measured work on 14 different days.</string>
+    <string name="achievement_active_days_30_title">A month of use</string>
+    <string name="achievement_active_days_30_condition">Leave measured work on 30 different days.</string>
+    <string name="achievement_active_days_100_title">A hundred days</string>
+    <string name="achievement_active_days_100_condition">Leave measured work on 100 different days.</string>
+    <string name="achievement_habit_series_7_title">A week in a row</string>
+    <string name="achievement_habit_series_7_condition">Keep one habit for 7 of its days in a row.</string>
+    <string name="achievement_habit_series_30_title">A month in a row</string>
+    <string name="achievement_habit_series_30_condition">Keep one habit for 30 of its days in a row.</string>
+
+    <!-- Volume: quantities reached over everything the profile ever did, whatever the rows look like now. -->
+    <string name="achievement_tasks_10_title">Ten done</string>
+    <string name="achievement_tasks_10_condition">Finish 10 tasks.</string>
+    <string name="achievement_tasks_50_title">Fifty done</string>
+    <string name="achievement_tasks_50_condition">Finish 50 tasks.</string>
+    <string name="achievement_tasks_100_title">A hundred done</string>
+    <string name="achievement_tasks_100_condition">Finish 100 tasks.</string>
+    <string name="achievement_tasks_500_title">Five hundred done</string>
+    <string name="achievement_tasks_500_condition">Finish 500 tasks.</string>
+    <string name="achievement_tasks_1000_title">A thousand done</string>
+    <string name="achievement_tasks_1000_condition">Finish 1 000 tasks.</string>
+    <string name="achievement_hours_10_title">Ten measured hours</string>
+    <string name="achievement_hours_10_condition">Measure 10 hours of work.</string>
+    <string name="achievement_hours_50_title">Fifty measured hours</string>
+    <string name="achievement_hours_50_condition">Measure 50 hours of work.</string>
+    <string name="achievement_hours_100_title">A hundred measured hours</string>
+    <string name="achievement_hours_100_condition">Measure 100 hours of work.</string>
+    <string name="achievement_hours_500_title">Five hundred measured hours</string>
+    <string name="achievement_hours_500_condition">Measure 500 hours of work.</string>
+    <string name="achievement_marks_100_title">A hundred marks</string>
+    <string name="achievement_marks_100_condition">Keep habits on 100 days, over all of them together.</string>
+
+    <!-- Milestones: a whole arc carried through, rather than a count of one kind of row. -->
+    <string name="achievement_goals_5_title">Five goals reached</string>
+    <string name="achievement_goals_5_condition">Carry 5 goals to their target.</string>
+    <string name="achievement_goals_10_title">Ten goals reached</string>
+    <string name="achievement_goals_10_condition">Carry 10 goals to their target.</string>
+    <string name="achievement_habits_kept_3_title">Three habits held</string>
+    <string name="achievement_habits_kept_3_condition">Keep 3 different habits for a week each.</string>
 </resources>

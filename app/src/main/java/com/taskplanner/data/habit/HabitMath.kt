@@ -176,12 +176,14 @@ object HabitMath {
     }
 
     /**
-     * The series as the card prints it, in the unit the frequency makes it meaningful in.
+     * The series as the caller's window prints it, in the unit the frequency makes it meaningful in.
      *
      * [best] is the longest run the marks in [marked] contain, so the set has to reach back as far as the
      * screen wants the history to; [current] only ever walks back from [today] and stops at the first
-     * break, which is why a read bounded to a year can state a year-long series exactly and say "at
-     * least a year" for one longer than that.
+     * break, which is why a window shorter than the series can only ever say "at least". A reader's whole
+     * history is therefore a wider question than a card's, and it is asked as one elsewhere rather than by
+     * widening this window: an achievement reads the same function over the habit's life, while a card names
+     * the four weeks it looked at.
      */
     fun streak(
         habit: Habit,

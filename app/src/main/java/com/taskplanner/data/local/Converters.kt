@@ -3,6 +3,8 @@ package com.taskplanner.data.local
 import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.taskplanner.data.model.AchievementCategory
+import com.taskplanner.data.model.AchievementUnit
 import com.taskplanner.data.model.GoalType
 import com.taskplanner.data.model.HabitFrequency
 import com.taskplanner.data.model.InsightAction
@@ -178,4 +180,19 @@ class Converters {
 
     @TypeConverter
     fun fromInsightFeedback(value: InsightFeedback?): String? = value?.name
+
+    // Both of these answer for a grant written down and never recomputed, so neither may fail on text this
+    // build has not met: an achievement earned by a newer build still has to be readable in this one's
+    // history, and both fallbacks are the "not known here" member rather than a guess at what was counted.
+    @TypeConverter
+    fun toAchievementCategory(value: String): AchievementCategory = AchievementCategory.fromName(value)
+
+    @TypeConverter
+    fun fromAchievementCategory(value: AchievementCategory): String = value.name
+
+    @TypeConverter
+    fun toAchievementUnit(value: String): AchievementUnit = AchievementUnit.fromName(value)
+
+    @TypeConverter
+    fun fromAchievementUnit(value: AchievementUnit): String = value.name
 } 

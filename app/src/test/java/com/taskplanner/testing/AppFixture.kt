@@ -8,6 +8,8 @@ import com.taskplanner.data.auth.AuthRepository
 import com.taskplanner.data.backup.BackupRepository
 import com.taskplanner.data.calendar.CalendarRepository
 import com.taskplanner.data.habit.HabitReminderCoordinator
+import com.taskplanner.data.local.AchievementDao
+import com.taskplanner.data.local.AchievementStatsDao
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GoalDao
@@ -28,6 +30,7 @@ import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.User
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
+import com.taskplanner.data.repository.AchievementRepository
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.DashboardRepository
 import java.util.concurrent.LinkedBlockingQueue
@@ -215,6 +218,30 @@ class AppFixture(private val context: Context) : AutoCloseable {
     val insightRepository = InsightRepository(
         database, insightDao, workloadRepository, taskStatisticsDao, workStatisticsDao, goalDao, habitDao,
         habitRepository, goalRepository, sessionRepository, timeBase, context
+    )
+
+    /**
+     * The grants the reader earned: the schema v16 table.
+     *
+     * The dao is exposed rather than wrapped here because the rules that write it are built in the test that
+     * needs them — a grant depends on which reads a rule is allowed to make, and the fixture should not decide
+     * that for every test.
+     */
+    val achievementDao: AchievementDao = database.achievementDao()
+
+    /**
+     * The engine behind those grants: the rules, the lifetime counters they are judged against, and the pass
+     * that writes what they met.
+     *
+     * Wired after the goal and habit repositories for the same reason the insights are: two of the counters
+     * ("was this goal reached", "how long did that habit run") are answered by the arithmetic those screens
+     * already run, so a test that grants an achievement goes through the same rules the screens do and differs
+     * only in the window it asks them about — the habit's whole life rather than a card's four weeks.
+     */
+    val achievementStatsDao: AchievementStatsDao = database.achievementStatsDao()
+    val achievementRepository = AchievementRepository(
+        database, achievementDao, achievementStatsDao, goalDao, habitDao, goalRepository, habitRepository,
+        sessionRepository, workTicker, timeBase, context
     )
 
     val taskRepository = TaskRepository(
