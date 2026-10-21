@@ -2,9 +2,11 @@ package com.taskplanner.data.achievement
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.data.model.Achievement
 import com.taskplanner.data.model.AchievementCategory
 import com.taskplanner.data.model.AchievementUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -27,7 +29,8 @@ import org.robolectric.RobolectricTestRunner
  *  * **The bar and its sentence agree.** §7's conditions are written as prose ("Finish 500 tasks") rather
  *    than as a number dropped into a template, because the sentences a reader of habits needs and the ones a
  *    reader of hours needs share no shape. The cost is that a retuned target could leave its old number in
- *    the text, so every condition is read back and the figure in it is compared with the rule's own [target].
+ *    the text, so every condition is read back and the figure in it is looked for as a whole number — the fifty
+ *    task card is not satisfied by a sentence whose "500" happens to contain the digits it asks for.
  *  * **A first is a first.** The five beginnings all ask whether a lifetime total went above zero, at a bar of
  *    one, over the figure their name states.
  *  * **Nothing is counted out of thin air.** With an empty profile — every figure at its default — a rule
@@ -42,6 +45,10 @@ class AchievementRulesTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val rules = AchievementRules.ALL
+
+    /** Two accounts, spelled out rather than assumed: an address is only unique per profile. */
+    private val userId = 1L
+    private val otherUser = 2L
 
     private fun rule(key: String): AchievementRule =
         rules.first { it.key == key }.also { assertNotNull("no rule named $key", it) }
@@ -72,6 +79,28 @@ class AchievementRulesTest {
         trackedHours = hours
     )
 
+    /**
+     * The wording with every space taken out, so a figure inside a sentence can be read as one number.
+     *
+     * A thousands separator is a space, and the separators a typographically careful translation uses — a
+     * non-breaking space (U+00A0), a narrow no-break space (U+202F), a figure space (U+2007) — are exactly the
+     * ones [Char.isWhitespace] does not report as whitespace. Dropping only what that call recognises would
+     * split "1 000" into two findings and fail a condition that states its bar correctly.
+     *
+     * Merging is also what makes the reading strict. Two numbers separated by nothing but a space become one run
+     * of digits, so a condition that reads "Finish 10 500 tasks" cannot answer yes to the ten-task rule.
+     */
+    private fun withoutSpaces(text: String): String = buildString(text.length) {
+        text.forEach { char ->
+            if (!char.isWhitespace() && !char.isUnicodeSpace()) append(char)
+        }
+    }
+
+    /** The separators Unicode calls spaces and [Char.isWhitespace] does not. */
+    private fun Char.isUnicodeSpace(): Boolean =
+        code == 0x00A0 || code == 0x1680 || (code in 0x2000..0x200B) || code == 0x202F ||
+            code == 0x205F || code == 0x3000
+
     // -- the catalogue as a set ----------------------------------------------------------------------
 
     @Test
@@ -79,6 +108,22 @@ class AchievementRulesTest {
         val keys = rules.map { it.key }
         assertEquals("keys repeat: $keys", keys.size, keys.toSet().size)
         keys.forEach { assertTrue("a key has to be safe in a table name: $it", it.matches(Regex("[a-z0-9_]+"))) }
+
+        // The table guards a grant twice: once on the uuid and once on the (profile, key) pair, and the pass
+        // reads a refused write as "this profile already holds it". That reading is only honest while the two
+        // indices can refuse the same row and no other — which holds because the uuid is spelled from that very
+        // pair, and because a key is confined to lower case letters, digits and underscores, so no key can
+        // contain the separator and no two pairs can spell one address. A key allowed to grow a hyphen would
+        // let one profile's grant be mistaken for another's, and a grant lost on the uuid index would be lost
+        // in silence.
+        assertEquals(keys.size, keys.map { Achievement.uuidFor(userId, it) }.distinct().size)
+        val bothAccounts = listOf(userId, otherUser).flatMap { user -> keys.map { Achievement.uuidFor(user, it) } }
+        assertEquals(
+            "one profile's grant is never mistaken for another's",
+            bothAccounts.size,
+            bothAccounts.distinct().size
+        )
+        assertNotEquals(Achievement.uuidFor(userId, "tasks_1"), Achievement.uuidFor(userId, "tasks_10"))
     }
 
     @Test
@@ -108,11 +153,13 @@ class AchievementRulesTest {
     @Test
     fun `a condition names the same bar as the rule it belongs to`() {
         rules.filter { it.target > 1L }.forEach { rule ->
-            val condition = context.getString(rule.conditionRes).filterNot { it.isWhitespace() }
-            val numbers = Regex("\\d+").findAll(condition).map { it.value }.toList()
+            val condition = withoutSpaces(context.getString(rule.conditionRes))
+            // The bar has to stand as a whole number rather than as part of one: "Finish 500 tasks" would
+            // otherwise answer yes to the fifty-task card, which is the drift this test exists to catch.
+            val bar = Regex("(?<!\\d)${rule.target}(?!\\d)")
             assertTrue(
-                "${rule.key} sets a bar of ${rule.target}, but its condition says \"$condition\" with $numbers",
-                numbers.contains(rule.target.toString())
+                "${rule.key} sets a bar of ${rule.target}, but its condition reads \"$condition\"",
+                bar.containsMatchIn(condition)
             )
         }
     }

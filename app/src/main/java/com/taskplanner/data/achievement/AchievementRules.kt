@@ -49,8 +49,9 @@ private class SimpleRule(
  * ## What the set covers, and what it deliberately does not
  *
  * The families follow §7: a beginning is a first time, steadiness is a thing kept across days, volume is a
- * quantity reached, a milestone is a whole arc carried through. Every figure is a lifetime total, so no
- * achievement can be lost by a quiet month and none can be paid out for a window the reader never chose.
+ * quantity reached, a milestone is a whole arc carried through. Every figure is read over the profile's whole
+ * life rather than over a period, so a quiet stretch cannot make a card the reader earned read as never earned,
+ * and no card can be paid out for a window the reader never chose.
  *
  * §7's examples are all here, with two differences, both stated rather than left for the reader to notice:
  *
@@ -118,8 +119,9 @@ object AchievementRules {
      *
      * Read as days of use rather than as days since the account was made: a run of calendar days is a fact
      * about the date, the app cannot know the reader opened it, and an achievement that paid out for that
-     * would be a streak mechanic wearing the language of a record. The figure is the same one the report
-     * prints under "active days", counted over every day the profile ever has.
+     * would be a streak mechanic wearing the language of a record. The figure counts every day the profile has
+     * ever left closed-out work on, over the whole account rather than a period, and an interval still running
+     * is not one of them.
      */
     private val activityDays: List<AchievementRule> = tiers(
         prefix = "active_days",
@@ -170,7 +172,7 @@ object AchievementRules {
 
     // -- volume: a quantity reached ------------------------------------------------------------------
 
-    /** 10, 50, 100, 500 and 1000 tasks finished, however long ago and whatever their state now. */
+    /** 10, 50, 100, 500 and 1000 tasks finished, over the whole account rather than any period of it. */
     private val taskTiers: List<AchievementRule> = tiers(
         prefix = "tasks",
         category = AchievementCategory.VOLUME,
@@ -278,9 +280,15 @@ object AchievementRules {
      *
      * The key is derived from the bar rather than spelled out beside it: `tasks_100` cannot be typed
      * differently in the two places that have to agree, and §7.2's history rows address themselves by that key
-     * for as long as the app reads them. The two string lists are looked up by the same bar, so a family that
-     * gains a tier and forgets its condition says so at build time through the missing resource rather than
-     * quietly re-using another tier's text.
+     * for as long as the app reads them.
+     *
+     * [titles] drives the list, so the two string lists must hold the same bars. A family that gains a title and
+     * forgets its condition does not quietly re-use another tier's text — [conditions] cannot answer for the new
+     * bar, and `NoSuchElementException` is thrown while this object is being initialized. That is loud rather
+     * than silent, and it is caught by the rules' own suite, which reads [ALL] and so fails the moment the
+     * registry cannot be built; but it is worth knowing the failure arrives at runtime and takes the whole
+     * catalogue with it, not only the tier that was left out. A condition without a matching title is the
+     * harmless direction: nothing asks for it.
      */
     private fun tiers(
         prefix: String,

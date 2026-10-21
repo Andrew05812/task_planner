@@ -235,7 +235,8 @@ class AppFixture(private val context: Context) : AutoCloseable {
      *
      * Wired after the goal and habit repositories for the same reason the insights are: two of the counters
      * ("was this goal reached", "how long did that habit run") are answered by the arithmetic those screens
-     * already run, so a test that grants an achievement is testing the same figure the card beside it shows.
+     * already run, so a test that grants an achievement goes through the same rules the screens do and differs
+     * only in the window it asks them about — the habit's whole life rather than a card's four weeks.
      */
     val achievementStatsDao: AchievementStatsDao = database.achievementStatsDao()
     val achievementRepository = AchievementRepository(

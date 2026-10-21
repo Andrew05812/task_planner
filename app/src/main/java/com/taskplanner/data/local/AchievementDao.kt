@@ -19,9 +19,9 @@ import kotlinx.coroutines.flow.Flow
  * future. **A grant is not a notification**: nothing here tracks whether the reader has looked, because the app
  * must not turn this into a game that nags.
  *
- * The pass reads [earnedKeys] rather than loading every row, and the screen reads one Flow and files the rows
- * itself: the number of achievements a profile can hold is bounded by the number of rules the app ships, so this
- * is the one table where reading the whole set is the cheap option.
+ * The pass reads [earnedKeys] rather than loading every row, and the repository reads one Flow and files the
+ * rows itself: the number of achievements a profile can hold is bounded by the number of rules the app ships, so
+ * this is the one table where reading the whole set is the cheap option.
  */
 @Dao
 interface AchievementDao {
@@ -40,8 +40,13 @@ interface AchievementDao {
     /**
      * This profile's grant of one achievement, if it has one.
      *
-     * Keyed by the rule name, because that is what a pass is asking when it decides whether the condition is
-     * worth measuring at all — and a grant already held needs no measurement to be kept.
+     * The read a caller reaches for when it wants the stored row behind one key: the tests that check what a pass
+     * left on the table ask for exactly one grant, and this is the cheapest way to name it.
+     *
+     * The pass itself does not use it. Deciding whether a condition was already earned is one question about
+     * every rule, and [earnedKeys] answers all of them with one read of one column — a lookup per rule would be
+     * the slower way to say the same thing, and a slower way of exactly the question that is asked on every
+     * screen opening the history is on.
      */
     @Query("SELECT * FROM achievements WHERE user_id = :userId AND achievement_key = :key LIMIT 1")
     suspend fun byKey(userId: Long, key: String): Achievement?
@@ -66,6 +71,11 @@ interface AchievementDao {
      * the time zone the reader asked for, and the day a grant landed on is the fact the report is about. A
      * month's report wants the grants that fall inside that month *in that zone*, and converting the period to
      * instants here would re-apply whichever zone this build happens to run in.
+     *
+     * §10's report is the caller this was written for and it arrives later in this stage, so nothing in the app
+     * reads it yet. What it does to a window — both ends inclusive, the order a printed section wants, rows
+     * belonging to another profile kept out — is stated and tested here rather than left to be discovered when
+     * the report starts relying on it.
      */
     @Query(
         "SELECT * FROM achievements WHERE user_id = :userId AND earned_day >= :fromDay " +
@@ -73,7 +83,12 @@ interface AchievementDao {
     )
     suspend fun earnedBetween(userId: Long, fromDay: Long, toDay: Long): List<Achievement>
 
-    /** How many grants landed in the window, without handing the caller rows to count. */
+    /**
+     * How many grants landed in the window, without handing the caller rows to count.
+     *
+     * The same window as [earnedBetween] and the same reason for it; a report's summary line asks for the count
+     * while its section asks for the rows, and one of the two should not have to load the other.
+     */
     @Query(
         "SELECT COUNT(*) FROM achievements WHERE user_id = :userId AND earned_day >= :fromDay " +
             "AND earned_day <= :toDay"

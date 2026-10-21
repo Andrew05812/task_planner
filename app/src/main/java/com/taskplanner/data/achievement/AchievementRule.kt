@@ -11,15 +11,22 @@ import com.taskplanner.data.model.AchievementUnit
  * This is the same seam [com.taskplanner.data.insight.InsightInputs] is for the reading rules, and it is here
  * for the same reason. A rule that reached into a dao could not be tested as arithmetic, and a rule that read
  * the database itself would decide its own threshold against whichever window it happened to be given — which
- * is how a "100 tasks" badge ends up counting three. The repository fills these figures in once per pass, from
- * the aggregates the dashboard and the goal and habit screens already use, so the number an achievement was
- * granted on is the number the screen beside it states.
+ * is how a "100 tasks" badge ends up counting three. The repository fills these figures in once per pass: the
+ * counts come from [com.taskplanner.data.local.AchievementStatsDao], and the two that need per-goal or
+ * per-habit arithmetic come through the repositories that own that arithmetic, so one definition of "reached"
+ * and of "kept" serves the screen and the grant alike. The period is the one thing the achievements choose
+ * differently, and deliberately: a grant asks about the whole life rather than the four weeks a habit card
+ * prints, because a thing the reader did does not stop having been done when it leaves a window.
  *
- * Every field is a lifetime total, and none of them is a window. That is what §7.1's "не выдавать одно
- * достижение повторно" needs in the figures rather than only in the table: a counter that counts everything
- * the profile ever did can only ever grow, so a quiet month cannot make an achievement the reader already
- * earned untrue, and a grant that was missed because no pass ran on the right day is still handed out by the
- * next one.
+ * Every field is read over the profile's whole life rather than over a period, and none of them is a window.
+ * That is what §7.1 asks of the figures rather than only of the table: a counter that counted this month alone
+ * would hand a badge out in January for December's work and then read it as never earned in February, and a
+ * reader whose thirty-day series ended thirteen months ago would be handed a history that contradicts the
+ * habit's own detail screen, whose grid is read over the whole life and still shows those thirty days. What
+ * these figures can still do is fall — a task un-completed, a habit deleted, a goal's target retuned — because
+ * each one is read from the work as it stands, and the grant does not depend on it holding: the no-repeat
+ * promise is kept by the unique index on `(user_id, achievement_key)` and by a dao that issues no update, not
+ * by counters that only ever grow.
  *
  * Two conversions happen on the way in, both because the achievements speak the figure rather than the schema
  * doing so. Measured time arrives as whole hours, because "100 hours of work" is a claim about hours and
@@ -29,21 +36,25 @@ import com.taskplanner.data.model.AchievementUnit
  * and a figure folded before the rule saw it could answer only one of them.
  */
 data class AchievementFigures(
-    /** Tasks finished, whatever their state now: un-completing work does not take the count back. */
+    /** Tasks standing finished now, over the whole account; taking a completion back takes it out of the count. */
     val tasksEverCompleted: Long = 0L,
 
-    /** Goals carried to their target, including ones since archived. */
+    /** Goals the account holds and has carried to their target, archived ones included. */
     val goalsEverReached: Long = 0L,
 
-    /** Groups (projects) closed, however long ago. */
+    /** Groups (projects) whose every live task is finished, as the account stands. */
     val projectsEverCompleted: Long = 0L,
 
     /**
      * The longest run of asked days each habit ever reached, one entry per habit.
      *
-     * Empty means the profile has never had a habit at all, which the streak rules read as "nothing to
-     * count" rather than as a series of nought — see [AchievementRule.counter]. A habit that has marks but
-     * none in a run contributes a zero, which is a real answer to a real question.
+     * A habit whose frequency counts weeks rather than days is not in this list at all: "seven days in a row"
+     * is a claim about days, and a run of kept weeks is a different claim that no streak rule here makes. So an
+     * empty list can mean two things — the profile never had a habit, or every habit it has counts weeks — and
+     * the streak rules read both the same way, as nothing to count rather than as a series of nought. See
+     * [AchievementRule.counter] for why that is not the same as zero.
+     *
+     * A habit that has marks but none in a run contributes a zero, which is a real answer to a real question.
      */
     val habitBestStreaks: List<Int> = emptyList(),
 
@@ -97,10 +108,12 @@ data class Grant(
  * rules cannot disagree about what reaching means.
  *
  * [counter] is a total rather than a window, and it reads [AchievementFigures] as they stand, so an achievement
- * is judged against everything the profile has ever done. That is what "never grant twice" needs: a counter
- * that drops — a habit whose marks were deleted, a task un-completed — cannot make an achievement the reader
- * already earned untrue, and the unique index in `achievements` keeps the grant standing even if a later pass
- * measures less.
+ * is judged against everything the profile has ever done rather than against the fortnight a pass happens to
+ * run in. That is what makes a card reachable: a reader who finished fifty tasks in March and never opened the
+ * app again is still owed the fifty-task card when a pass runs in November, and it is written with the figure
+ * their own history lists. What keeps a grant standing once it is written is a different mechanism — the unique
+ * index in `achievements` and a dao that issues no update — because a total can fall when work is taken back,
+ * and the memory does not fall with it.
  *
  * The wording is not on the interface either, only the ids of it. A rule that returned a sentence could not be
  * tested as arithmetic, and a screen could not re-state a grant in another language; a rule that names its two
@@ -130,8 +143,9 @@ interface AchievementRule {
      * The bar is written into the text instead of being substituted into it, because the sentence a reader of
      * habits needs is not the sentence a reader of hours needs ("Measure 100 hours of work" and "Keep one habit
      * for 30 of its days in a row" share no shape worth forcing them through). The cost is that a rule and its
-     * text can drift, so the rules' own suite reads the number out of every condition and compares it with
-     * [target] — the drift is caught as a failing test rather than left for the reader to notice.
+     * text can drift, so the rules' own suite reads the bar out of every condition and compares it with
+     * [target] — as a whole number where the bar is a number, and as a first rather than a count where the bar
+     * is one. The drift is caught as a failing test rather than left for the reader to notice.
      */
     val conditionRes: Int
 
