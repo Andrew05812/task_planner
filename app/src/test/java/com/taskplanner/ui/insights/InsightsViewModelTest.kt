@@ -128,16 +128,29 @@ class InsightsViewModelTest {
     private fun awaitLoaded() = awaitUntil("the readings to arrive") { !state().isLoading }
 
     /**
-     * Waits for the screen to be loaded *and* to be holding the reading the seeded pile produces.
+     * Asks the screen to run its pass again now that the pile is on disk, and waits for the reading it raises.
      *
-     * [awaitLoaded] is not enough for a test that then names a card, and CI found the difference: `!isLoading`
-     * says the pass finished and a frame arrived, and the frame Room delivers first can be the one it read
-     * before that pass wrote. The screen catches up a frame later, so a test asserting at the earlier one was
-     * racing its own fixture — which is why this waits for the card itself. The assertions that follow stay
-     * exactly as they were; only the moment they are allowed to run at has become the one they describe.
+     * Two races, both found by CI rather than by the local run.
+     *
+     * The first is the wait: [awaitLoaded] answers `!isLoading`, which means "the pass is over and a frame has
+     * arrived" — not "the frame holds what the pass wrote". The frame Room delivers first can be the notebook
+     * as it stood before the write, and the screen catches up a frame later, so a test naming a card at the
+     * earlier one was reading whatever the scheduler served first.
+     *
+     * The second is deeper, and waiting for the card is what exposed it: the screen runs its one pass when it is
+     * constructed, in `setUp`, while the pile is inserted afterwards by the test itself. The pass's own database
+     * reads land on Room's executors, so whether they see those three rows is a race between two queues — and
+     * when the pass wins the race it finds an empty account, raises nothing, and nothing asks it again, because
+     * a task write changes the notebook's table not at all. `retry` is the production command for exactly this
+     * question — "ask the same thing again" — so the seeding ends up behind a pass that must see it. The
+     * assertions that follow are unchanged, messages included; what changed is that they now run at the moment
+     * they describe.
      */
-    private fun awaitPileRead() = awaitUntil("the notebook to hold the reading the pile raised") {
-        !state().isLoading && state().insights.any { it.ruleKey == "high-priority-overload" }
+    private fun awaitPileRead() {
+        viewModel.retry()
+        awaitUntil("the notebook to hold the reading the pile raised") {
+            !state().isLoading && state().insights.any { it.ruleKey == "high-priority-overload" }
+        }
     }
 
     private fun awaitUntil(what: String, condition: () -> Boolean) {
