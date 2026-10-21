@@ -2,7 +2,6 @@ package com.taskplanner.data.repository
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.taskplanner.data.achievement.AchievementFigures
 import com.taskplanner.data.achievement.AchievementRule
 import com.taskplanner.data.achievement.AchievementRules
 import com.taskplanner.data.calendar.CalendarMath
@@ -18,6 +17,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -36,21 +37,24 @@ import org.robolectric.RobolectricTestRunner
  * The achievement engine, over real Room.
  *
  * `AchievementRulesTest` already reads each rule as arithmetic, so nothing here re-asks whether a bar is
- * reached. What is proved is the five things only the pass and the database can settle. **A grant is handed
- * out once**: the same condition met twice leaves one row with the first date and the first figure on it,
- * which is §7.1's "no repeats" as a property of the storage rather than of a loop's memory. **A grant that
- * arrives from elsewhere is not handed out a second time either** — a row written by a restore keeps its own
- * date and wording while the pass that finds it reports it as already held, which is §11's import rule
- * settled at the level the pass can see. **A grant is never rewritten underneath the reader**: when the work
- * that earned it shrinks or falls away, the stored figure and the stored sentence stay, while the card's own
- * live progress figure moves — the two numbers are different things and the screen is given both. **The
- * figures are the app's own**: a card is earned by completing a task through [TaskRepository], by measuring
- * an interval through [WorkTrackingRepository], by marking a habit through [HabitRepository] and by reaching
- * a goal through the same [GoalRepository.progressOf] the goal's card runs, never by inserting a row shaped
- * like the answer, so the test would fail the day an achievement started counting something the screens do
- * not count. **Cancelled work cannot pay out, and paid-for work is not taken back** — both directions of the
- * same figure, held apart by the instant a completion is stamped. **And nothing here belongs to anybody
- * else**: two profiles doing the identical thing earn two rows, not one shared one.
+ * reached. What is proved is what only the pass and the database can settle. **A grant is handed
+ * out once**: the same condition met twice leaves one row with the first date and the first figure on it, and
+ * two passes running against the same work leave one row as well — which is §7.1's "no repeats" as a property
+ * of the storage rather than of a loop's memory. **A grant that arrives from elsewhere is not handed out a
+ * second time either** — a row written by a restore keeps its own date and wording while the pass that finds it
+ * reports it as already held, which is §11's import rule settled at the level the pass can see. **A grant is
+ * never rewritten underneath the reader**: when the work that earned it shrinks or falls away, the stored
+ * figure and the stored sentence stay, while the card's own live progress figure moves — the two numbers are
+ * different things and the screen is given both. **The figures are read over a life rather than a window**, so
+ * a series that ended more than a year ago is still the series it was — the guarantee the two previous points
+ * stand on. **The figures are the app's own**: a card is earned by completing a task through [TaskRepository],
+ * by measuring an interval through [WorkTrackingRepository], by marking a habit through [HabitRepository] and
+ * by reaching a goal through the same [GoalRepository.progressOf] the goal's card runs, never by inserting a row
+ * shaped like the answer, so the test would fail the day an achievement started counting something the screens
+ * do not count — and where a completion has to land on a named day, [finish] says so and states why.
+ * **Cancelled work cannot pay out, and paid-for work is not taken back** — both directions of the same figure,
+ * held apart by the instant a completion is stamped. **And nothing here belongs to anybody else**: two profiles
+ * doing the identical thing earn two rows, not one shared one.
  *
  * One exception to "through the repository" is [finish], and it is spelled out there: the task writes that
  * this suite's goal windows depend on are stamped by [TaskRepository.completeAndArchive] from the device
@@ -60,6 +64,13 @@ import org.robolectric.RobolectricTestRunner
  * The clock is parked at midday Wednesday 3 June 2026 in a zone with a daylight-saving jump behind it, as
  * everywhere in this suite, and a later pass is asked for by moving that clock — two passes in one parked
  * millisecond are one pass, which is the honest reading of a screen that re-subscribes.
+ *
+ * A third exception, and the largest: the section *What the storage settles on its own* writes grant rows
+ * through [grantRow] rather than earning them. Those tests ask which rows a unique index refuses and which rows
+ * an epoch-day window selects — questions a pass cannot be mixed into, because a pass decides both the day and
+ * the figure for them, and the answers would then be about the pass rather than about the table. They are the
+ * only tests here that put a row on the `achievements` table by hand, and every claim they make is a claim
+ * about storage, not about reaching a bar.
  */
 @RunWith(RobolectricTestRunner::class)
 class AchievementRepositoryTest {
@@ -141,11 +152,13 @@ class AchievementRepositoryTest {
         assertEquals(emptyList<String>(), keys())
         assertEquals(0, result.granted)
         assertEquals(0, result.met)
-        // The rules with a figure to judge are the ones whose counter is not null over an empty profile; a
-        // streak rule with no habits has nothing to be short of, and counting it as "considered" would make
-        // the screen report a failure the reader never had.
-        val expected = AchievementRules.ALL.count { it.counter(AchievementFigures()) != null }
-        assertEquals(expected, result.considered)
+        // Three rules ask about a habit's series, and a profile that never had a habit has no such figure to be
+        // short of: the screen says "not started" rather than "0 of 7", and the pass does not count them as
+        // judged at all. Every other rule reads a lifetime count an empty profile can answer with a zero, so the
+        // expectation is written from the registry's size rather than from the rules' own counters — a test that
+        // asked the production code what it was about to do would pass however the code changed.
+        val withoutAFigure = listOf("habit_series_7", "habit_series_30", "habits_kept_3")
+        assertEquals(AchievementRules.ALL.size - withoutAFigure.size, result.considered)
     }
 
     @Test
@@ -214,6 +227,42 @@ class AchievementRepositoryTest {
         // nothing happened today.
         assertEquals(first.met, again.met)
         assertEquals(first.met, again.alreadyEarned)
+    }
+
+    @Test
+    fun `two passes racing over the same work hand each card out once`() = runBlocking {
+        seed()
+        val ids = (1..10).map { fixture.addTask(userId, "task $it") }
+        ids.forEach { fixture.taskRepository.completeAndArchive(it) }
+        fixture.awaitIdle()
+
+        // A screen re-subscribing and the background worker can ask for a pass in the same breath, and each of
+        // them reads what the profile holds before either has written a row. Nothing in the pass locks the other
+        // out, and nothing needs to: what settles the race is the unique index under the write, so the invariant
+        // worth stating is the one the reader sees — as many grants credited to the two passes as there are rows
+        // standing, which is another way of saying no achievement was handed out twice and none was lost.
+        val results = coroutineScope {
+            val one = async { repository.refresh() }
+            val two = async { repository.refresh() }
+            listOf(one.await(), two.await())
+        }
+        fixture.awaitIdle()
+
+        assertEquals(listOf("first_task", "tasks_10"), keys())
+        assertEquals(
+            "each card is credited to exactly one of the two passes",
+            2,
+            results.sumOf { it.granted }
+        )
+        val rows = dao.observeEarned(userId).first()
+        assertEquals(
+            "both cards came from these two passes, on the day they ran",
+            listOf(today, today),
+            rows.map { it.earnedDay }
+        )
+        // Both task rules read the same figure, so both rows carry ten on them: the beginning card is not
+        // clamped to its own bar, and neither row is the mixture of a pass that had read older numbers.
+        assertEquals(listOf(10L, 10L), rows.map { it.progressValue })
     }
 
     @Test
@@ -413,6 +462,57 @@ class AchievementRepositoryTest {
         assertEquals(7L, row.progressValue)
         assertEquals("Earned with 7 days in a row.", row.description)
         assertNull("a week is not a month", grantOrNone("habit_series_30"))
+    }
+
+    @Test
+    fun `a series that ended more than a year before today is still a series the reader ran`() = runBlocking {
+        seed()
+        // The guarantee §7.1's "never hand the same achievement out twice" rests on is that every figure a rule
+        // judges is read over the whole life, and a habit series measured over a window is the figure that
+        // breaks it. A pass reaching back only a year would score this run as whatever fell inside the window
+        // rather than as the thirty days it was, and would tell a reader who restored an old account — or who
+        // kept a habit and let it go over a year ago — that a thing their own habit grid still shows never
+        // happened. The grid and the grant are read from the same life here; a habit *card*, which answers the
+        // screen's four-week question, is allowed to show less, and says so in its own words.
+        val habit = createHabit("Run", HabitFrequency.DAILY, wednesday.minusDays(430))
+        (401L..430L).forEach { back -> keep(habit, wednesday.minusDays(back)) }
+        pass()
+
+        val row = grant("habit_series_30")
+        assertEquals(
+            "the series is the thirty days it ran, not the days the window happened to reach",
+            30L,
+            row.progressValue
+        )
+        assertEquals("Earned with 30 days in a row.", row.description)
+        // The live read the screen prints agrees with the stored grant, which is the pair this pass is built to
+        // keep identical: a card that said "0 of 30" beside a grant of thirty would be the window showing again.
+        val overview = repository.observeOverview(zone).first()
+        assertEquals(30L, overview.first { it.key == "habit_series_30" }.progress)
+    }
+
+    @Test
+    fun `a habit put away keeps the series it ran while it was open`() = runBlocking {
+        seed()
+        // Kept for a week and then archived: putting a habit away stops the asking and keeps the marks, which
+        // is what a reader means by "I did that and I stopped". An achievement that only looked at the habits
+        // still being asked would take the week back from somebody who did nothing wrong but moved on, and the
+        // streak achievements would read as a mechanic that punishes finishing.
+        val habit = createHabit("Run", HabitFrequency.DAILY, wednesday.minusDays(60))
+        (1L..7L).forEach { offset -> keep(habit, wednesday.minusDays(offset)) }
+        assertTrue(
+            "the habit was not put away",
+            fixture.habitRepository.archive(habit) is HabitWriteResult.Saved
+        )
+        pass()
+
+        val row = grant("habit_series_7")
+        assertEquals(7L, row.progressValue)
+        assertEquals("Earned with 7 days in a row.", row.description)
+        // And the live read agrees with the grant rather than dropping the archived habit out of the figures.
+        val card = repository.observeOverview(zone).first().first { it.key == "habit_series_7" }
+        assertEquals(7L, card.progress)
+        assertTrue(card.isEarned)
     }
 
     @Test
@@ -690,7 +790,164 @@ class AchievementRepositoryTest {
         assertEquals("first_task", after.first { it.isEarned }.key)
     }
 
+    // -- what the storage settles on its own ------------------------------------------------------------
+
+    @Test
+    fun `a grant written under an older edition of a rule is not re-judged by a later one`() = runBlocking {
+        seed()
+        // A row as an earlier release wrote it: the bar that release set, the figure that met it, the sentence
+        // it rendered. The rule in this build asks for ten, so the pass now looks at a grant whose own numbers
+        // it cannot reproduce — and §7.2's history survives that only if the row is left alone.
+        assertTrue(
+            dao.insertOrIgnore(
+                grantRow("tasks_10", onDay = today - 400, progress = 12L)
+                    .copy(ruleVersion = 1, targetValue = 8L, title = "Eight done")
+            ) > 0L
+        )
+        fixture.awaitIdle()
+        val asOfTheOlderEdition = grant("tasks_10")
+        assertEquals(1, asOfTheOlderEdition.ruleVersion)
+        assertEquals(8L, asOfTheOlderEdition.targetValue)
+        assertEquals("Eight done", asOfTheOlderEdition.title)
+
+        // Ten tasks completed under today's rule: the card is met again, so the pass has a live reason to reach
+        // for that row — and the only thing it is allowed to do with it is leave it where it stands.
+        (1..10).map { fixture.addTask(userId, "task $it") }
+            .forEach { fixture.taskRepository.completeAndArchive(it) }
+        val result = pass()
+
+        assertEquals(1, result.granted)
+        assertTrue(keys().contains("first_task"))
+        assertEquals(
+            "the stored edition, bar, figure and wording are the memory; nothing is recomputed to fit today",
+            asOfTheOlderEdition,
+            grant("tasks_10")
+        )
+
+        // The screen can still tell the two readings apart: the card states the rule as it stands now and the
+        // grant keeps the edition it was handed out under, so a retuned bar shows up as a change of the rule
+        // rather than as a reader who earned something different from what they did.
+        val card = repository.observeOverview(zone).first().first { it.key == "tasks_10" }
+        assertTrue(card.isEarned)
+        assertEquals(10L, card.target)
+        assertEquals(10L, card.progress)
+        assertEquals(8L, card.earned?.targetValue)
+        assertEquals(12L, card.earned?.progressValue)
+        assertEquals("Eight done", card.earned?.title)
+    }
+
+    @Test
+    fun `a second grant of the same card is refused by the row rather than by the pass`() = runBlocking {
+        seed()
+        assertTrue(dao.insertOrIgnore(grantRow("tasks_10", onDay = today)) > 0L)
+        fixture.awaitIdle()
+        val asWritten = grant("tasks_10")
+
+        // The row a racing pass would put up: same profile, same card, a later day, a larger figure and its own
+        // sentence — every one of the things a reader would notice if the conflict resolved by overwriting
+        // instead of refusing.
+        val again = grantRow("tasks_10", onDay = today + 1, progress = 40L)
+            .copy(title = "Rewritten", description = "Earned with 40 tasks.")
+        assertEquals(
+            "-1 is the only honest answer about a card this profile already holds",
+            -1L,
+            dao.insertOrIgnore(again)
+        )
+        fixture.awaitIdle()
+
+        assertEquals("the refused write left nothing of itself behind", asWritten, grant("tasks_10"))
+        assertEquals(listOf("tasks_10"), keys())
+    }
+
+    @Test
+    fun `a day window takes the grants that landed inside it and neither end is excluded`() = runBlocking {
+        seed()
+        val other = fixture.signInAs(User(email = "report@example.com", name = "Report"))
+        // Three grants on three consecutive days, and one of them belonging to a different profile. §10's
+        // report cuts its period in the zone the reader asked for and asks which days fell inside it, so these
+        // rows are written by hand rather than computed: the question here belongs to the table, and a pass
+        // would have decided the days for the test instead of letting the test name them.
+        listOf("tasks_10", "tasks_50", "tasks_100").forEachIndexed { index, key ->
+            assertTrue(dao.insertOrIgnore(grantRow(key, onDay = today - 1 + index)) > 0L)
+        }
+        assertTrue(dao.insertOrIgnore(grantRow("first_task", onDay = today, of = other.id)) > 0L)
+        fixture.awaitIdle()
+
+        // Both ends inclusive, because the window a month's report hands over names the month's first and last
+        // day; excluding either edge would lose two days of the reader's history from a document whose whole
+        // point is that it covers the period they chose.
+        assertEquals(
+            listOf("tasks_10", "tasks_50"),
+            dao.earnedBetween(userId, today - 1, today)
+                .also { fixture.awaitIdle() }
+                .map { it.achievementKey }
+        )
+        assertEquals(
+            "a window of one day asks for one day",
+            listOf("tasks_50"),
+            dao.earnedBetween(userId, today, today).also { fixture.awaitIdle() }.map { it.achievementKey }
+        )
+        assertEquals(
+            emptyList<Achievement>(),
+            dao.earnedBetween(userId, today + 2, today + 30).also { fixture.awaitIdle() }
+        )
+
+        // Oldest first — the order a printed section reads in, and the opposite of the history list's newest
+        // first — and the count agreeing with the rows rather than being a second answer to the same question.
+        val window = dao.earnedBetween(userId, today - 1, today + 1).also { fixture.awaitIdle() }
+        assertEquals(listOf("tasks_10", "tasks_50", "tasks_100"), window.map { it.achievementKey })
+        assertEquals(listOf(today - 1, today, today + 1), window.map { it.earnedDay })
+        assertEquals(
+            window.size,
+            dao.countEarnedBetween(userId, today - 1, today + 1).also { fixture.awaitIdle() }
+        )
+
+        // And the window is per account: two grants that landed on the same day belong to two readers, and a
+        // report over one of them never prints the other.
+        assertEquals(
+            listOf("first_task"),
+            dao.earnedBetween(other.id, today, today)
+                .also { fixture.awaitIdle() }
+                .map { it.achievementKey }
+        )
+        assertEquals(
+            1,
+            dao.countEarnedBetween(other.id, today - 1, today + 1).also { fixture.awaitIdle() }
+        )
+    }
+
     // -- helpers --------------------------------------------------------------------------------------
+
+    /**
+     * A finished grant row, for the questions that belong to the table rather than to a pass.
+     *
+     * The shelf, the unit and the bar are the rule's own, so a hand-written row is shaped exactly like one the
+     * app writes; the title and description are deliberately not the app's sentences, because the tests that
+     * use this one ask whether a stored row survived a write that should have been refused, and a row that
+     * reads like every other row cannot answer that. `earned_at` is noon on the day being named, so the day
+     * column and the instant column agree with each other the way they do in a real grant.
+     */
+    private suspend fun grantRow(
+        key: String,
+        onDay: Long,
+        of: Long = userId,
+        progress: Long? = null
+    ): Achievement {
+        val owner = rule(key)
+        return Achievement(
+            uuid = Achievement.uuidFor(of, key),
+            userId = of,
+            achievementKey = key,
+            category = owner.category,
+            title = "Stored $key",
+            description = "Hand-written row for $key.",
+            unit = owner.unit,
+            targetValue = owner.target,
+            progressValue = progress ?: owner.target,
+            earnedDay = onDay,
+            earnedAt = at(LocalDate.ofEpochDay(onDay), 12, 0)
+        )
+    }
 
     private suspend fun createHabit(
         title: String,

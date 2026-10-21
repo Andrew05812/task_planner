@@ -37,8 +37,9 @@ import kotlinx.coroutines.flow.flowOf
  * [considered] is how many rules had a figure to judge at all, and [met] how many of those the profile has
  * reached. The difference between them is what a screen needs when the reader asks why nothing happened: a
  * profile with no habits has not failed the streak achievements, it has no streak to be measured against.
- * [granted] is what this pass wrote, and [alreadyEarned] is the part of [met] that was on the table before it
- * ran — the §7 guarantee stated as a number rather than assumed.
+ * [granted] is what this pass wrote, and [alreadyEarned] is the part of [met] it left unwritten — a grant that
+ * was on the table before the pass ran, or one that arrived between reading the keys and writing its own row.
+ * Either way the §7 guarantee is stated as a number rather than assumed.
  */
 data class AchievementPass(
     val considered: Int = 0,
@@ -155,13 +156,17 @@ class AchievementRepository @Inject constructor(
 
         var granted = 0
         var skipped = met - pending.size
+        // The sentences are put together before the lock is taken, not inside it. Reading a string resource is
+        // not a database read, but it is work the write lock has no reason to cover, and this is the one place
+        // the pass holds that lock at all — every other read here happens outside it, for the same reason the
+        // figures do.
+        val rows = pending.map { (rule, grant) -> rowOf(userId, rule, grant, wordingOf(rule, grant.progress)) }
         database.withTransaction {
-            pending.forEach { (rule, grant) ->
-                val wording = wordingOf(rule, grant.progress)
+            rows.forEach { row ->
                 // The ignore is the race, not the common case: the key was not in `alreadyEarned` a moment
                 // ago, and if the unique index refused the row, another pass granted it first and said the
                 // same thing about the same figure.
-                if (achievementDao.insertOrIgnore(rowOf(userId, rule, grant, wording)) > 0L) {
+                if (achievementDao.insertOrIgnore(row) > 0L) {
                     granted++
                 } else {
                     skipped++
@@ -190,8 +195,8 @@ class AchievementRepository @Inject constructor(
      * table the first Flow listens to, so a pass that hands something out reaches the screen in the same frame
      * it reached the database.
      *
-     * The figures are collected once per emission and shared by every rule, so a screen with twelve
-     * achievements on it runs one set of aggregates, not twelve.
+     * The figures are collected once per emission and shared by every rule, so a screen holding the whole
+     * catalogue runs one set of aggregates rather than one per card.
      */
     fun observeOverview(zone: ZoneId = CalendarMath.systemZone()): Flow<List<AchievementOverview>> =
         sessionRepository.currentUser.flatMapLatest { user ->
@@ -220,16 +225,27 @@ class AchievementRepository @Inject constructor(
      * The lifetime counters, read once per pass.
      *
      * Two of them are not aggregates of this table's own dao, and both are read through the repository that
-     * owns the arithmetic: whether a goal was reached and how long a habit's series ran are questions the
-     * goals and habits screens already answer, out of each goal's type and each habit's schedule. Re-stating
-     * them here would put a second definition of "reached" in the app, free to disagree with the card beside
-     * it the first time one of them changed.
+     * owns the arithmetic: whether a goal was reached and how long a habit's series ran are questions the goals
+     * and habits screens already answer, out of each goal's type and each habit's schedule. Re-stating them
+     * here would put a second definition of "reached" and of "kept" in the app, free to disagree with the
+     * screen that owns them the first time one of those definitions changed. What the achievements ask differs
+     * in one way only: the period, which for a grant is the reader's whole life rather than the four weeks a
+     * habit card prints.
+     *
+     * One coupling comes with reading through another screen's repository, and it is worth naming rather than
+     * leaving for the next reader to trip over: [com.taskplanner.data.repository.GoalRepository.progressOf] and
+     * [com.taskplanner.data.repository.HabitRepository.figuresOf] resolve the signed-in account from the session
+     * themselves rather than taking the [userId] this pass was given. In the ordinary run they agree, because
+     * the pass asks for the current user's own figures — which is the only way this method is reached. They do
+     * not agree if the reader switches account between this method's own read and those two, and this pass does
+     * not close that window: it is the same session race §11's account-aware work has to settle, and a caller
+     * that wanted another profile's history would have to thread the account through explicitly anyway.
      */
     private suspend fun collectFigures(userId: Long, today: Long, zone: ZoneId): AchievementFigures =
         AchievementFigures(
             tasksEverCompleted = achievementStatsDao.completedTasksEver(userId),
             goalsEverReached = goalsEverReached(userId, LocalDate.ofEpochDay(today), zone),
-            projectsEverCompleted = achievementStatsDao.completedGroups(userId).size.toLong(),
+            projectsEverCompleted = achievementStatsDao.completedGroupCount(userId),
             habitBestStreaks = habitBestStreaks(userId, today, zone),
             habitMarksEver = achievementStatsDao.habitMarks(userId),
             activeDays = achievementStatsDao.activeDays(userId),
@@ -251,13 +267,25 @@ class AchievementRepository @Inject constructor(
             .toLong()
 
     /**
-     * Each habit's longest run of kept asked days, as the habit's own card states it.
+     * Each habit's longest run of kept asked days, read over the habit's whole life.
      *
-     * Two bounds, both stated rather than assumed. The window starts at the day the habit began, because
-     * nothing before it can answer a question about this habit, and it reaches back no further than
-     * [SERIES_LOOKBACK_DAYS], so a habit kept for four hundred days reports the three hundred and sixty-five
-     * it can show marks for — an "at least" the streak achievements cannot be wrong about, since the longest
-     * one of them asks for thirty.
+     * The window starts at the day the habit began and ends at the day being measured, with no cap in between.
+     * Nothing before the start day can answer a question about this habit, and everything after it can — which
+     * is the property §7.1's "never grant the same achievement twice" is built on. A run measured over a window
+     * would be a window figure wearing a lifetime name: a reader who imported a year-old account, or whose
+     * thirty-day series ended thirteen months ago, would be handed a history that contradicts the habit's own
+     * detail screen, whose grid is read over the whole life and still shows those thirty days.
+     *
+     * That is the one place where this figure and a habit card part company on purpose. The card answers a
+     * question the screen asks — kept over the last four weeks — and [com.taskplanner.ui.habits.HabitCard] names
+     * that period in its own words so its figure cannot be read as a whole life; the achievement answers a
+     * question about a thing the reader did, and a thing done does not stop having been done when it leaves a
+     * window. Both readings come from the same [com.taskplanner.data.habit.HabitMath.streak] over the same
+     * marks, so they agree about the arithmetic and differ only about the period they were asked for.
+     *
+     * Habits the reader archived are in, and ones they deleted out of the account are not. An archived habit was
+     * kept while it was open, so its series is a fact the achievements read; a deleted one is a tombstone the
+     * same way a deleted task is, and no work was carried through it.
      *
      * A habit whose frequency makes it count weeks rather than days contributes nothing. "Seven days in a
      * row" is a claim about days, and a run of seven kept weeks is a different claim, stated on that habit's
@@ -265,8 +293,7 @@ class AchievementRepository @Inject constructor(
      */
     private suspend fun habitBestStreaks(userId: Long, today: Long, zone: ZoneId): List<Int> =
         habitDao.getOpenHabits(userId).mapNotNull { habit ->
-            val from = maxOf(habit.startDay, today - SERIES_LOOKBACK_DAYS)
-            val streak = habitRepository.figuresOf(habit, from, today, zone).streak
+            val streak = habitRepository.figuresOf(habit, habit.startDay, today, zone).streak
             streak.best.takeIf { streak.unit == StreakUnit.DAYS }
         }
 
@@ -339,8 +366,5 @@ class AchievementRepository @Inject constructor(
 
     private companion object {
         private const val SECONDS_PER_HOUR = 3_600L
-
-        /** How far back a habit's series is measured for an achievement, in days. */
-        private const val SERIES_LOOKBACK_DAYS = 365L
     }
 }

@@ -2,16 +2,16 @@ package com.taskplanner.data.local
 
 import androidx.room.Dao
 import androidx.room.Query
-import com.taskplanner.data.model.CompletedGroup
 
 /**
  * The lifetime counters the achievements are judged against.
  *
  * An achievement is a claim about everything a profile has ever done, so these reads deliberately have no
  * window in them: a "100 tasks" grant that counted only this month would be handed out on the first of the
- * month after a busy one, and taken back in the reader's own history by a quiet one. What the dashboard and the
- * reports ask for is a figure inside a period; what these questions ask for is a total, and a total is
- * cheaper — one scan of the profile's own rows, aggregated in SQLite, returning a number.
+ * month after a busy one, and would read as never earned again on the card beside the history after a quiet
+ * one. What the dashboard and the reports ask for is a figure inside a period; what these questions ask for is
+ * a total, and a total is cheaper — one scan of the profile's own rows, aggregated in SQLite, returning a
+ * number.
  *
  * The same two rules the other statistics reads keep apply here: nothing selects `*`, and a tombstone is not a
  * piece of work. Finished tasks are counted by their `completed_at` rather than by whichever spelling the status
@@ -23,8 +23,10 @@ import com.taskplanner.data.model.CompletedGroup
  * habit's best streak was are questions the goals and habits screens already answer, out of aggregates that
  * differ by goal type and by each habit's own schedule. The pass asks [com.taskplanner.data.repository.
  * GoalRepository.progressOf] and [com.taskplanner.data.repository.HabitRepository.figuresOf] instead of
- * re-stating that arithmetic against another table, so the number an achievement was granted on is the number
- * the screen beside it states — and a change to how a goal is counted moves both together.
+ * re-stating that arithmetic against another table. The goal read is the goal's own card question, asked on the
+ * same day, so a change to how a goal is counted moves the card and the grant together; the habit read shares
+ * the card's arithmetic but not its four-week window, because a badge is measured over the habit's whole life,
+ * and the two differ about nothing else.
  */
 @Dao
 interface AchievementStatsDao {
@@ -114,18 +116,19 @@ interface AchievementStatsDao {
      *
      * The link is `tasks.group_id`, which holds a group's uuid rather than a numeric row id — the one column
      * pair in this schema joined without a database-level foreign key, so the join is spelled out here rather
-     * than trusted to a constraint. Ordered by the day the project was made, oldest first, which is the order a
-     * reader would call "the first one closed".
+     * than trusted to a constraint.
      *
-     * The rows come back as a list rather than a count on purpose: §7 wants the achievement to name what was
-     * done, and a project count alone cannot say which project was the first one closed.
+     * A count rather than the rows, because the achievement judges a number: "Projects closed" is paid out on
+     * how many, and the pass that reads it has no use for the names. Returning the rows anyway would have the
+     * screen's own detail travel to a caller that discards it, and would tempt the pass to fold them with
+     * `.size` — which is what this query is here to not need.
      */
     @Query(
-        "SELECT g.uuid AS groupUuid, g.name AS name FROM task_groups g " +
+        "SELECT COUNT(*) FROM task_groups g " +
             "WHERE g.user_id = :userId AND g.is_deleted = 0 AND " +
             "EXISTS (SELECT 1 FROM tasks t WHERE t.group_id = g.uuid AND t.is_deleted = 0) AND " +
             "NOT EXISTS (SELECT 1 FROM tasks t WHERE t.group_id = g.uuid AND t.is_deleted = 0 AND " +
-            "t.completed_at IS NULL) ORDER BY g.created_at ASC, g.uuid ASC"
+            "t.completed_at IS NULL)"
     )
-    suspend fun completedGroups(userId: Long): List<CompletedGroup>
+    suspend fun completedGroupCount(userId: Long): Long
 }
