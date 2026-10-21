@@ -36,17 +36,26 @@ import org.robolectric.RobolectricTestRunner
  * The achievement engine, over real Room.
  *
  * `AchievementRulesTest` already reads each rule as arithmetic, so nothing here re-asks whether a bar is
- * reached. What is proved is the four things only the pass and the database can settle. **A grant is handed
+ * reached. What is proved is the five things only the pass and the database can settle. **A grant is handed
  * out once**: the same condition met twice leaves one row with the first date and the first figure on it,
- * which is §7.1's "no repeats" as a property of the storage rather than of a loop's memory — and the same
- * guarantee is what an import or a re-sync runs into, because both end with a pass over work that is already
- * paid for. **The figures are the app's own**: a card is earned by completing a task through
- * [TaskRepository], by measuring an interval through [WorkTrackingRepository], by marking a habit through
- * [HabitRepository] and by reaching a goal through [GoalRepository], never by inserting a row shaped like the
- * answer, so the test would fail the day an achievement started counting something the screens do not count.
- * **Cancelled work cannot pay out, and paid-for work is not taken back** — both directions of the same
- * figure, held apart by the instant a completion is stamped. **And nothing here belongs to anybody else**:
- * two profiles doing the identical thing earn two rows, not one shared one.
+ * which is §7.1's "no repeats" as a property of the storage rather than of a loop's memory. **A grant that
+ * arrives from elsewhere is not handed out a second time either** — a row written by a restore keeps its own
+ * date and wording while the pass that finds it reports it as already held, which is §11's import rule
+ * settled at the level the pass can see. **A grant is never rewritten underneath the reader**: when the work
+ * that earned it shrinks or falls away, the stored figure and the stored sentence stay, while the card's own
+ * live progress figure moves — the two numbers are different things and the screen is given both. **The
+ * figures are the app's own**: a card is earned by completing a task through [TaskRepository], by measuring
+ * an interval through [WorkTrackingRepository], by marking a habit through [HabitRepository] and by reaching
+ * a goal through the same [GoalRepository.progressOf] the goal's card runs, never by inserting a row shaped
+ * like the answer, so the test would fail the day an achievement started counting something the screens do
+ * not count. **Cancelled work cannot pay out, and paid-for work is not taken back** — both directions of the
+ * same figure, held apart by the instant a completion is stamped. **And nothing here belongs to anybody
+ * else**: two profiles doing the identical thing earn two rows, not one shared one.
+ *
+ * One exception to "through the repository" is [finish], and it is spelled out there: the task writes that
+ * this suite's goal windows depend on are stamped by [TaskRepository.completeAndArchive] from the device
+ * clock rather than from the parked one, so those completions name their instant directly through the DAO
+ * statement that makes them.
  *
  * The clock is parked at midday Wednesday 3 June 2026 in a zone with a daylight-saving jump behind it, as
  * everywhere in this suite, and a later pass is asked for by moving that clock — two passes in one parked
@@ -241,6 +250,74 @@ class AchievementRepositoryTest {
         assertEquals(listOf("tasks_10"), keys().filter { it.startsWith("tasks_") })
         assertEquals(earned, grant("tasks_10"))
         assertEquals(0L, fixture.achievementStatsDao.completedTasksEver(userId))
+    }
+
+    @Test
+    fun `a grant keeps the figure and the sentence it was earned with after the work shrinks`() = runBlocking {
+        seed()
+        val ids = (1..11).map { fixture.addTask(userId, "task $it") }
+        ids.forEach { fixture.taskRepository.completeAndArchive(it) }
+        pass()
+        val earned = grant("tasks_10")
+        assertEquals(11L, earned.progressValue)
+        assertEquals("Earned with 11 tasks.", earned.description)
+
+        // Eight of them thrown away, so the live figure falls below the bar the card was handed out over. The
+        // history still says what was true on the day it was written: §7.2 asks that a grant never vanish, and
+        // a grant that quietly re-wrote its own number and its own sentence would be that vanishing done
+        // politely — the reader would have no way to see that the record had been edited.
+        fixture.taskRepository.softDeleteTasks(ids.take(8))
+        pass()
+
+        assertEquals("the stored row is untouched, figure and wording included", earned, grant("tasks_10"))
+        assertEquals(3L, fixture.achievementStatsDao.completedTasksEver(userId))
+
+        // And the screen can still tell the two numbers apart: the grant's figure is the memory, and the card's
+        // own progress figure is what the profile has reached now.
+        val card = repository.observeOverview(zone).first().first { it.key == "tasks_10" }
+        assertTrue(card.isEarned)
+        assertEquals(3L, card.progress)
+        assertEquals(11L, card.earned?.progressValue)
+    }
+
+    @Test
+    fun `a grant that arrived from outside the app keeps its own date and is not handed out again`() = runBlocking {
+        seed()
+        // A restore from a backup puts a grant on the table that this app never computed, under a day it never
+        // saw. §11's "достижения не должны дублироваться после импорта" therefore has to be a property of the
+        // storage rather than of a pass that remembers: the imported row is there before the next pass runs,
+        // and the pass reads it as granted rather than as work worth measuring again.
+        val restored = Achievement(
+            uuid = Achievement.uuidFor(userId, "tasks_10"),
+            userId = userId,
+            achievementKey = "tasks_10",
+            category = AchievementCategory.VOLUME,
+            title = "Ten done",
+            description = "Earned with 10 tasks.",
+            unit = AchievementUnit.TASKS,
+            targetValue = 10L,
+            progressValue = 10L,
+            earnedDay = 1L,
+            earnedAt = 1L
+        )
+        assertTrue(dao.insertOrIgnore(restored) > 0L)
+        fixture.awaitIdle()
+        val asArrived = grant("tasks_10")
+
+        (1..12).map { fixture.addTask(userId, "task $it") }
+            .forEach { fixture.taskRepository.completeAndArchive(it) }
+        val result = pass()
+
+        // Twelve finished tasks meet two cards; one of them was already on the table.
+        assertEquals(2, result.met)
+        assertEquals("only the card nobody held is written", 1, result.granted)
+        assertEquals(1, result.alreadyEarned)
+        assertEquals(listOf("first_task", "tasks_10"), keys())
+        assertEquals(
+            "the imported grant is the one that stands, date and figure and wording and all",
+            asArrived,
+            grant("tasks_10")
+        )
     }
 
     @Test
