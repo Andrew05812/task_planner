@@ -72,4 +72,14 @@ interface CategoryDao {
 
     @Query("SELECT COUNT(*) FROM categories WHERE user_id = :userId AND is_deleted = 0")
     fun getCategoryCount(userId: Long): Flow<Int>
+
+    /**
+     * The signal a report watches so its category section cannot outlive a rename.
+     *
+     * A category's name and colour are printed rather than computed, and they live only on this table: a task
+     * is not touched when its category is renamed, so no task-side signal moves. Without this one, an open
+     * report would keep printing the old names beside the same figures.
+     */
+    @Query("SELECT COALESCE(MAX(updated_at), 0) FROM categories WHERE user_id = :userId")
+    fun observeChanges(userId: Long): Flow<Long>
 }

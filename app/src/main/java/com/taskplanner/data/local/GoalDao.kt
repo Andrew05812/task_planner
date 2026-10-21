@@ -109,6 +109,23 @@ interface GoalDao {
     fun observeArchivedGoals(userId: Long): Flow<List<Goal>>
 
     /**
+     * Every aim the profile still stands behind, archived ones included, oldest first.
+     *
+     * The set a report reads. A goal put away last February was still an aim the user held in February, and
+     * an archived goal that dropped out of the figures would make the report contradict the achievement
+     * granted for reaching it — the same reasoning [com.taskplanner.data.local.HabitDao.getStandingHabits]
+     * gives for habits, and the same reason the two lists are split on the screen and joined here.
+     *
+     * `id` breaks a tie because several goals created in the same millisecond are still one list in one
+     * order, and a page printed twice should not have its rows swapped.
+     */
+    @Query(
+        "SELECT * FROM goals WHERE user_id = :userId AND is_deleted = 0 " +
+            "ORDER BY created_at ASC, id ASC"
+    )
+    suspend fun getStandingGoals(userId: Long): List<Goal>
+
+    /**
      * The live goals whose date falls inside a stretch of days, soonest first.
      *
      * Asked for by a pass that reads a goal's remaining work against the days left to do it in, which is
@@ -298,6 +315,16 @@ interface GoalDao {
         "SELECT * FROM goal_value_changes WHERE user_id = :userId ORDER BY created_at DESC LIMIT :limit"
     )
     suspend fun recentValueChanges(userId: Long, limit: Int): List<GoalValueChange>
+
+    /**
+     * The signal a report watches so its goal section cannot go stale behind somebody's back.
+     *
+     * The goal row, not the history table: the report's figures are the aims the profile stands behind and
+     * the windows they count over, and both move with `goals.updated_at` — an edit, an archive, a soft delete.
+     * Work that lands inside a goal's window is already covered by the task signal the report also follows.
+     */
+    @Query("SELECT COALESCE(MAX(updated_at), 0) FROM goals WHERE user_id = :userId")
+    fun observeChanges(userId: Long): Flow<Long>
 
     // endregion
 }

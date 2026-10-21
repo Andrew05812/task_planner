@@ -52,6 +52,50 @@ data class DailyCompletionCount(
 )
 
 /**
+ * How many tasks a category had finished inside a window, and the name the category row answers to.
+ *
+ * The counterpart of [com.taskplanner.data.model.CategoryWorkSummary] rather than a restatement of it: that
+ * row sums measured seconds, this one counts completions, and the two are not each other's answer — a
+ * category of quick tasks can hold most of a week's finishes and almost none of its tracked time, which is
+ * exactly the case a report that inferred one from the other would get wrong.
+ *
+ * A null [categoryId] is the unclassified bucket, and it holds two kinds of row on purpose: tasks that never
+ * had a category, and tasks whose category row is gone — the same shape
+ * [com.taskplanner.data.model.CategoryWorkSummary] reports, because the two aggregates group on the joined
+ * `categories.id` rather than on `tasks.category_id`. Grouping on the task's own column would file the second
+ * kind under an id with no name while the time beside it landed in the unclassified bucket, and one real
+ * category would come out of the report as two half-empty rows.
+ */
+data class CategoryCompletionCount(
+    val categoryId: Long?,
+    val categoryName: String?,
+    val color: Int?,
+    val completions: Int
+)
+
+/**
+ * How many tasks the account stands behind, how many of them read finished, how many are put away, and how
+ * many of the finished ones carry no date.
+ *
+ * One scan rather than four counts, because the report's standing figures have to divide into each other: a
+ * rate computed from two separate statements could be built over a set a write moved between them, and a
+ * heading that printed "12 of 40" beside a total of 41 would be a report arguing with itself. The fourth
+ * column is here for the same reason rather than as a second query over rows this one already read.
+ *
+ * [archived] is counted by its own column rather than taken from [completed], and the two differ in real
+ * data: finishing a task locally archives it in the same statement, while a task that arrived from another
+ * device already finished can stand un-archived. A report that derived one from the other would be guessing
+ * at a state the row names.
+ */
+data class AccountTaskCounts(
+    val tasks: Int = 0,
+    val completed: Int = 0,
+    val archived: Int = 0,
+    /** Finished rows with no `completed_at`: the work the account cannot place in any period. */
+    val undated: Int = 0
+)
+
+/**
  * The open tasks sorted by how late they are and how much they matter, from one scan.
  *
  * The insight rules ask a question the dashboard's [TaskHealthCounts] does not: not "how much is overdue"

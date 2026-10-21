@@ -271,7 +271,7 @@ class InsightRepository @Inject constructor(
 
     /** Each open habit answered over the week the pass counts, on the schedule the habit itself names. */
     private suspend fun habitWindows(userId: Long, weekFrom: Long, today: Long): List<HabitWindow> =
-        habitDao.getOpenHabits(userId)
+        habitDao.getStandingHabits(userId)
             .filter { it.id > 0L }
             .sortedBy { it.id }
             .map { habit ->

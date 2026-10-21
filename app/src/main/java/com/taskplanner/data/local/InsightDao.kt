@@ -141,6 +141,43 @@ interface InsightDao {
     suspend fun byKey(userId: Long, ruleKey: String, fromDay: Long, toDay: Long): Insight?
 
     /**
+     * The readings whose own window closed inside the period a report covers, oldest closing day first.
+     *
+     * §6's tenth section is "what was noticed about this period", and the row already carries the answer to
+     * which period it was noticed about: [Insight.periodFromDay] and [Insight.periodToDay] are the days the
+     * rule counted over, stored because a reading without its window is a claim nobody can re-check.
+     *
+     * The bound is the *end* of the row's window rather than any overlap between the two ranges, which is
+     * the difference between a report that is honest about March and one that is mostly about February. A
+     * weekly reading taken on 2 February counted 27 January to 2 February; asked what was noticed during
+     * March, it would answer with three weeks that were not March and let the reader take them for the month
+     * they lived through. A reading whose window closes inside the period is one the app formed about days the
+     * period contains, and a period shorter than the row's own window simply holds the readings that closed in
+     * it — possibly none, which is a fact about the report's length and not a gap in the notebook.
+     *
+     * Both the current rows and the retired ones answer, because the report is about the period rather than
+     * about what the screen is showing today: a pattern the rules stopped finding in April is still something
+     * the app said about April. What is filtered out is what the reader refused or hid, in the same words
+     * [observeCurrent] uses — a report that printed a reading somebody had already told the app was wrong
+     * would be re-opening an argument that is closed.
+     *
+     * Ordered by closing day then rule so the same data yields the same list twice, which a printed page
+     * needs and an `ORDER BY last_seen_at` would not give: a row refreshed today moves to the top of a
+     * report about last month.
+     */
+    @Query(
+        "SELECT * FROM insights WHERE user_id = :userId " +
+            "AND period_to_day >= :fromDayInclusive AND period_to_day <= :toDayInclusive " +
+            "AND (feedback IS NULL OR feedback IN ('ACCEPTED', 'USEFUL')) " +
+            "ORDER BY period_to_day ASC, rule_key ASC"
+    )
+    suspend fun findingsClosingBetween(
+        userId: Long,
+        fromDayInclusive: Long,
+        toDayInclusive: Long
+    ): List<Insight>
+
+    /**
      * Forgets retired readings the reader never answered.
      *
      * A history is worth keeping, and an unbounded one is a table that grows with every pass of every rule
@@ -153,4 +190,15 @@ interface InsightDao {
             "AND period_to_day < :olderThanDay"
     )
     suspend fun forgetUntouchedHistoryBefore(userId: Long, olderThanDay: Long): Int
+
+    /**
+     * The signal a report watches so its findings section cannot go stale behind somebody's back.
+     *
+     * A pass re-states a reading through [refresh], which moves `updated_at` on the row it touched; silencing
+     * and forgetting do too. Nothing else changes what the report prints about a window, so this is the one
+     * column worth following — and the answer is a scalar rather than the rows, because the report re-reads
+     * them itself.
+     */
+    @Query("SELECT COALESCE(MAX(updated_at), 0) FROM insights WHERE user_id = :userId")
+    fun observeChanges(userId: Long): Flow<Long>
 }

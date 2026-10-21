@@ -433,33 +433,51 @@ class GoalRepository @Inject constructor(
             // With no profile there is no set of rows to count, and an all-zero figure is the honest
             // answer; inventing one would put a number on a screen that has no account behind it.
             ?: return GoalProgress(goal, counted = 0L, target = goal.targetValue)
-        return when (goal.type) {
-            GoalType.TASK_COUNT -> {
-                val (from, to) = goal.instantBounds(zone)
-                progressOf(
-                    goal,
-                    counted = statisticsDao.completedTasksInPeriod(userId, from, to).toLong(),
-                    set = null,
-                    onDay = onDay,
-                    zone = zone
-                )
-            }
+        return progressOf(goal, userId, onDay, zone)
+    }
 
-            GoalType.TIME_SPENT -> {
-                val (from, to) = goal.dayBounds()
-                progressOf(
-                    goal,
-                    counted = statisticsDao.periodSummary(userId, from, to).seconds,
-                    set = null,
-                    onDay = onDay,
-                    zone = zone
-                )
-            }
+    /**
+     * The same figure for a profile the caller already holds.
+     *
+     * A single-read overload rather than a second arithmetic: the body is the one the screen path falls
+     * through to, so a goal cannot be "reached" for the report and 3-of-5 on the card beside it. It exists
+     * because a report reads ten things about one account, and this repository resolving the signed-in user
+     * for itself means the tenth read could be answered against somebody else's rows if the reader switched
+     * account halfway through. Any caller that asks about more than one thing at a time takes the id it
+     * resolved once and passes it down; the screen that only ever means the current account uses the other
+     * one.
+     */
+    suspend fun progressOf(
+        goal: Goal,
+        userId: Long,
+        onDay: LocalDate,
+        zone: ZoneId
+    ): GoalProgress = when (goal.type) {
+        GoalType.TASK_COUNT -> {
+            val (from, to) = goal.instantBounds(zone)
+            progressOf(
+                goal,
+                counted = statisticsDao.completedTasksInPeriod(userId, from, to).toLong(),
+                set = null,
+                onDay = onDay,
+                zone = zone
+            )
+        }
 
-            GoalType.TASK_SET, GoalType.DEADLINE -> {
-                val set = goalDao.setProgress(goal.uuid, userId)
-                progressOf(goal, counted = set.completed.toLong(), set = set, onDay = onDay, zone = zone)
-            }
+        GoalType.TIME_SPENT -> {
+            val (from, to) = goal.dayBounds()
+            progressOf(
+                goal,
+                counted = statisticsDao.periodSummary(userId, from, to).seconds,
+                set = null,
+                onDay = onDay,
+                zone = zone
+            )
+        }
+
+        GoalType.TASK_SET, GoalType.DEADLINE -> {
+            val set = goalDao.setProgress(goal.uuid, userId)
+            progressOf(goal, counted = set.completed.toLong(), set = set, onDay = onDay, zone = zone)
         }
     }
 
@@ -747,12 +765,17 @@ class GoalRepository @Inject constructor(
  * `periodSummary` reads `[from, to)` over `local_day`, so the goal's inclusive end day is passed as the
  * day after it; forgetting the `+1` would leave every time goal one day short of the window it names. An
  * open end stays open by reaching past any day a row can carry.
+ *
+ * Internal rather than private because [com.taskplanner.data.report.ReportRepository] asks the second half
+ * of the same question — how much of this goal's measure was produced inside the report's window — and has
+ * to intersect two windows in the units the goal already uses. A report that re-derived these bounds would
+ * be a second definition of a goal's dates, free to disagree with the card beside it.
  */
-private fun Goal.dayBounds(): Pair<Long, Long> =
+internal fun Goal.dayBounds(): Pair<Long, Long> =
     (windowFromDay ?: Long.MIN_VALUE) to (windowToDay?.plus(1L) ?: Long.MAX_VALUE)
 
-/** The same window as the half-open instant pair the completion column is filtered by. */
-private fun Goal.instantBounds(zone: ZoneId): Pair<Long, Long> = Pair(
+/** The same window as the half-open instant pair the completion column is filtered by. See [dayBounds]. */
+internal fun Goal.instantBounds(zone: ZoneId): Pair<Long, Long> = Pair(
     windowFromDay?.let { CalendarMath.startOfDay(LocalDate.ofEpochDay(it), zone) } ?: Long.MIN_VALUE,
     windowToDay?.let { CalendarMath.startOfDay(LocalDate.ofEpochDay(it + 1L), zone) } ?: Long.MAX_VALUE
 )

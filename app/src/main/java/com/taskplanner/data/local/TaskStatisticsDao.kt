@@ -2,6 +2,8 @@ package com.taskplanner.data.local
 
 import androidx.room.Dao
 import androidx.room.Query
+import com.taskplanner.data.model.AccountTaskCounts
+import com.taskplanner.data.model.CategoryCompletionCount
 import com.taskplanner.data.model.PriorityOverdueCounts
 import com.taskplanner.data.model.TaskHealthCounts
 import com.taskplanner.data.model.TaskStatusCount
@@ -156,6 +158,73 @@ interface TaskStatisticsDao {
             "ORDER BY completed_at ASC"
     )
     suspend fun completedInstantsInPeriod(userId: Long, from: Long, to: Long): List<Long>
+
+    /**
+     * Which categories the finished work of a window belongs to, counted in SQL.
+     *
+     * The report's category section asks two questions of the same window — how much time went into each
+     * category and how much finished work each category produced — and [WorkStatisticsDao.workByCategory]
+     * answers only the first, because it sums intervals and a task nobody tracked still got finished. The
+     * grouping is deliberately the same `LEFT JOIN` grouped on `categories.id`, not on the task's own
+     * `category_id`: a task whose category row is gone then lands in the unclassified bucket here exactly as
+     * its measured time does there, and one real bucket cannot split into two half-empty rows in the merged
+     * section. A category that was soft-deleted but is still stored keeps naming the bucket its tasks were
+     * finished into in both reads — the minutes and the finishes really did go there, and re-labelling them as
+     * unclassified whenever a category was hidden would be a chart that rewrites the past.
+     *
+     * `completed_at IS NOT NULL` is the whole honesty of this figure. A row that reads `COMPLETED` with no
+     * instant on it is work that finished at an unknown time — a task completed by a build from before the
+     * column existed, which the migration refused to backfill from `updated_at` — and counting it inside a
+     * window would attribute it to days nobody can prove. Those rows are counted as
+     * [com.taskplanner.data.model.AccountTaskCounts.undated] instead.
+     *
+     * Ties break on the category id so the order is a fact about the data rather than about SQLite's
+     * grouping pass: two categories with three finishes each come back in the same order every read, which
+     * a printed table needs and a chart axis does not care about.
+     */
+    @Query(
+        "SELECT c.id AS categoryId, MAX(c.name) AS categoryName, MAX(c.color) AS color, " +
+            "COUNT(*) AS completions FROM tasks t " +
+            "LEFT JOIN categories c ON c.id = t.category_id " +
+            "WHERE t.user_id = :userId AND t.is_deleted = 0 AND UPPER(t.status) IN ('COMPLETED', 'DONE') " +
+            "AND t.completed_at IS NOT NULL AND t.completed_at >= :from AND t.completed_at < :to " +
+            "GROUP BY c.id ORDER BY completions DESC, c.id ASC"
+    )
+    suspend fun completedByCategory(
+        userId: Long,
+        from: Long,
+        to: Long
+    ): List<CategoryCompletionCount>
+
+    /**
+     * The account's standing, in one scan: what it holds, what of that reads finished, what is put away, and
+     * what of the finished work carries no date at all.
+     *
+     * The four figures are counted over the same rows in the same pass so a report can divide one by another
+     * without the pair disagreeing — see [com.taskplanner.data.model.AccountTaskCounts]. Tombstones are out of
+     * all four: a task the user threw away is not work the account stands behind, and counting it would make
+     * the standing figures disagree with every list on the device.
+     *
+     * [com.taskplanner.data.model.AccountTaskCounts.undated] rides along here rather than standing as its own
+     * statement because it is the same scan over the same rows for a fourth question, and a report that read
+     * the profile twice to ask it would pay twice for one answer. It is never folded into a period: §6's
+     * reports state completions inside a window only for rows that carry an instant, and a figure that quietly
+     * omitted the rest would read as though the older work had never been done. Printing it beside the window
+     * totals puts the omission on the page instead of leaving it in the schema.
+     *
+     * `UPPER` on the status for the reason the whole file gives it — a row an import spelled `done` is
+     * finished to every screen here, and a rate that only matched one spelling would understate the account.
+     */
+    @Query(
+        "SELECT COUNT(*) AS tasks, " +
+            "COALESCE(SUM(CASE WHEN UPPER(status) IN ('COMPLETED', 'DONE') THEN 1 ELSE 0 END), 0) " +
+            "AS completed, " +
+            "COALESCE(SUM(CASE WHEN archived = 1 THEN 1 ELSE 0 END), 0) AS archived, " +
+            "COALESCE(SUM(CASE WHEN UPPER(status) IN ('COMPLETED', 'DONE') AND completed_at IS NULL " +
+            "THEN 1 ELSE 0 END), 0) AS undated " +
+            "FROM tasks WHERE user_id = :userId AND is_deleted = 0"
+    )
+    suspend fun accountCounts(userId: Long): AccountTaskCounts
 
     /**
      * The signal the dashboard re-reads itself on, in the same shape the history list uses.

@@ -292,7 +292,7 @@ class AchievementRepository @Inject constructor(
      * own card in its own unit rather than converted into one it never made.
      */
     private suspend fun habitBestStreaks(userId: Long, today: Long, zone: ZoneId): List<Int> =
-        habitDao.getOpenHabits(userId).mapNotNull { habit ->
+        habitDao.getStandingHabits(userId).mapNotNull { habit ->
             val streak = habitRepository.figuresOf(habit, habit.startDay, today, zone).streak
             streak.best.takeIf { streak.unit == StreakUnit.DAYS }
         }

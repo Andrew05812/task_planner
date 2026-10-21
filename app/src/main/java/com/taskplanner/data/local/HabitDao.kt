@@ -8,6 +8,7 @@ import androidx.room.Update
 import com.taskplanner.data.model.Habit
 import com.taskplanner.data.model.HabitCheck
 import com.taskplanner.data.model.HabitCheckChange
+import com.taskplanner.data.model.HabitMarkedDay
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -80,8 +81,20 @@ interface HabitDao {
     )
     fun observeArchivedHabits(userId: Long): Flow<List<Habit>>
 
-    @Query("SELECT * FROM habits WHERE user_id = :userId AND is_deleted = 0 ORDER BY created_at ASC")
-    suspend fun getOpenHabits(userId: Long): List<Habit>
+    /**
+     * Every habit the profile still stands behind — archived included, tombstones not — oldest first.
+     *
+     * Named for what it selects rather than for where it was first used, because both of its callers ask a
+     * question about the account's whole habit history and neither wants the screen's list: the achievement
+     * pass must still see a series a put-away habit ran, and a report over a past window must still see the
+     * marks made inside it. [observeOpenHabits] and [observeArchivedHabits] are the two halves of this same
+     * set, split the way the screen splits them.
+     *
+     * A tombstone is excluded because a habit the user threw away is not work the account can be measured by,
+     * even though its marks stay in `habit_checks` for a restore that brings the habit back.
+     */
+    @Query("SELECT * FROM habits WHERE user_id = :userId AND is_deleted = 0 ORDER BY created_at ASC, id ASC")
+    suspend fun getStandingHabits(userId: Long): List<Habit>
 
     /** Everything the profile holds, tombstones included, for the account purge and for export. */
     @Query("SELECT * FROM habits WHERE user_id = :userId ORDER BY created_at ASC")
@@ -214,6 +227,36 @@ interface HabitDao {
     suspend fun countLive(habitUuid: String, userId: Long, fromInclusive: Long, toInclusive: Long): Int
 
     /**
+     * Every live mark the profile holds inside a window, as habit-and-day pairs, oldest first.
+     *
+     * One read across the whole account rather than one per habit, which is the shape the report's habit
+     * section needs: it has to know which habits were kept at all inside the window before it can compute
+     * anything about them, and asking each habit separately would be one statement per card over a table
+     * that `index_habit_checks_user_id_local_day` already seeks in a single pass. The bare two columns come
+     * back because every figure a habit card prints is arithmetic on days, and the caller turns these rows
+     * into one set per habit.
+     *
+     * The same three predicates as [liveDays] — a tombstone, a walked-back mark and another profile's row
+     * are all excluded — so a total built from these rows sums the same marks the cards count. The one filter
+     * a profile-wide read cannot express is the habit's own start day, which belongs to `habits` rather than to
+     * the mark row; the caller applies it, and [com.taskplanner.data.repository.HabitRepository.figuresOf]
+     * states what a caller using that set owes it.
+     * Ordered by day then habit so a list built out of this is stable across reads, which a printed report
+     * needs and a `GROUP BY` does not give.
+     */
+    @Query(
+        "SELECT habit_uuid AS habitUuid, local_day AS localDay FROM habit_checks " +
+            "WHERE user_id = :userId AND is_deleted = 0 AND day_marker IS NOT NULL " +
+            "AND local_day BETWEEN :fromInclusive AND :toInclusive " +
+            "ORDER BY localDay ASC, habitUuid ASC"
+    )
+    suspend fun markedDaysInWindow(
+        userId: Long,
+        fromInclusive: Long,
+        toInclusive: Long
+    ): List<HabitMarkedDay>
+
+    /**
      * Takes a day's mark back.
      *
      * Two columns change for one reason: [HabitCheck.dayMarker] goes null so the unique index stops
@@ -343,6 +386,16 @@ interface HabitDao {
             "WHERE user_id = :userId AND reminded_on_day = :day"
     )
     suspend fun clearRemindedOnDay(userId: Long, day: Long, now: Long)
+
+    /**
+     * The signal a report watches so a habit section cannot go stale behind somebody's back.
+     *
+     * `habit_checks` rather than `habits`, because the report's habit figures are computed from marks: a mark
+     * made, moved or walked back is what changes the answer, and every one of those writes moves `updated_at`
+     * on the row it touched. A rename on the habit row itself changes no figure, so it is not waited on.
+     */
+    @Query("SELECT COALESCE(MAX(updated_at), 0) FROM habit_checks WHERE user_id = :userId")
+    fun observeChanges(userId: Long): Flow<Long>
 
     // endregion
 }
