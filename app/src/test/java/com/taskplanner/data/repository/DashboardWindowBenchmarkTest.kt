@@ -588,11 +588,20 @@ class DashboardWindowBenchmarkTest {
         // The numbers the read has to keep: ten times the account is not allowed to become ten times the
         // wait. Part of the dashboard is about the account rather than about a window — the panel counts
         // every open row and the share divides everything ever finished — so this read does grow, and the
-        // measurement says how much: about a fifth of the account's own growth.
+        // measurement says how much.
+        //
+        // The bound is absolute milliseconds rather than a multiple, because a multiple of a timing this
+        // small measures the runner rather than the read: the same code passed at 27.8 → 57.8 ms and failed
+        // on a CI runner at 3.6 → 16.8 ms, where a fourth of the wait is two milliseconds of scheduling and
+        // the whole read still costs a fortieth of what the ceiling allows. What the claim needs is that the
+        // tenfold account adds a bounded amount of time — and the way this screen used to work, loading every
+        // row, adds more than that bound, which the walk comparison below keeps proving.
         val read = costs.map { it.read }
         assertTrue(
-            "the read grew from ${read.first()} ms to ${read.last()} ms while the account grew tenfold",
-            read.last() < read.first() * READ_GROWTH_FACTOR
+            "the read grew from ${read.first()} ms to ${read.last()} ms, adding " +
+                "${read.last() - read.first()} ms while the account grew tenfold, over the " +
+                "$READ_GROWTH_MS the aggregate read is allowed to need for that",
+            read.last() - read.first() < READ_GROWTH_MS
         )
 
         // The same account, counted the way this screen used to count it. Measured on this harness at
@@ -706,8 +715,13 @@ class DashboardWindowBenchmarkTest {
          */
         const val READ_CEILING_MS = 200.0
 
-        /** Ten times the account for [READ_CEILING_MS]'s read: measured at a little over twice. */
-        const val READ_GROWTH_FACTOR = 4.0
+        /**
+         * What ten times the account may add to the read, in milliseconds. Measured at about 30 ms on this
+         * harness (27.8 → 57.8) and 13 ms on a CI runner (3.6 → 16.8); the old way of counting it — this
+         * divided by a multiple of the fastest read — failed on the CI numbers, and the walk over the same
+         * accounts grows by about 137 ms, which this still catches.
+         */
+        const val READ_GROWTH_MS = 100.0
 
         /** The same growth of the read that loads every row: measured at seven times over the range. */
         const val WALK_GROWTH_FACTOR = 3.0
