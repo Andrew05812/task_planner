@@ -64,6 +64,21 @@
             </intent-filter>
         </receiver>
 
+        <!-- The one way a report leaves the app to be opened by something else. A `file://` uri would carry a
+             path the receiving app cannot read since API 24 and would name a file by where it lives rather
+             than by what was granted; a content uri minted here names one directory of the cache, and the
+             read grant travels with the single intent that carries it. Not exported, and no other path rule
+             is configured — see res/xml/file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>
