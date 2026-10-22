@@ -79,7 +79,7 @@ private class FixtureExecutor(name: String) : ThreadPoolExecutor(
  * production repositories and a real SharedPreferences file, so repository, backup and sync tests
  * execute the same code paths as the app.
  */
-class AppFixture(private val context: Context) : AutoCloseable {
+class AppFixture(val context: Context) : AutoCloseable {
 
     // Room answers a query from the thread its Flow collector was resumed on, and it refuses that when
     // the thread is inside a suspending transaction belonging to another coroutine context: committing
@@ -388,12 +388,25 @@ class AppFixture(private val context: Context) : AutoCloseable {
         database.close()
     }
 
+    /**
+     * The stream a document provider hands the app: it holds whatever was written, says whether the app
+     * closed it, and can give the bytes back rather than only their UTF-8 reading — a report export is
+     * checked on its bytes, including the three that say what encoding they are in.
+     */
     inner class CapturedUri(val uri: Uri = Uri.parse("content://document/capture")) : OutputStream() {
         private val buffer = ByteArrayOutputStream()
         val written: String get() = String(buffer.toByteArray(), Charsets.UTF_8)
+        var closed: Boolean = false
+            private set
+
+        val bytes: ByteArray get() = buffer.toByteArray()
 
         override fun write(b: Int) {
             buffer.write(b)
+        }
+
+        override fun close() {
+            closed = true
         }
     }
 }

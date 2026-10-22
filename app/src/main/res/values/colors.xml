@@ -68,4 +68,18 @@
     <color name="health_without_deadline">#FF9E9E9E</color>
     <color name="health_in_progress">@color/status_in_progress</color>
     <color name="health_stale">#FF7E57C2</color>
+
+    <!-- Reports, printed. Paper is never dark, so the five colours a report draws with are written out here
+         instead of borrowed from the theme: the same hues the screens already use for the same claims — the
+         accent for a heading, the app's ink for text, its grey for a qualification, the green of a finished
+         task for finished work — fixed at one value so a report printed at midnight and a report printed at
+         noon look identical, which is what a document a reader keeps has to be. -->
+    <color name="report_ink">#FF1C1B1F</color>
+    <color name="report_accent">#FF6750A4</color>
+    <color name="report_muted">#FF757575</color>
+    <color name="report_finished">#FF4CAF50</color>
+    <color name="report_hairline">#33757575</color>
+    <!-- Work nobody filed, and work whose category has since been deleted: the grey the dashboard gives the
+         same bucket, so a chart in a report and the bar beside it on the screen agree. -->
+    <color name="report_category_none">#FF9E9E9E</color>
 </resources>

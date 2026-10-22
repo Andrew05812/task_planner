@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The single directory this app is willing to hand a file out of, and the only rule here.
+
+    A `files-path` of "." or an `external-path` of "." would make the provider a door to everything the app
+    owns, including the database, and a sharesheet that could reach those is exactly the "произвольный доступ к
+    внутренней БД" the reports section of the stage forbids. So the rule names one subdirectory of the cache,
+    and only the exported report copies are ever written into it.
+-->
+<paths>
+    <cache-path name="report_exports" path="report_exports/" />
+</paths>
