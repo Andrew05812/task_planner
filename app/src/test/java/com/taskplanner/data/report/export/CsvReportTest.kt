@@ -278,6 +278,54 @@ class CsvReportTest {
         assertTrue(String(throughStream.toByteArray(), Charsets.UTF_8).endsWith("\r\n"))
     }
 
+    /**
+     * The file and the screen read the same lines.
+     *
+     * A preview that re-split the finished bytes would have to re-derive where a row ends, and a quoted field
+     * holding a line break is the case it gets wrong: the row would be shown as two, in a screen whose whole
+     * claim is that this is what the file contains. So the lines are stated once, here, and both readers take
+     * them from this object — the writer joins them with its line endings, the report screen shows them.
+     */
+    @Test
+    fun `the lines the writer states are the file with its line endings put back`() {
+        val report = fullReport()
+        val lines = CsvReport.lines(report, delimiter = ',')
+        val text = String(CsvReport.bytes(report, delimiter = ','), Charsets.UTF_8).removePrefix(BOM)
+
+        assertEquals(lines.joinToString("\r\n") + "\r\n", text)
+    }
+
+    @Test
+    fun `a field holding a line break is one line of the file, not two`() {
+        val report = fullReport().copy(
+            findings = listOf(
+                ReportFixtures.finding(
+                    key = "quiet-friday",
+                    title = "A finished thing",
+                    body = "two\r\nlines of reading",
+                    sampleSize = 3,
+                    confidence = 70
+                )
+            )
+        )
+
+        val lines = CsvReport.lines(report, delimiter = ',')
+        val row = lines.single { it.contains("lines of reading") }
+        assertTrue(
+            "the field is quoted, because a break inside it is not the end of the row",
+            row.contains("\"two\r\nlines of reading\"")
+        )
+
+        // What the screen would have shown had it re-split the finished bytes instead of asking the writer:
+        // one row of the file arriving as two lines of the preview, in a screen whose claim is that it is
+        // showing the file.
+        val resplit = String(CsvReport.bytes(report, delimiter = ','), Charsets.UTF_8)
+            .removePrefix(BOM)
+            .split("\r\n")
+            .dropLastWhile { it.isEmpty() }
+        assertTrue("re-splitting the bytes breaks that row in two", resplit.size > lines.size)
+    }
+
     private fun fullReport() = ReportFixtures.report(
         period = ReportPeriod.Month(java.time.YearMonth.of(2026, 6)),
         summary = ReportFixtures.summary(

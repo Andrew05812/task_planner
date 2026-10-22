@@ -220,12 +220,66 @@ class ReportViewModelTest {
         assertTrue("and the profile they belong to", drawn.contains(profileLine("Test User")))
 
         assertEquals(
-            "the preview is the file's own rows, untouched",
-            CsvReport.rows(report),
-            state.csvRows
+            "the preview shows the file's own lines, quotes and all",
+            CsvReport.lines(report),
+            state.csvLines
         )
-        assertEquals(CsvReport.defaultDelimiter(), state.csvDelimiter)
+        assertEquals(
+            "and those lines really are the file, with its line endings put back",
+            String(CsvReport.bytes(report), Charsets.UTF_8).removePrefix(BOM),
+            state.csvLines.joinToString("\r\n") + "\r\n"
+        )
+        assertTrue("and it starts where the file starts", state.csvLines.first().startsWith("section,"))
         assertFalse(state.isLoading)
+    }
+
+    /**
+     * The reader's own words, with a comma and a line break inside them, are shown as the file holds them.
+     *
+     * §4 of the stage's spec treats a multiline name as a layout case, and the csv answer to it is RFC 4180
+     * quoting: the field is wrapped and its break is *inside* the row. A preview built by re-splitting the
+     * finished bytes at every line ending would show that one row as two, in a screen whose whole claim is that
+     * it is showing the file — so the lines come from the writer, and this test is the difference between the
+     * two ways of doing it.
+     */
+    @Test
+    fun `a name with a comma and a line break in it is one line of the preview, quoted as the file quotes it`() {
+        val userId = signIn()
+        val awkward = "Thesis, draft 2\r\nagain"
+        runBlocking {
+            val categoryId = fixture.categoryDao.insertCategory(
+                Category(name = awkward, color = -16711936, icon = "ic_tag", userId = userId)
+            )
+            fixture.taskDao.insertTask(
+                Task(
+                    title = "Chapter 2",
+                    description = "",
+                    status = TaskStatus.COMPLETED,
+                    userId = userId,
+                    categoryId = categoryId,
+                    completedAt = at(juneFirst, 9)
+                )
+            )
+        }
+        openScreen()
+        awaitReport()
+
+        val state = viewModel.state.value
+        val namingIt = state.csvLines.filter { it.contains("draft 2") }
+        assertTrue("the category the reader named is in the file", namingIt.isNotEmpty())
+        assertTrue(
+            "and every row that names it quotes it, because a comma inside a field is not a column break",
+            namingIt.all { it.contains("\"$awkward\"") }
+        )
+
+        val resplit = String(CsvReport.bytes(state.report!!), Charsets.UTF_8)
+            .removePrefix(BOM)
+            .split("\r\n")
+            .dropLastWhile { it.isEmpty() }
+        assertTrue(
+            "re-splitting the finished bytes would have shown that one row as two",
+            resplit.size > state.csvLines.size
+        )
     }
 
     @Test
@@ -387,6 +441,36 @@ class ReportViewModelTest {
     }
 
     @Test
+    fun `zoom is bounded by the levels the screen offers`() {
+        signIn()
+        openScreen()
+        awaitReport()
+        assertEquals(ReportPageFit.MIN_ZOOM, viewModel.state.value.zoom)
+
+        repeat(6) { viewModel.zoomIn() }
+        assertEquals(ReportPageFit.MAX_ZOOM, viewModel.state.value.zoom)
+        assertFalse("there is nothing to zoom into past the last level", viewModel.state.value.canZoomIn)
+
+        repeat(6) { viewModel.zoomOut() }
+        assertEquals(ReportPageFit.MIN_ZOOM, viewModel.state.value.zoom)
+        assertFalse("and the page is already as wide as the view", viewModel.state.value.canZoomOut)
+    }
+
+    @Test
+    fun `zooming redraws the pages it already has`() {
+        signIn()
+        openScreen()
+        awaitReport()
+        val pages = viewModel.state.value.pages!!
+
+        viewModel.zoomIn()
+
+        val state = viewModel.state.value
+        assertSame("a bigger sheet is the same document", pages, state.pages)
+        assertFalse("and asking for it started no read", state.isLoading)
+    }
+
+    @Test
     fun `a new report is laid out again rather than reused`() {
         signIn()
         openScreen()
@@ -504,9 +588,12 @@ class ReportViewModelTest {
         awaitUntil("a finished save") { it.feedback != null }
 
         val text = csvText(capture.bytes)
-        val lines = text.trim().lines()
         val state = viewModel.state.value
-        assertEquals("the preview and the file are the same rows", state.csvRows.size, lines.size)
+        assertEquals(
+            "what was previewed is what was written, byte for byte",
+            state.csvLines.joinToString("\r\n") + "\r\n",
+            text
+        )
         assertTrue("the days the report was asked about are in it", text.contains("2026-06-01"))
         assertFalse("and a month nobody chose is not", text.contains("2026-03-17"))
     }

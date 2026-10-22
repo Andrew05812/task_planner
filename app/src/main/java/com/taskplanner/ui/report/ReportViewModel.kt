@@ -111,13 +111,31 @@ data class ReportState(
     val followsDeviceZone: Boolean,
     val format: ReportFormat,
 
+    /**
+     * How big the sheets are drawn, as a level rather than a scale.
+     *
+     * A page fitted to the phone is the page the file is, and that is the right answer on most screens; it is
+     * also the wrong one on a small one, where a 10 pt line becomes five pixels. Two steps up are offered because
+     * past that the reader is scrolling a document instead of reading it.
+     */
+    val zoom: Int = ReportPageFit.MIN_ZOOM,
+
     val profileId: Long? = null,
     val profileName: String? = null,
 
     val report: Report? = null,
     val pages: PagedReport? = null,
-    val csvRows: List<List<String>> = emptyList(),
-    val csvDelimiter: Char = ',',
+
+    /**
+     * The csv file's own lines, the byte-order mark taken off and the line endings split.
+     *
+     * The preview shows these and nothing else, which is what makes it a preview rather than a second document:
+     * a field with a comma or a line break inside it reads here exactly as it reads in the file, because these
+     * are the bytes the exporter writes, taken back apart for the screen. A list of the *values* would have
+     * needed its own quoting rule to display, and two quoting rules in one app is how a preview ends up
+     * promising something the file does not contain.
+     */
+    val csvLines: List<String> = emptyList(),
 
     /** A read for the question on screen has not answered yet. */
     val reading: Boolean = true,
@@ -146,8 +164,17 @@ data class ReportState(
      */
     val canExport: Boolean get() = report != null && !isLoading && !saving && !staging
 
-    /** How many rows the csv view holds, which is what the "first of these" caption counts against. */
-    val csvRowCount: Int get() = csvRows.size
+    /** How many lines the csv view holds, which is what the "first of these" caption counts against. */
+    val csvRowCount: Int get() = csvLines.size
+
+    /**
+     * Whether the screen may ask for a bigger sheet.
+     *
+     * The buttons that do this are disabled at the ends of the range rather than left to do nothing, because a
+     * control that answers a press with silence is indistinguishable from one that has broken.
+     */
+    val canZoomIn: Boolean get() = zoom < ReportPageFit.MAX_ZOOM
+    val canZoomOut: Boolean get() = zoom > ReportPageFit.MIN_ZOOM
 }
 
 /**
@@ -290,6 +317,21 @@ class ReportViewModel @Inject constructor(
      */
     fun chooseFormat(format: ReportFormat) {
         _state.update { it.copy(format = format) }
+    }
+
+    /**
+     * Bigger sheets, or smaller ones.
+     *
+     * Nothing is re-read and nothing is re-laid-out: the pages are the document's and the level only decides how
+     * large they are drawn, which is why the buttons are enabled at the ends of the range instead of pressing
+     * into a silence the reader has to interpret.
+     */
+    fun zoomIn() {
+        _state.update { it.copy(zoom = ReportPageFit.clamp(it.zoom + 1)) }
+    }
+
+    fun zoomOut() {
+        _state.update { it.copy(zoom = ReportPageFit.clamp(it.zoom - 1)) }
     }
 
     /** Asks the current question again, and takes the complaints off the screen while it does. */
@@ -478,7 +520,7 @@ class ReportViewModel @Inject constructor(
             it.copy(
                 report = null,
                 pages = null,
-                csvRows = emptyList(),
+                csvLines = emptyList(),
                 reading = true,
                 previewing = false,
                 emptyMessage = null,
@@ -503,7 +545,7 @@ class ReportViewModel @Inject constructor(
                     profileName = null,
                     report = null,
                     pages = null,
-                    csvRows = emptyList(),
+                    csvLines = emptyList(),
                     reading = false,
                     previewing = false,
                     readError = null,
@@ -530,7 +572,7 @@ class ReportViewModel @Inject constructor(
                     profileName = user.name,
                     report = null,
                     pages = null,
-                    csvRows = emptyList(),
+                    csvLines = emptyList(),
                     reading = false,
                     previewing = false,
                     readError = context.getString(R.string.report_fail_read),
@@ -573,7 +615,7 @@ class ReportViewModel @Inject constructor(
                     measurer = PaintReportMeasurer(),
                     palette = palette
                 )
-                Laid(pages, CsvReport.rows(report), CsvReport.defaultDelimiter())
+                Laid(pages, csvLinesOf(report))
             }
         }
         // A report that is no longer the one on screen has no business being drawn over the one that is.
@@ -589,8 +631,7 @@ class ReportViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     pages = laid.pages,
-                    csvRows = laid.rows,
-                    csvDelimiter = laid.delimiter,
+                    csvLines = laid.lines,
                     previewing = false,
                     previewError = null
                 )
@@ -601,8 +642,7 @@ class ReportViewModel @Inject constructor(
     /** The two views one report was laid out into. */
     private data class Laid(
         val pages: PagedReport,
-        val rows: List<List<String>>,
-        val delimiter: Char
+        val lines: List<String>
     )
 
     /**
@@ -680,6 +720,17 @@ class ReportViewModel @Inject constructor(
 
     private fun today(zone: ZoneId): LocalDate =
         LocalDate.ofEpochDay(WorkTimeMath.epochDayOf(timeBase.wallMillis(), zone))
+
+    /**
+     * The csv file's own lines, taken from the writer rather than worked out again.
+     *
+     * Asked of [CsvReport.lines] rather than of its rows, because the rows are only half of a csv file: which
+     * fields carry quotes is what makes the file the document the reader saves. And asked as lines rather than by
+     * splitting the finished bytes, because a quoted field holding a line break is one row of the file and would
+     * become two lines of the preview — a screen that misstates how many rows it is showing is worse than one
+     * that shows none.
+     */
+    private fun csvLinesOf(report: Report): List<String> = CsvReport.lines(report)
 
     private companion object {
 
