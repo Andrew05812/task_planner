@@ -60,7 +60,7 @@ name is the failure this rule exists for: it looks correct.
 **Saving.** The promise comes last. The reader presses Save, the platform's own `CreateDocument` sheet opens
 with the name the exporter suggests, the reader chooses a place, the uri comes back, the stream is opened, the
 bytes are written, the stream is closed, the exporter counts them, and only then does the screen say
-"Written to the file you chose — 86 960 bytes." A sheet closed without choosing a place is silence rather than
+"Written to the file you chose — 86 959 bytes." A sheet closed without choosing a place is silence rather than
 an error. A location that will not open, a write that breaks partway, a file the device drew no bytes into,
 and a report that is not there to write are four different sentences, none of them an exception's own text. No
 storage permission is requested and no path is ever invented.
@@ -231,7 +231,7 @@ the PDF suite passed on the same image. What was looked at, and what it settled:
 | The zoom acts on the document | 1× → 1.5× → 2.25× measured to the pixel, the buttons letting go at both ends, and the round trip returning the sheet to the size it started at. |
 | The picker is the platform's | `05-save-picker.png` is the system's own *Save to Downloads* sheet, carrying the name the exporter suggested and a PDF badge. Nothing was written, and the screen said nothing, because the reader backed out. |
 | The Sharesheet is handed a real file | `07-share-sheet.png` reads "Sharing 1 file — taskplanner-report-2026-10-18.pdf", and the staged copy was still on disk afterwards. |
-| A finished save writes what it promises | Pressing the platform's own SAVE put `taskplanner-report-2026-10.pdf` in Downloads. The screen announced *86 960 bytes*; the file pulled off over `adb` is **86 960 bytes**. The announcement is what the exporter counted on its way out, so the two agreeing is the end of §6's sequence. |
+| A finished save writes what it promises | Pressing the platform's own SAVE put `taskplanner-report-2026-10.pdf` in Downloads. The screen announced *86 959 bytes*; the file pulled off over `adb` is **86 959 bytes**. The announcement is what the exporter counted on its way out, so the two agreeing is the end of §6's sequence. |
 | Those bytes are a real PDF | `%PDF-1.4` header, `%%EOF` trailer, `/Count 3` matching the "3 pages" the screen showed, producer `Skia/PDF m128`, and — read through the inflated streams — 8 `Type3` fonts with `/CharProcs` and 8 `/ToUnicode` maps: the letterforms travel inside the file and its text is text. |
 | The screen holds up in dark and at large text | Both device suites pass again with the system in night mode and with `font_scale` at 1.3; the photographs show the header wrapping rather than clipping, the sheet still paper-white on a dark screen, and the figures column still whole. |
 

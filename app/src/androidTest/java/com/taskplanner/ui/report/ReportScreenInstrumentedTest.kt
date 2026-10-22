@@ -101,8 +101,12 @@ class ReportScreenInstrumentedTest {
             .addMigrations(*AppMigrations.ALL)
             .build()
         runBlocking {
+            // A profile of this test's own. The e-mail column is unique and the insert replaces on conflict, so
+            // a second test signing in under the same address would delete the first one's profile — and with
+            // it the tasks, the categories and the report the earlier test was about. Each test seeds who it
+            // needs and leaves the others alone.
             val id = database.userDao().insertUser(
-                User(email = "report@example.test", name = "Анна Ковалёва")
+                User(email = "report-${System.nanoTime()}@example.test", name = "Анна Ковалёва")
             )
             database.userDao().setCurrentUser(database.userDao().getUserById(id)!!)
             val category = database.categoryDao().insertCategory(
@@ -200,7 +204,8 @@ class ReportScreenInstrumentedTest {
         onView(withId(R.id.reportSaveButton)).perform(click())
         assertTrue("the picker is in front", waitUntil("the system's picker") { !isInFront() })
         Thread.sleep(PICKER_SETTLE_MILLIS)
-        assertTrue("and its SAVE was pressed", pressThePlatformButton(SAVE_LABEL))
+        shot("10-picker-opened")
+        assertTrue("the platform's SAVE was pressed and the reader came home", finishThePlatformSheet(SAVE_LABEL))
         assertTrue(
             "the report is where the reader lands again",
             waitUntil("back at the report") { isInFront() && shown(R.id.reportSaveButton) }
@@ -217,8 +222,8 @@ class ReportScreenInstrumentedTest {
             "the promise came only after the writing: the buttons are live again, not stuck on a spinner",
             findView(R.id.reportSaveButton)?.isEnabled == true
         )
-        shot("10-saved")
-        record("10-saved-message", "announced=$message\nnote=$note\n")
+        shot("11-saved")
+        record("11-saved-message", "announced=$message\nnote=$note\n")
         println("saved report: note=$note announced=$message bytes=$bytes")
     }
 
@@ -434,27 +439,41 @@ class ReportScreenInstrumentedTest {
     // -- the helpers ------------------------------------------------------------------------------
 
     /**
-     * Pressing a button the platform owns.
+     * Pressing the platform's own answer and coming home.
      *
-     * The document picker is another app's window, so Espresso has no claim on it and this test does not pretend
-     * otherwise: the node is asked for through the instrumentation's own accessibility connection, which is the
-     * API designed for reaching across apps, and nothing is pressed unless the platform says it can be. A label
-     * is searched rather than a screen coordinate, because the picker lays its buttons out differently between
-     * versions and a coordinate that moved would press the wrong thing rather than report that it missed.
+     * The document picker is another app's window, so Espresso has no claim on it and nothing here pretends
+     * otherwise: the node is asked for through the instrumentation's accessibility connection, which is the API
+     * designed for reaching across apps. A label is searched rather than a coordinate because the picker lays
+     * its buttons out differently between versions, and a coordinate that moved would press the wrong thing
+     * rather than report that it missed.
+     *
+     * A node whose own text *is* the label is preferred over one that merely contains it: the picker's window
+     * hands back several clickable things that mention saving, and pressing a container answers nothing. The
+     * press is repeated while the other window still holds the screen, because a sheet that asks "replace this
+     * file?" answers to the same button twice.
      */
-    private fun pressThePlatformButton(label: String): Boolean {
+    private fun finishThePlatformSheet(label: String): Boolean {
         val deadline = System.currentTimeMillis() + TIMEOUT_MILLIS
+        var presses = 0
         while (System.currentTimeMillis() < deadline) {
-            val root = runCatching { instrumentation.uiAutomation.rootInActiveWindow }.getOrNull()
-            val target = root?.findAccessibilityNodeInfosByText(label)?.firstOrNull { it.isClickable }
+            if (isInFront()) return presses > 0
+            val target = clickableNodeNamed(label)
             if (target != null) {
-                val pressed = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                println("platform button '$label' pressed=$pressed")
-                return pressed
+                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                presses++
+                println("platform '$label' pressed $presses times")
             }
-            Thread.sleep(200)
+            Thread.sleep(PRESS_SETTLE_MILLIS)
         }
-        return false
+        return isInFront()
+    }
+
+    private fun clickableNodeNamed(label: String): AccessibilityNodeInfo? {
+        val root = runCatching { instrumentation.uiAutomation.rootInActiveWindow }.getOrNull() ?: return null
+        val nodes = runCatching { root.findAccessibilityNodeInfosByText(label) }.getOrNull().orEmpty()
+        return nodes.firstOrNull {
+            it.isClickable && it.text?.toString().equals(label, ignoreCase = true)
+        } ?: nodes.firstOrNull { it.isClickable }
     }
 
     /**
@@ -603,6 +622,9 @@ class ReportScreenInstrumentedTest {
 
         /** Fewer dark samples than this and the page is blank; a page of Russian text gives hundreds. */
         const val INK_MINIMUM = 200
+
+        /** How long the platform's window is given to answer a press before another is tried. */
+        const val PRESS_SETTLE_MILLIS = 1_200L
 
         /** How far a scaled sheet may sit from the pixel its factor asks for: a page is computed in points. */
         const val SIZE_TOLERANCE = 2f
