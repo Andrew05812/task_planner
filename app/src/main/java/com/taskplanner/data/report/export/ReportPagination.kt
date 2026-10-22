@@ -425,10 +425,10 @@ object ReportPagination {
         is ReportChart.Shares -> {
             val rows = sharesRows(chart, geometry, measurer, palette)
             Flow(
-                // The bar is what a continuation page has to be given again, or the swatches under it are
-                // colours without a total to be colours of.
-                header = rows.take(2),
-                rows = rows.drop(2),
+                // The bar and the total it is cut from are what a continuation page has to be given again, or
+                // the swatches under it are colours without anything to be colours of.
+                header = rows.take(3),
+                rows = rows.drop(3),
                 spaceBefore = ReportTypography.spec(ReportStyle.ChartTitle).spaceBefore,
                 spaceAfter = 8f,
                 atomic = false
@@ -551,10 +551,10 @@ object ReportPagination {
                 )
             }
         )
+        rows += captionRows(chart.totalText, geometry, measurer, palette)
         val spec = ReportTypography.spec(ReportStyle.ChartLabel)
         val right = geometry.width - geometry.marginRight
         chart.parts.forEach { part ->
-            val value = "${part.value} ${chart.unit}"
             rows += Row(
                 height = spec.leading,
                 draws = listOf(
@@ -573,11 +573,11 @@ object ReportPagination {
                         part.label
                     ),
                     ReportDraw.Text(
-                        right - measurer.width(value, ReportStyle.ChartLabel),
+                        right - measurer.width(part.valueText, ReportStyle.ChartLabel),
                         baseline(spec),
                         ReportStyle.ChartLabel,
                         palette.ink,
-                        value
+                        part.valueText
                     )
                 )
             )
@@ -800,7 +800,14 @@ object ReportPagination {
 
         private fun gapFor(group: Group): Float = if (isEmpty) 0f else group.spaceAbove
 
-        private val isEmpty: Boolean get() = current.isEmpty()
+        /**
+         * Whether the sheet being filled has been given anything yet.
+         *
+         * Measured by the cursor rather than by the draw list, because a row can occupy paper and hold no
+         * mark at all — a table row whose cells are all blank is one — and a page that thought itself empty
+         * after placing it would both refuse to close and let the next row run past the bottom of the sheet.
+         */
+        private val isEmpty: Boolean get() = y == geometry.contentTop
 
         private fun breakPage() {
             if (isEmpty) return

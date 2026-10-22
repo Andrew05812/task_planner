@@ -15,6 +15,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.ZoneId
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +53,8 @@ object ReportNaming {
         val stem = when (window.period) {
             is ReportPeriod.Day -> window.period.date.toString()
             is ReportPeriod.Week -> window.firstDate.toString()
-            is ReportPeriod.Month -> "${window.period.month.year}-${"%02d".format(window.period.month.monthValue)}"
+            is ReportPeriod.Month ->
+                "%04d-%02d".format(Locale.ROOT, window.period.month.year, window.period.month.monthValue)
             is ReportPeriod.Year -> window.period.year.toString()
             is ReportPeriod.Range -> "${window.period.from}-${window.period.to}"
         }
@@ -191,9 +193,11 @@ class ReportExportRepository @Inject constructor(
      * database, the preferences and the rest of the app's files are not under it, which is what §6.3's
      * "не предоставляй доступ к внутренней БД" asks of a share button.
      *
-     * The file is not deleted afterwards, and that is a decision rather than an oversight: the receiving app
-     * reads on its own schedule, and a copy taken away while it is still opening is a share that fails. The
-     * directory is capped instead, oldest first, on every stage and again at start-up.
+     * The file is not deleted when the share is handed over, and that is a decision rather than an oversight:
+     * the receiving app reads on its own schedule, and a copy taken away while it is still opening is a share
+     * that fails. The directory is capped instead — the newest [MAX_STAGED] exports are kept, older ones go —
+     * on every stage, and [pruneStaged] offers the same sweep to a caller that wants it at start-up. Which
+     * caller arrives with the report screen in Part 5; nothing is asked of the app's own start-up until then.
      */
     suspend fun stage(report: Report, format: ReportFormat): Result<StagedReport> =
         withContext(Dispatchers.IO) {
@@ -257,11 +261,10 @@ class ReportExportRepository @Inject constructor(
 
     private fun prune(directory: File) {
         val files = directory.listFiles() ?: return
-        val byNewest = files.filter { it.isFile }.sortedByDescending { it.lastModified() }
-        byNewest.drop(MAX_STAGED).forEach { it.delete() }
-        byNewest.take(MAX_STAGED).forEach { file ->
-            if (System.currentTimeMillis() - file.lastModified() > STALE_MILLIS) file.delete()
-        }
+        files.filter { it.isFile }
+            .sortedByDescending { it.lastModified() }
+            .drop(MAX_STAGED)
+            .forEach { it.delete() }
     }
 
     private suspend fun paginate(report: Report): PagedReport {
@@ -290,7 +293,14 @@ class ReportExportRepository @Inject constructor(
         /** `wt`: write and truncate, the mode the backup export already uses. A re-save replaces the file. */
         private const val WRITE_MODE = "wt"
         private const val STAGE_DIR = "report_exports"
+        /**
+         * How many staged exports the cache is allowed to hold.
+         *
+         * The cap is the whole policy, and it is deliberately not a timer: a file handed to another app
+         * stays readable until five newer exports have pushed it out, which is long enough for the recipient
+         * that opened it a minute later and short enough that the cache cannot fill up. An age limit would
+         * have deleted a file somebody was still opening.
+         */
         private const val MAX_STAGED = 5
-        private const val STALE_MILLIS = 60L * 60L * 1000L
     }
 }

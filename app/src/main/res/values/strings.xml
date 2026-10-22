@@ -1085,7 +1085,7 @@
     <string name="report_chart_completions_unit">tasks finished per day</string>
     <string name="report_chart_tallest">The busiest day measured %1$s.</string>
     <string name="report_chart_tallest_completions">The busiest day finished %1$s.</string>
-    <string name="report_chart_shares_unit">seconds</string>
+    <string name="report_chart_shares_total">%1$s measured in all</string>
     <string name="report_chart_shares_omitted">And %1$d more, holding %2$s between them.</string>
     <string name="report_dynamics_chart_work">Work measured, day by day</string>
     <string name="report_dynamics_chart_completions">Tasks finished, day by day</string>
@@ -1165,9 +1165,6 @@
         <item quantity="other">%1$d achievements were earned in these days</item>
     </plurals>
 
-    <string name="report_export_saved">Report saved</string>
-    <string name="report_export_canceled">Saving was cancelled, so nothing was written</string>
-    <string name="report_export_failed">The report could not be written</string>
-    <string name="report_export_no_profile">No profile is signed in, so there is nothing to report on</string>
-    <string name="report_export_share_failed">The file could not be handed to another app</string>
+    <!-- The sentences a saving or a share answers with are Part 5's, with the screen that has to choose
+         between them; declared here they would only be words nothing points at. -->
 </resources>

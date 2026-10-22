@@ -21,7 +21,7 @@ import java.util.Locale
  * The second of the stage's two exports, and the reason it is not the same document as the PDF: a person
  * reading a report and a program reading data ask different questions of it, and a file written to answer both
  * answers neither. So nothing here is a sentence. One column set runs from the first row to the last —
- * section, subject, metric, value, unit, scope, day, text — which is what lets a reader filter the file to
+ * section, subject_id, subject, metric, value, unit, scope, day, text — which is what lets a reader filter the file to
  * "every standing figure" or "every row about habits" without a parser that has to learn a new shape per
  * table, and what keeps §6.2's "стабильный порядок колонок" true of the whole file rather than of one part of
  * it.

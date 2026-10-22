@@ -94,8 +94,11 @@ object ReportLayout {
         // single pass cannot forget a column, and the alternative — a `text()` call at every read of user
         // data — has exactly one bug per place somebody forgets it.
         val marker = context.getString(R.string.report_glyph_marker)
-        val needed = blocks.any(::holdsMarker)
         val marked = markBlocks(blocks, marker)
+        // The note is offered when the pass changed something, which is the same question asked of the
+        // blocks it just produced — a second predicate over the same shapes would be free to disagree with
+        // the pass it describes.
+        val needed = marked != blocks
         return ReportDocument(
             title = context.getString(R.string.report_document_title),
             meta = marked.filterIsInstance<ReportBlock.MetaLine>().map { it.text },
@@ -133,9 +136,14 @@ object ReportLayout {
 
         is ReportChart.Shares -> chart.copy(
             title = ReportGlyphs.show(chart.title, marker),
-            unit = ReportGlyphs.show(chart.unit, marker),
+            totalText = ReportGlyphs.show(chart.totalText, marker),
             omitted = chart.omitted?.let { ReportGlyphs.show(it, marker) },
-            parts = chart.parts.map { it.copy(label = ReportGlyphs.show(it.label, marker)) }
+            parts = chart.parts.map {
+                it.copy(
+                    label = ReportGlyphs.show(it.label, marker),
+                    valueText = ReportGlyphs.show(it.valueText, marker)
+                )
+            }
         )
     }
 
@@ -172,25 +180,12 @@ object ReportLayout {
         return blocks
     }
 
-    /** Whether any string in [block] had to be marked, which is what decides the closing note. */
-    private fun holdsMarker(block: ReportBlock): Boolean = when (block) {
-        is ReportBlock.Title -> ReportGlyphs.needsMarker(block.text)
-        is ReportBlock.MetaLine -> ReportGlyphs.needsMarker(block.text)
-        is ReportBlock.Section -> ReportGlyphs.needsMarker(block.text)
-        is ReportBlock.Paragraph -> ReportGlyphs.needsMarker(block.text)
-        is ReportBlock.Note -> ReportGlyphs.needsMarker(block.text)
-        is ReportBlock.KeyValue -> ReportGlyphs.needsMarker(block.label) || ReportGlyphs.needsMarker(block.value)
-        is ReportBlock.Table -> block.rows.any { row -> row.any { ReportGlyphs.needsMarker(it) } } ||
-            block.columns.any { ReportGlyphs.needsMarker(it.title) }
-        is ReportBlock.Chart -> when (val chart = block.chart) {
-            is ReportChart.Bars -> ReportGlyphs.needsMarker(chart.title) ||
-                chart.columns.any { it.label?.let { text -> ReportGlyphs.needsMarker(text) } == true }
-            is ReportChart.Shares -> ReportGlyphs.needsMarker(chart.title) ||
-                chart.parts.any { ReportGlyphs.needsMarker(it.label) }
-        }
-    }
-
-    /** The palette a printed report is drawn with, taken from the app's own fixed print colours. */
+    /**
+     * The palette a printed report is drawn with, read from the app's own fixed print colours.
+     *
+     * Five of them, taken from `colors.xml` rather than from the theme: paper is never dark, and a report
+     * assembled at midnight has to look the way the same report looks at noon.
+     */
     fun palette(context: Context): ReportPalette = ReportPalette(
         ink = ContextCompat.getColor(context, R.color.report_ink),
         accent = ContextCompat.getColor(context, R.color.report_accent),
@@ -360,19 +355,23 @@ object ReportLayout {
             // Only the rows that hold a share of the time are drawn as parts of it: a category that was
             // visited but never measured has a place in the table above and no width in a bar of seconds.
             val shares = rows.filter { it.seconds > 0L }
-            if (total > 0L && shares.size > 1) {
+            if (shares.size > 1) {
                 val shown = shares.take(CHART_PARTS)
                 val rest = shares.drop(CHART_PARTS)
                 blocks += ReportBlock.Chart(
                     ReportChart.Shares(
                         title = context.getString(R.string.report_categories_chart_title),
-                        total = total,
-                        unit = context.getString(R.string.report_chart_shares_unit),
-                        parts = shown.map {
+                        totalText = context.getString(
+                            R.string.report_chart_shares_total,
+                            ReportFormatting.seconds(context, total)
+                        ),
+                        parts = shown.map { activity ->
                             ChartPart(
-                                label = categoryText(it),
-                                value = it.seconds,
-                                color = it.color ?: ContextCompat.getColor(context, R.color.report_category_none)
+                                label = categoryText(activity),
+                                value = activity.seconds,
+                                valueText = ReportFormatting.seconds(context, activity.seconds),
+                                color = activity.color
+                                    ?: ContextCompat.getColor(context, R.color.report_category_none)
                             )
                         },
                         omitted = if (rest.isEmpty()) null else context.getString(
@@ -418,6 +417,9 @@ object ReportLayout {
                     listOf(row.goal.title, progressText(row), reachedText(row), movedText(row))
                 }
             )
+            if (section.rows.any { it.measure == GoalMeasure.SET_STATE }) {
+                blocks += note(context.getString(R.string.report_note_set_goal))
+            }
             blocks += note(context.getString(R.string.report_note_goals_standing))
             return blocks
         }
@@ -695,8 +697,12 @@ object ReportLayout {
                 empty -> missing()
                 change.fraction == null -> context.getString(R.string.report_change_from_nothing)
                 change.direction == ChangeDirection.FLAT -> context.getString(R.string.report_change_flat)
-                else -> (if (change.direction == ChangeDirection.UP) "+" else "−") +
-                    ReportFormatting.percent(change.fraction.toFloat())
+                else ->
+                    // The sign is this report's own and the figure is the locale's: [FigureChange] stores a
+                    // decrease as a negative fraction, and a percent formatter prints the minus it was given,
+                    // so the two together would be a report that wrote the same minus twice.
+                    (if (change.direction == ChangeDirection.UP) "+" else "−") +
+                        ReportFormatting.percent(kotlin.math.abs(change.fraction).toFloat())
             }
             return ChangeRow(
                 metric = metric,

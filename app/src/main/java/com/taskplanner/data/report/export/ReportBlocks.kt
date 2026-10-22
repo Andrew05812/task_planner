@@ -121,11 +121,16 @@ sealed class ReportChart {
         val caption: String?
     ) : ReportChart()
 
-    /** One total cut into named parts, largest first, with the parts the reader is shown listed beside it. */
+    /**
+     * One total cut into named parts, largest first.
+     *
+     * [totalText] and each [ChartPart.valueText] are the words the layout chose for those figures — the bar
+     * is scaled by the numbers, and read in the units the reader's own report states them in, which is the
+     * same division of labour the tables keep.
+     */
     data class Shares(
         val title: String,
-        val total: Long,
-        val unit: String,
+        val totalText: String,
         val parts: List<ChartPart>,
         /** What is not a part on this page — the rest of the total, stated rather than left out. */
         val omitted: String?
@@ -135,5 +140,5 @@ sealed class ReportChart {
 /** One column of a bar chart: the day's label under the bar and the figure the bar stands for. */
 data class BarColumn(val label: String?, val value: Long)
 
-/** One part of a share chart, wearing the colour its own data carries. */
-data class ChartPart(val label: String, val value: Long, val color: Int)
+/** One part of a share chart: the figure the bar is scaled by, the words it is read in, and its own colour. */
+data class ChartPart(val label: String, val value: Long, val valueText: String, val color: Int)

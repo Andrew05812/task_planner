@@ -74,9 +74,6 @@ object ReportTypography {
         ReportStyle.Note -> TypeSpec(9f, 12.5f, 2f, 6f)
     }
 
-    /** The gap between two blocks of the document, beyond whatever their own specs asked for. */
-    const val BLOCK_GAP: Float = 3f
-
     /** The room a table's header asks for above the first row of a continuation page. */
     const val TABLE_HEADER_GAP: Float = 3f
 }
@@ -130,9 +127,6 @@ data class ReportPageGeometry(
 
     /** The height available to one block. A block taller than this is broken rather than pushed off. */
     val contentHeight: Float get() = contentBottom - contentTop
-
-    /** Where a page's first line begins. */
-    fun firstBaseline(spec: TypeSpec): Float = contentTop + spec.leading
 
     companion object {
         const val A4_WIDTH = 595

@@ -305,6 +305,28 @@ class ReportLayoutTest {
     }
 
     @Test
+    fun `a decrease is printed with one sign, not two`() {
+        val report = ReportFixtures.report().withComparison(
+            completions = com.taskplanner.data.statistics.DashboardMath.change(3L, 12L)
+        )
+        val table = build(report).blocks.filterIsInstance<ReportBlock.Table>()
+            .first { it.columns.first().title == "Measure" }
+        val row = table.rows.first { it[0] == "Finished" }
+        assertEquals("12", row[1])
+        assertEquals("3", row[2])
+        assertEquals("−75%", row[3])
+    }
+
+    @Test
+    fun `a goal that names a set is explained where its dash sits`() {
+        val report = ReportFixtures.report(
+            goals = GoalsReport(listOf(ReportFixtures.goal(measure = GoalMeasure.SET_STATE)), 0, 1)
+        )
+        val notes = build(report).blocks.filterIsInstance<ReportBlock.Note>().map { it.text }
+        assertTrue(notes.joinToString(" | "), notes.any { it.startsWith("A goal that names a set") })
+    }
+
+    @Test
     fun `a finding keeps its own kind and the sample it was counted from`() {
         val report = ReportFixtures.report(
             findings = listOf(ReportFixtures.finding(kind = InsightKind.HYPOTHESIS, sampleSize = 7, confidence = 62))
@@ -355,7 +377,9 @@ class ReportLayoutTest {
             is ReportBlock.Table -> block.columns.map { it.title } + block.rows.flatten()
             is ReportBlock.Chart -> when (val chart = block.chart) {
                 is ReportChart.Bars -> listOfNotNull(chart.title, chart.unit, chart.caption) + chart.columns.mapNotNull { it.label }
-                is ReportChart.Shares -> listOfNotNull(chart.title, chart.omitted) + chart.parts.map { it.label }
+                is ReportChart.Shares ->
+                    listOfNotNull(chart.title, chart.totalText, chart.omitted) + chart.parts.map { it.label } +
+                        chart.parts.map { it.valueText }
             }
         }
     }

@@ -293,10 +293,9 @@ class ReportPaginationTest {
             ReportBlock.Chart(
                 ReportChart.Shares(
                     title = "Where the measured time went",
-                    total = 1_000L,
-                    unit = "seconds",
-                    parts = (1..8).map { ChartPart("Категория $it", 100L, palette.accent) },
-                    omitted = "3 more categories hold 1 h between them."
+                    totalText = "16 min 40 s measured in all",
+                    parts = (1..8).map { ChartPart("Категория $it", 100L, "1 min 40 s", palette.accent) },
+                    omitted = "3 more, holding 1 h between them."
                 )
             ),
             page = ReportPageGeometry(width = 400, height = 700, footerHeight = 20f)
@@ -308,6 +307,10 @@ class ReportPaginationTest {
                 assertTrue(
                     "page ${page.number} lists parts under no title",
                     texts.any { it.contains("Where the measured time went") }
+                )
+                assertTrue(
+                    "page ${page.number} lists parts under no total",
+                    texts.any { it.contains("16 min 40 s measured in all") }
                 )
             }
         }
