@@ -221,19 +221,29 @@
                     android:layout_height="wrap_content" />
             </HorizontalScrollView>
 
-            <TextView
-                android:id="@+id/reportCsv"
+            <!-- A row of a csv file is one line of that file. Wrapped at the edge of the screen a value splits in
+                 two and the reader ends up counting lines that are not rows, so this block keeps every row whole
+                 and lets a long one run sideways out of view instead — which is also how the file itself reads. -->
+            <HorizontalScrollView
+                android:id="@+id/reportCsvScroll"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/spacing_normal"
                 android:layout_marginEnd="@dimen/spacing_normal"
                 android:background="?attr/colorSurface"
-                android:fontFamily="monospace"
-                android:padding="@dimen/spacing_small"
-                android:textIsSelectable="true"
-                android:textSize="@dimen/text_caption"
-                android:visibility="gone"
-                tools:visibility="gone" />
+                android:scrollbars="horizontal">
+
+                <TextView
+                    android:id="@+id/reportCsv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:padding="@dimen/spacing_small"
+                    android:scrollHorizontally="true"
+                    android:textIsSelectable="true"
+                    android:textSize="@dimen/text_caption"
+                    tools:text="section,subject_id,subject,metric,value,unit,scope,day,text" />
+            </HorizontalScrollView>
 
             <ProgressBar
                 android:id="@+id/reportProgress"

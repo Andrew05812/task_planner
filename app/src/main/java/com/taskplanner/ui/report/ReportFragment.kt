@@ -151,7 +151,12 @@ class ReportFragment : Fragment() {
             // The preview has to be told how wide it is. Inside a horizontal scroller the measure spec a child
             // is handed says nothing about the window, and "fit the page to the screen" needs the screen.
             reportPagesScroll.addOnLayoutChangeListener { scroll, _, _, _, _, _, _, _, _ ->
-                reportPages.setViewport(scroll.width.toFloat())
+                // The room a page can fill is the scroller's width minus the scroller's own padding: the padding
+                // belongs to the screen's margins, and a sheet measured against the whole width runs underneath
+                // it, which is a report whose right-hand column of figures is cut off.
+                reportPages.setViewport(
+                    (scroll.width - scroll.paddingStart - scroll.paddingEnd).toFloat()
+                )
             }
         }
     }
@@ -205,15 +210,14 @@ class ReportFragment : Fragment() {
      * reader ends up waiting for an answer that has already refused to arrive.
      */
     private fun renderDocument(state: ReportState) {
-        val asPages = state.format == ReportFormat.PDF
         val pages = state.pages
 
-        binding.reportPages.setDocument(if (asPages) pages else null)
+        binding.reportPages.setDocument(if (state.showingPages) pages else null)
         binding.reportPages.zoom = state.zoom
-        binding.reportPagesScroll.isVisible = asPages && pages != null
+        binding.reportPagesScroll.isVisible = state.showingPages
 
-        val rows = state.csvLines.take(if (asPages) 0 else CSV_ROWS_SHOWN)
-        binding.reportCsv.isVisible = rows.isNotEmpty()
+        val rows = state.csvPreview
+        binding.reportCsvScroll.isVisible = rows.isNotEmpty()
         binding.reportCsv.text = rows.joinToString("\n")
 
         // A missing message is a hidden row, never a zero id handed to setText.
@@ -235,6 +239,9 @@ class ReportFragment : Fragment() {
         binding.reportSaveButton.isEnabled = state.canExport
         binding.reportShareButton.isEnabled = state.canExport
         binding.reportBusy.isVisible = state.saving || state.staging
+        // The zoom is put away with the sheets it acts on: rows have nothing to make bigger.
+        binding.reportZoomIn.isVisible = state.showingPages
+        binding.reportZoomOut.isVisible = state.showingPages
         binding.reportZoomIn.isEnabled = state.canZoomIn && state.pages != null
         binding.reportZoomOut.isEnabled = state.canZoomOut && state.pages != null
     }
@@ -266,13 +273,33 @@ class ReportFragment : Fragment() {
             state.zoneLabel
         }
 
+    /**
+     * What the view under this line is: how many sheets, or how many of the file's rows.
+     *
+     * The csv answer has two shapes because they are two different claims. A short file is on screen whole, and
+     * "the first 79 of 79" would leave a reader looking for the part they were not being shown; a long one is
+     * cut, and the cut has to be named before anyone mistakes a preview for the file. Nothing is said while
+     * there is nothing to count — a report still being laid out does not have zero pages.
+     */
     private fun noteLine(state: ReportState): String = when (state.format) {
-        ReportFormat.PDF -> getString(R.string.report_pages_count, state.pages?.pageCount ?: 0)
-        ReportFormat.CSV -> getString(
-            R.string.report_csv_shown_format,
-            state.csvLines.size.coerceAtMost(CSV_ROWS_SHOWN),
-            state.csvRowCount
-        )
+        ReportFormat.PDF -> {
+            val sheets = state.pages?.pageCount
+            if (sheets == null) ""
+            else resources.getQuantityString(R.plurals.report_pages_count, sheets, sheets)
+        }
+        ReportFormat.CSV -> when {
+            state.csvRowCount == 0 -> ""
+            state.csvRowsAllShown -> resources.getQuantityString(
+                R.plurals.report_csv_all_rows,
+                state.csvRowCount,
+                state.csvRowCount
+            )
+            else -> getString(
+                R.string.report_csv_shown_format,
+                state.csvPreview.size,
+                state.csvRowCount
+            )
+        }
     }
 
     // -- the two dialogs ---------------------------------------------------------------------------
@@ -376,6 +403,7 @@ class ReportFragment : Fragment() {
         val state = viewModel.state.value
         val form = DialogReportZoneBinding.inflate(layoutInflater)
         var options = emptyList<ReportZone>()
+        lateinit var picker: androidx.appcompat.app.AlertDialog
 
         fun fill(query: String) {
             options = viewModel.zoneOptions(query)
@@ -385,22 +413,30 @@ class ReportFragment : Fragment() {
                 options.map { it.label }
             )
             form.reportZoneList.setOnItemClickListener { _, _, position, _ ->
-                options.getOrNull(position)?.let { viewModel.chooseZone(ZoneId.of(it.id)) }
+                options.getOrNull(position)?.let {
+                    viewModel.chooseZone(ZoneId.of(it.id))
+                    // Choosing is the end of choosing. A picker that stays open after the row was taken asks the
+                    // reader to dismiss a dialog they have already answered — and the screen behind it has
+                    // already moved to the zone they picked.
+                    picker.dismiss()
+                }
             }
         }
         fill(state.zone.id)
         form.reportZoneDevice.isVisible = !state.followsDeviceZone
         form.reportZoneDevice.setOnClickListener {
             viewModel.useDeviceZone()
+            picker.dismiss()
         }
         form.reportZoneSearch.setText(state.zone.id)
         form.reportZoneSearch.doAfterTextChanged { text -> fill(text?.toString().orEmpty()) }
 
-        MaterialAlertDialogBuilder(context)
+        picker = MaterialAlertDialogBuilder(context)
             .setTitle(R.string.report_zone_title)
             .setView(form.root)
             .setNegativeButton(R.string.action_cancel, null)
-            .show()
+            .create()
+        picker.show()
     }
 
     // -- the hand-overs ----------------------------------------------------------------------------
@@ -469,16 +505,5 @@ class ReportFragment : Fragment() {
         ReportKind.MONTH -> R.string.report_period_month
         ReportKind.YEAR -> R.string.report_period_year
         ReportKind.RANGE -> R.string.report_period_range
-    }
-
-    private companion object {
-        /**
-         * How many csv lines the screen paints.
-         *
-         * A year's report is a few hundred rows, and a TextView of that length is a layout pass the reader is
-         * waiting on for no reason. The caption beside it states how many are shown and how many the file holds,
-         * so a shortened list is never mistaken for the whole of it.
-         */
-        const val CSV_ROWS_SHOWN = 120
     }
 }

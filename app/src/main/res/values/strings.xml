@@ -1187,10 +1187,21 @@
     <string name="report_range_from_format">From %1$s</string>
     <string name="report_range_to_format">To %1$s</string>
     <string name="report_apply">Show the report</string>
-    <string name="report_pages_count">%1$d pages</string>
+    <plurals name="report_pages_count">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+    <plurals name="report_csv_all_rows">
+        <item quantity="one">One row, shown here as it stands in the file.</item>
+        <item quantity="other">%d rows, all of them shown here and in the file.</item>
+    </plurals>
     <string name="report_csv_shown_format">The first %1$d of %2$d rows are shown. The file holds them all.</string>
-    <string name="report_preview_description">The report as %1$d pages of a document. Its figures are in the
-        screen beside it and in the file this screen saves.</string>
+    <plurals name="report_preview_description">
+        <item quantity="one">The report as %d page of a document. Its figures are in the screen beside it and in
+            the file this screen saves.</item>
+        <item quantity="other">The report as %d pages of a document. Its figures are in the screen beside it and
+            in the file this screen saves.</item>
+    </plurals>
 
     <string name="report_empty_no_profile">Sign in to a profile to see the report it holds.</string>
     <string name="report_period_rejected">The last day cannot fall before the first. The report stayed on the period you had.</string>

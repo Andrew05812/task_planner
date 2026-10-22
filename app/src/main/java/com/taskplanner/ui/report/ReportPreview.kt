@@ -303,7 +303,7 @@ class ReportPreviewView @JvmOverloads constructor(
         if (paged === document) return
         document = paged
         contentDescription = paged?.let {
-            context.getString(R.string.report_preview_description, it.pageCount)
+            resources.getQuantityString(R.plurals.report_preview_description, it.pageCount, it.pageCount)
         }
         requestLayout()
         invalidate()
