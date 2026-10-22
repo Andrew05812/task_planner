@@ -997,4 +997,177 @@
     <string name="achievement_goals_10_condition">Carry 10 goals to their target.</string>
     <string name="achievement_habits_kept_3_title">Three habits held</string>
     <string name="achievement_habits_kept_3_condition">Keep 3 different habits for a week each.</string>
+
+    <!-- ============================================================================
+         Reports, exported (Stage 3J Part 4). A report is the ten sections of §6 turned into
+         sentences, so the words below are the document a reader keeps rather than a screen they
+         dismiss. Three rules the wording is held to, because a printed report cannot be re-read
+         the way a screen can:
+          * A figure names its own unit. "24 000" on a page is nothing to a reader; "6 h 20 min" is.
+          * An absence is a sentence, not a zero. A month with no measured work says so, and the
+            line the reader does not get is never a line that quietly reads as nothing happened.
+          * A standing figure says it is standing. These rows store events rather than snapshots,
+            so "still open" is true of the day the report was written and of no other day; the note
+            under the summary says that in as many words as it takes.
+         ============================================================================ -->
+    <string name="report_document_title">Task Planner report</string>
+    <string name="report_meta_period">%1$s: %2$s to %3$s</string>
+    <string name="report_meta_timezone">Counted in the timezone %1$s</string>
+    <string name="report_instant_format">Written %1$s</string>
+    <string name="report_meta_profile">For the profile “%1$s”</string>
+    <string name="report_meta_week_starts">Weeks begin on %1$s</string>
+
+    <string name="report_period_day">A single day</string>
+    <string name="report_period_week">A week</string>
+    <string name="report_period_month">A month</string>
+    <string name="report_period_year">A year</string>
+    <string name="report_period_range">A chosen range</string>
+
+    <string name="report_section_summary">Summary</string>
+    <string name="report_section_completed">Finished tasks</string>
+    <string name="report_section_worked">Measured work</string>
+    <string name="report_section_categories">Where the work went</string>
+    <string name="report_section_goals">Goals</string>
+    <string name="report_section_habits">Habits</string>
+    <string name="report_section_dynamics">Day by day</string>
+    <string name="report_section_achievements">Achievements</string>
+    <string name="report_section_comparison">Against the period before</string>
+    <string name="report_section_findings">What the app noticed</string>
+
+    <string name="report_metric_created">Tasks created</string>
+    <string name="report_metric_completed">Tasks finished</string>
+    <string name="report_metric_worked">Work measured</string>
+    <string name="report_metric_intervals">Stretches closed</string>
+    <string name="report_metric_sessions">Sessions measured</string>
+    <string name="report_metric_average_session">Average session</string>
+    <string name="report_metric_days">Days counted</string>
+    <string name="report_metric_active_days">Days that held work</string>
+    <string name="report_metric_per_day">Finished per day</string>
+    <string name="report_metric_undated">Finished with no date</string>
+    <string name="report_metric_open_now">Still open</string>
+    <string name="report_metric_overdue_now">Late</string>
+    <string name="report_metric_due_today">Due today</string>
+    <string name="report_metric_due_week">Due this week</string>
+    <string name="report_metric_without_deadline">With no deadline</string>
+    <string name="report_metric_in_progress">Being worked on</string>
+    <string name="report_metric_archived">Archived</string>
+    <string name="report_metric_total">Tasks held</string>
+    <string name="report_metric_rate">Finished of everything held</string>
+    <string name="report_metric_achievements">Achievements earned</string>
+
+    <string name="report_note_standing">Everything above happened inside the period. The lines under this one
+        describe the account as it stands the day this report was written: the app keeps events rather than
+        snapshots, so what was open in a past month cannot be counted afterwards.</string>
+    <string name="report_note_goals_standing">A goal is shown as it stands the day the report was written. This
+        app records what changed about a goal, not which day it was reached, so a past period can state how much
+        of its work counted toward a goal and cannot state whether the goal was reached during it.</string>
+    <string name="report_note_set_goal">A goal that names a set is finished or not, and nothing moves inside a
+        period that a report can date.</string>
+    <string name="report_note_habit_series">A habit series is counted back from the last day of the period, so a
+        run longer than the period is reported as at least its length.</string>
+    <string name="report_note_category_none">No category, or one that has since been deleted.</string>
+    <string name="report_note_undated">Finished work the account holds no date for is counted here and left out
+        of the day-by-day lines below, because guessing the day would be inventing the event.</string>
+    <string name="report_note_dynamics">Days with nothing on them are kept, because a trend that skips them
+        reports a shorter period than the one that was lived.</string>
+
+    <string name="report_none_completed">No task was finished in these days.</string>
+    <string name="report_none_worked">Nothing was measured in these days.</string>
+    <string name="report_none_categories">No work was filed against a category in these days.</string>
+    <string name="report_none_goals">This profile holds no goal to report on.</string>
+    <string name="report_none_habits">No habit was kept in these days.</string>
+    <string name="report_none_achievements">No achievement was earned in these days.</string>
+    <string name="report_none_findings">The app had nothing to say about these days.</string>
+    <string name="report_none_dynamics">These days hold no work to draw.</string>
+    <string name="report_none_comparison">The period before this one has nothing to be measured against.</string>
+
+    <string name="report_chart_work_unit">measured seconds per day</string>
+    <string name="report_chart_completions_unit">tasks finished per day</string>
+    <string name="report_chart_tallest">The busiest day measured %1$s.</string>
+    <string name="report_chart_tallest_completions">The busiest day finished %1$s.</string>
+    <string name="report_chart_shares_unit">seconds</string>
+    <string name="report_chart_shares_omitted">And %1$d more, holding %2$s between them.</string>
+    <string name="report_dynamics_chart_work">Work measured, day by day</string>
+    <string name="report_dynamics_chart_completions">Tasks finished, day by day</string>
+
+    <string name="report_worked_line">%1$s measured over %2$s.</string>
+    <string name="report_categories_chart_title">Where the measured time went</string>
+    <string name="report_comparison_against">The period before: %1$s to %2$s, the same number of days.</string>
+
+    <string name="report_table_day">Day</string>
+    <string name="report_table_finished">Finished</string>
+    <string name="report_table_measured">Measured</string>
+    <string name="report_table_category">Category</string>
+    <string name="report_table_stretches">Stretches</string>
+    <string name="report_table_goal">Goal</string>
+    <string name="report_table_progress">Progress</string>
+    <string name="report_table_in_period">Moved in the period</string>
+    <string name="report_table_habit">Habit</string>
+    <string name="report_table_marks">Days kept</string>
+    <string name="report_table_kept">Kept</string>
+    <string name="report_table_longest">Longest run</string>
+    <string name="report_table_reached">Reached</string>
+    <string name="report_table_metric">Measure</string>
+    <string name="report_table_before">Before</string>
+    <string name="report_table_now">This period</string>
+    <string name="report_table_change">Change</string>
+    <string name="report_table_busiest">The busiest days</string>
+
+    <string name="report_value_missing">—</string>
+    <string name="report_glyph_marker">[?]</string>
+    <string name="report_progress_of">%1$s of %2$s</string>
+    <string name="report_reached_yes">Reached</string>
+    <string name="report_reached_no">Not reached</string>
+    <string name="report_reached_unknown">No target set</string>
+    <string name="report_achievement_progress">%1$s of %2$s %3$s</string>
+    <string name="report_finding_basis">%1$s in the sample, %2$s confidence</string>
+    <string name="report_finding_kind_fact">a fact</string>
+    <string name="report_finding_kind_pattern">a pattern</string>
+    <string name="report_finding_kind_hypothesis">a hypothesis</string>
+    <string name="report_finding_superseded">A reading the app has stopped making.</string>
+
+    <string name="report_unit_tasks">tasks</string>
+    <string name="report_unit_goals">goals</string>
+    <string name="report_unit_projects">projects</string>
+    <string name="report_unit_habits">habits</string>
+    <string name="report_unit_marks">days kept</string>
+    <string name="report_unit_sessions">sessions</string>
+    <string name="report_unit_streak_days">days in a row</string>
+    <string name="report_unit_active_days">days of work</string>
+    <string name="report_unit_hours">hours</string>
+    <string name="report_unit_other">of that measure</string>
+
+    <string name="report_change_flat">the same</string>
+    <string name="report_change_from_nothing">from nothing</string>
+
+    <string name="report_section_limits">About these figures</string>
+    <string name="report_limits_window">The period runs from %1$s to %2$s, counted in %3$s.</string>
+    <string name="report_limits_written">Written by Task Planner %1$s.</string>
+    <string name="report_limits_glyphs">Some characters in the reader’s own titles are not part of the font this
+        report is written with. They are marked %1$s here and kept exactly as they are in the csv export.</string>
+    <string name="report_note_long_series">These days are too many to list one under the other, so the chart
+        shows all of them and the table prints only the ten that held the most.</string>
+
+    <plurals name="report_habits_kept_of">
+        <item quantity="one">%1$d of %2$d habit was kept in these days</item>
+        <item quantity="other">%1$d of %2$d habits were kept in these days</item>
+    </plurals>
+    <plurals name="report_goals_reached_of">
+        <item quantity="one">%1$d of %2$d goal has reached its target</item>
+        <item quantity="other">%1$d of %2$d goals have reached their target</item>
+    </plurals>
+    <plurals name="report_undated_count">
+        <item quantity="one">%1$d finished task carries no date</item>
+        <item quantity="other">%1$d finished tasks carry no date</item>
+    </plurals>
+    <plurals name="report_achievements_granted">
+        <item quantity="one">%1$d achievement was earned in these days</item>
+        <item quantity="other">%1$d achievements were earned in these days</item>
+    </plurals>
+
+    <string name="report_export_saved">Report saved</string>
+    <string name="report_export_canceled">Saving was cancelled, so nothing was written</string>
+    <string name="report_export_failed">The report could not be written</string>
+    <string name="report_export_no_profile">No profile is signed in, so there is nothing to report on</string>
+    <string name="report_export_share_failed">The file could not be handed to another app</string>
 </resources>

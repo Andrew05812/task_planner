@@ -1,0 +1,106 @@
+package com.taskplanner.data.report.export
+
+import android.content.Context
+import com.taskplanner.R
+import com.taskplanner.data.report.ReportPeriod
+import com.taskplanner.ui.util.WorkTimeFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.text.NumberFormat
+import java.util.Locale
+
+/**
+ * The ways a figure becomes a word in a report.
+ *
+ * One object because the same number appears in a summary line, in a table cell and in a chart's caption, and
+ * three spellings of it in one document is a document that contradicts itself. Two rules decide everything
+ * here, and both of them come from the promise a report makes rather than from taste:
+ *
+ *  * **A measured duration is spelled by the app's own rule.** `WorkTimeFormat.compact` is what a task card, a
+ *    history row and the dashboard already print, so the hours a report states are the hours the reader saw on
+ *    the screen the day they did the work.
+ *  * **A number is printed the way the reader reads numbers.** Grouping separators, a decimal comma or a point,
+ *    a percent sign before or after — these belong to the locale, and the report is written for a person, not
+ *    for a parser. The machine-readable export is the csv, which deliberately uses none of this.
+ *
+ * A date is the one thing given two spellings. A calendar date is written the way the reader's locale writes
+ * dates; the moment a report was assembled is written with a time beside it, because that is a timestamp and a
+ * report that said only "22 October" of the minute it was written would be a report that could not tell two
+ * runs of the same day apart.
+ */
+object ReportFormatting {
+
+    /** A day as the reader's locale spells it: "3 Jun 2026", "3 июня 2026 г.". */
+    fun day(context: Context, date: LocalDate): String =
+        DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault()).format(date)
+
+    /** A day short enough to sit under one bar of a chart. */
+    fun shortDay(date: LocalDate): String =
+        DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()).format(date)
+
+    /** A month as a heading: "June 2026". */
+    fun month(date: LocalDate): String =
+        DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()).format(date)
+
+    /** An instant, with the time the reader's locale shows and the zone it was resolved in named once. */
+    fun instant(context: Context, millis: Long, zone: ZoneId): String {
+        val text = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+            .withLocale(Locale.getDefault())
+            .format(Instant.ofEpochMilli(millis).atZone(zone))
+        return context.getString(R.string.report_instant_format, text, zone.id)
+    }
+
+    fun count(value: Int): String = integer().format(value.toLong())
+
+    fun count(value: Long): String = integer().format(value)
+
+    /** The measured seconds, in the words the rest of the app uses for them. */
+    fun seconds(context: Context, value: Long): String = WorkTimeFormat.compact(context, value)
+
+    /**
+     * A ratio, printed with as many decimals as it carries meaning for and no more.
+     *
+     * "1,7 tasks a day" is a figure a reader can hold; "1,7000000000000002" is the arithmetic underneath it
+     * showing through, which is what a float division does and is not the reader's business.
+     */
+    fun decimal(value: Double, digits: Int): String =
+        NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+            minimumFractionDigits = digits
+            maximumFractionDigits = digits
+        }.format(value)
+
+    /** A share of 0f to 1f as the locale's percent, with no decimals: the exact counts are printed beside it. */
+    fun percent(fraction: Float): String = NumberFormat.getPercentInstance(Locale.getDefault()).format(fraction)
+
+    /**
+     * A whole percentage the repository already worked out, in the words the reader's locale uses.
+     *
+     * [percent] is a figure from 0 to 100 — an adherence, computed as integers where the division is exact by
+     * design — and it is divided back rather than printed with a hand-typed sign, because which side of the
+     * number a percent belongs on is the locale's decision and not this report's.
+     */
+    fun wholePercent(percent: Int): String = NumberFormat.getPercentInstance(Locale.getDefault())
+        .format(percent.toDouble() / 100.0)
+
+    /** The way this report shows that it does not know: a dash, not a zero and not an empty cell. */
+    fun missing(context: Context): String = context.getString(R.string.report_value_missing)
+
+    /** The period as the one or two words that say which of the five kinds of report this is. */
+    fun periodWord(context: Context, period: ReportPeriod): String = context.getString(
+        when (period) {
+            is ReportPeriod.Day -> R.string.report_period_day
+            is ReportPeriod.Week -> R.string.report_period_week
+            is ReportPeriod.Month -> R.string.report_period_month
+            is ReportPeriod.Year -> R.string.report_period_year
+            is ReportPeriod.Range -> R.string.report_period_range
+        }
+    )
+
+    /** A weekday's own name, which is what a reader needs to see to trust a week's bounds. */
+    fun weekday(day: java.time.DayOfWeek): String = day.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault())
+
+    private fun integer(): NumberFormat = NumberFormat.getIntegerInstance(Locale.getDefault())
+}

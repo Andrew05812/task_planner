@@ -664,7 +664,9 @@ object ReportPagination {
         return if (flow.atomic) {
             listOf(
                 Group(
-                    rows = flow.header + flow.rows,
+                    rows = flow.rows,
+                    header = flow.header,
+                    headerAlways = true,
                     spaceAbove = flow.spaceBefore,
                     spaceBelow = flow.spaceAfter,
                     keepWithNext = flow.keepWithNext,
@@ -674,7 +676,9 @@ object ReportPagination {
         } else {
             flow.rows.mapIndexed { index, row ->
                 Group(
-                    rows = if (index == 0) flow.header + row else listOf(row),
+                    rows = listOf(row),
+                    header = flow.header,
+                    headerAlways = index == 0,
                     spaceAbove = if (index == 0) flow.spaceBefore else 0f,
                     spaceBelow = if (index == flow.rows.lastIndex) flow.spaceAfter else 0f,
                     keepWithNext = false,
@@ -698,8 +702,8 @@ object ReportPagination {
                 if (group.keepWithNext && next != null && !isEmpty) {
                     // A heading that cannot be followed by so much as the first line of what it heads has been
                     // left to close a page. It travels instead, and the section begins whole.
-                    val roomAfter = room() - gapFor(group) - group.height
-                    if (roomAfter < next.height) breakPage()
+                    val roomAfter = room() - gapFor(group) - contentOf(group).sumHeight()
+                    if (roomAfter < (next.header + next.rows).sumHeight()) breakPage()
                 }
                 place(group)
             }
@@ -707,9 +711,10 @@ object ReportPagination {
 
         private fun place(group: Group) {
             val room = room()
-            val needed = gapFor(group) + group.height
+            val content = contentOf(group)
+            val needed = gapFor(group) + content.sumHeight()
             if (needed <= room) {
-                emit(group.rows, gapFor(group))
+                emit(content, gapFor(group))
                 y += group.spaceBelow
                 return
             }
@@ -721,14 +726,25 @@ object ReportPagination {
             // An empty page that still cannot hold this group: a chart is asked to give up plot height first,
             // because a shorter chart is still the same chart, and only then is anything cut at all.
             val shrunk = group.shrinkTo?.invoke(room)
-            if (shrunk != null && shrunk.sumHeight() <= room) {
-                emit(shrunk, 0f)
+            if (shrunk != null && (group.header + shrunk).sumHeight() <= room) {
+                emit(group.header + shrunk, 0f)
                 y += group.spaceBelow
                 return
             }
-            spill(sliced(group.rows))
+            spill(sliced(content))
             y += group.spaceBelow
         }
+
+        /**
+         * The rows a group occupies, with its header in front when the group is starting a page.
+         *
+         * The header travels with every group of a table rather than being glued to the first one, because the
+         * thing that decides whether it is needed is where the page fell — and that is not known until the
+         * packer gets there. A continuation sheet whose columns have gone unnamed is a sheet of numbers with no
+         * question attached to them.
+         */
+        private fun contentOf(group: Group): List<Row> =
+            if (group.headerAlways || isEmpty) group.header + group.rows else group.rows
 
         /**
          * The last resort: rows no page could take whole, placed one slice at a time.
@@ -860,8 +876,6 @@ object ReportPagination {
         is ReportDraw.Rect -> copy(top = top + this.top, bottom = top + this.bottom)
     }
 
-    private fun List<Row>.sumHeight(): Float = sumOf { it.height.toDouble() }.toFloat()
-
     /** One line of the flow: the marks it carries, relative to its own top, and the room it takes. */
     internal data class Row(val height: Float, val draws: List<ReportDraw>)
 
@@ -885,11 +899,15 @@ object ReportPagination {
     /** What the packer places: a set of rows that move together, with the air it asks for above and below. */
     private data class Group(
         val rows: List<Row>,
+        val header: List<Row>,
+        /** Whether this group is the flow's own beginning, where the header belongs whatever page it lands on. */
+        val headerAlways: Boolean,
         val spaceAbove: Float,
         val spaceBelow: Float,
         val keepWithNext: Boolean,
         val shrinkTo: ((Float) -> List<Row>)?
-    ) {
-        val height: Float get() = rows.sumOf { it.height.toDouble() }.toFloat()
-    }
+    )
 }
+
+/** The room a set of rows takes, added in double and read back as points. */
+internal fun List<ReportPagination.Row>.sumHeight(): Float = sumOf { it.height.toDouble() }.toFloat()
