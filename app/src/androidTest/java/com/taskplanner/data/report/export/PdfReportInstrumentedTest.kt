@@ -73,8 +73,7 @@ class PdfReportInstrumentedTest {
     fun aStagedFileIsHandedOverAsAContentUriAndNeverAsAPath() {
         val directory = java.io.File(context.cacheDir, "report_exports").apply { mkdirs() }
         val file = java.io.File(directory, "taskplanner-report-instrumented.csv")
-        file.writeBytes("section,subject_id
-".toByteArray(Charsets.UTF_8))
+        file.writeBytes("section,subject_id,metric".toByteArray(Charsets.UTF_8))
 
         val uri = androidx.core.content.FileProvider.getUriForFile(
             context,
