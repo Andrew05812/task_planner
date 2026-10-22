@@ -85,6 +85,10 @@ class ProfileFragment : Fragment() {
                 findNavController().navigate(R.id.action_profile_to_insights)
             }
 
+            openReportsButton.setOnClickListener {
+                findNavController().navigate(R.id.action_profile_to_reports)
+            }
+
             switchProfileButtonNoUser.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_profile_selection)
             }

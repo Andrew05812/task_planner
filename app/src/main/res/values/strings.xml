@@ -1169,22 +1169,25 @@
          The figures and the pages come from underneath; everything here is a question or an answer about the
          hand-over of a file, which is the only thing the screen owns. -->
     <string name="title_reports">Reports</string>
-    <string name="report_period_title">Period</string>
     <string name="report_dates_button">Change the days</string>
     <string name="report_range_title">From the first day to the last</string>
-    <string name="report_range_from">First day</string>
-    <string name="report_range_to">Last day</string>
-    <string name="report_days_between">%1$s – %2$s</string>
+    <string name="report_days_between">%1$s: %2$s – %3$s</string>
     <string name="report_zone_title">Counted in</string>
     <string name="report_zone_button">Choose a timezone</string>
     <string name="report_zone_device">The device\'s own timezone</string>
     <string name="report_zone_search_hint">Search the list</string>
-    <string name="report_format_title">File</string>
 
     <string name="report_action_save">Save</string>
     <string name="report_action_share">Share</string>
+    <string name="report_format_pdf">PDF</string>
+    <string name="report_format_csv">CSV</string>
+    <string name="report_zoom_in">Make the pages bigger</string>
+    <string name="report_zoom_out">Make the pages smaller</string>
+    <string name="report_zone_device_note">%1$s · the device\'s own timezone</string>
+    <string name="report_range_from_format">From %1$s</string>
+    <string name="report_range_to_format">To %1$s</string>
+    <string name="report_apply">Show the report</string>
     <string name="report_pages_count">%1$d pages</string>
-    <string name="report_rows_count">%1$d rows</string>
     <string name="report_csv_shown_format">The first %1$d of %2$d rows are shown. The file holds them all.</string>
     <string name="report_preview_description">The report as %1$d pages of a document. Its figures are in the
         screen beside it and in the file this screen saves.</string>

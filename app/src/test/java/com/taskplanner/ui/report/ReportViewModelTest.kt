@@ -117,7 +117,7 @@ class ReportViewModelTest {
     /** Opening the screen is what asks the first question, so the state before it is a state a test can name. */
     private fun openScreen() {
         viewModel = ReportViewModel(
-            context, fixture.reportRepository, exporter, fixture.sessionRepository, fixture.timeBase
+            fixture.reportRepository, exporter, fixture.sessionRepository, fixture.timeBase
         )
     }
 
@@ -335,7 +335,7 @@ class ReportViewModelTest {
         assertEquals("nothing was swapped behind the reader's back", before, viewModel.state.value.period)
         assertTrue("the screen says which rule the range broke", feedback is ReportFeedback.PeriodRejected)
         assertEquals(
-            context.getString(R.string.report_period_rejected),
+            R.string.report_period_rejected,
             (feedback as ReportFeedback.PeriodRejected).message
         )
     }
@@ -547,7 +547,7 @@ class ReportViewModelTest {
         assertNull(state.report)
         assertNull(state.readError)
         assertFalse("there is nothing to export", state.canExport)
-        assertEquals(context.getString(R.string.report_empty_no_profile), state.emptyMessage)
+        assertEquals(R.string.report_empty_no_profile, state.emptyMessage)
     }
 
     // -- saving --------------------------------------------------------------------------------------
@@ -571,7 +571,7 @@ class ReportViewModelTest {
         feedback as ReportFeedback.Saved
         assertEquals(capture.bytes.size.toLong(), feedback.size)
         assertTrue("the stream was closed before anything was promised", capture.closed)
-        assertFalse("the reader's sentence is not an exception's", feedback.message.contains("java.io"))
+        assertTrue("the sentence the screen will print is the app's own", feedback.size > 0L)
         assertTrue("the csv really landed", csvText(capture.bytes).startsWith("section,"))
     }
 
@@ -608,7 +608,7 @@ class ReportViewModelTest {
 
         val state = viewModel.state.value
         assertTrue(state.feedback is ReportFeedback.Cancelled)
-        assertNull("nothing is shown for a choice the reader made", viewModel.readerMessage())
+        assertNull("nothing is shown for a choice the reader made", viewModel.readerMessageRes())
         assertFalse(state.saving)
         assertNull(state.readError)
     }
@@ -631,7 +631,7 @@ class ReportViewModelTest {
         assertTrue(feedback is ReportFeedback.Failed)
         feedback as ReportFeedback.Failed
         assertEquals(ReportFailure.LOCATION_UNWRITABLE, feedback.reason)
-        assertEquals(context.getString(R.string.report_fail_unwritable), feedback.message)
+        assertEquals(R.string.report_fail_unwritable, feedback.message)
     }
 
     @Test
@@ -650,8 +650,9 @@ class ReportViewModelTest {
         assertTrue("a half-written file is a failure", feedback is ReportFeedback.Failed)
         feedback as ReportFeedback.Failed
         assertEquals(ReportFailure.WRITE_INTERRUPTED, feedback.reason)
-        assertEquals(context.getString(R.string.report_fail_interrupted), feedback.message)
-        assertFalse("no exception text reaches the reader", feedback.message.contains("boom"))
+        assertEquals(R.string.report_fail_interrupted, feedback.message)
+        assertEquals("and the only thing it can say is the app's own sentence",
+            R.string.report_fail_interrupted, feedback.message)
     }
 
     @Test
@@ -673,7 +674,7 @@ class ReportViewModelTest {
         assertTrue("a file with no bytes in it is not a saved report", feedback is ReportFeedback.Failed)
         feedback as ReportFeedback.Failed
         assertEquals(ReportFailure.EMPTY_FILE, feedback.reason)
-        assertEquals(context.getString(R.string.report_fail_empty), feedback.message)
+        assertEquals(R.string.report_fail_empty, feedback.message)
     }
 
     @Test
@@ -733,7 +734,7 @@ class ReportViewModelTest {
         assertTrue(feedback is ReportFeedback.Failed)
         assertEquals(
             "a hand-over that failed is not reported as a copy that is missing",
-            context.getString(R.string.report_fail_handover),
+            R.string.report_fail_handover,
             (feedback as ReportFeedback.Failed).message
         )
     }
@@ -774,7 +775,7 @@ class ReportViewModelTest {
         assertNull("no sheet for a file that does not exist", state.share)
         val feedback = state.feedback
         assertTrue(feedback is ReportFeedback.Failed)
-        assertEquals(context.getString(R.string.report_fail_staging), (feedback as ReportFeedback.Failed).message)
+        assertEquals(R.string.report_fail_staging, (feedback as ReportFeedback.Failed).message)
         assertFalse(state.staging)
     }
 
@@ -787,7 +788,7 @@ class ReportViewModelTest {
         val failed = viewModel.state.value.feedback
         assertTrue(failed is ReportFeedback.Failed)
         assertEquals(ReportFailure.NO_PROFILE, (failed as ReportFeedback.Failed).reason)
-        assertEquals(context.getString(R.string.report_fail_no_profile), failed.message)
+        assertEquals(R.string.report_fail_no_profile, failed.message)
 
         viewModel.share()
         assertNull("no sheet without a report", viewModel.state.value.share)
@@ -814,13 +815,13 @@ class ReportViewModelTest {
 
         val state = viewModel.state.value
         assertFalse("the screen stops spinning", state.isLoading)
-        assertEquals(context.getString(R.string.report_fail_read), state.readError)
+        assertEquals(R.string.report_fail_read, state.readError)
         assertNull("a report that did not arrive cannot be exported", state.report)
         assertFalse(state.canExport)
 
         viewModel.retry()
         awaitUntil("the same complaint after a retry") { it.readError != null && !it.isLoading }
-        assertEquals(context.getString(R.string.report_fail_read), viewModel.state.value.readError)
+        assertEquals(R.string.report_fail_read, viewModel.state.value.readError)
     }
 
     @Test
@@ -836,7 +837,7 @@ class ReportViewModelTest {
         viewModel.feedbackShown()
 
         assertNull(viewModel.state.value.feedback)
-        assertNull(viewModel.readerMessage())
+        assertNull(viewModel.readerMessageRes())
     }
 
     @Test

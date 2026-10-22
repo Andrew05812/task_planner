@@ -1,8 +1,8 @@
 package com.taskplanner.ui.report
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.R
@@ -19,16 +19,12 @@ import com.taskplanner.data.report.export.ReportExport
 import com.taskplanner.data.report.export.ReportExportRepository
 import com.taskplanner.data.report.export.ReportFailure
 import com.taskplanner.data.report.export.ReportFormat
-import com.taskplanner.data.report.export.ReportFormatting
-import com.taskplanner.data.report.export.ReportLayout
 import com.taskplanner.data.report.export.ReportNaming
-import com.taskplanner.data.report.export.ReportPagination
 import com.taskplanner.data.repository.ReportRepository
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.tracking.TimeBase
 import com.taskplanner.data.tracking.WorkTimeMath
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -44,7 +40,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * The five period chips, in the order a reader is asked to choose them.
@@ -66,26 +61,33 @@ enum class ReportKind { DAY, WEEK, MONTH, YEAR, RANGE }
  */
 sealed class ReportFeedback {
 
-    /** Bytes are on disk behind a closed stream. [size] is the exporter's own count, never the screen's guess. */
-    data class Saved(val size: Long, val message: String) : ReportFeedback()
+    /**
+     * Bytes are on disk behind a closed stream, and [size] is the exporter's own count of them.
+     *
+     * The count rather than a sentence, because the sentence wants the reader's number format and their word for
+     * "bytes" — both of which belong to whoever is holding the screen, and neither of which a ViewModel has.
+     */
+    data class Saved(val size: Long) : ReportFeedback()
 
     /** The reader closed the picker. There is no sentence for this one, and showing one is the bug. */
     data object Cancelled : ReportFeedback()
 
-    data class Failed(val reason: ReportFailure, val message: String) : ReportFeedback()
+    data class Failed(@StringRes val message: Int, val reason: ReportFailure) : ReportFeedback()
 
     /** The days were named the wrong way round, or the year is outside the calendar. Nothing was guessed. */
-    data class PeriodRejected(val message: String) : ReportFeedback()
+    data class PeriodRejected(@StringRes val message: Int) : ReportFeedback()
 
     /**
-     * The words for the reader, or none.
+     * What to tell the reader, as a resource — or nothing at all.
      *
-     * A cancellation is the case §6 names — closing the picker is not an error — and the screen has to be able
-     * to tell it apart from a success without re-deriving the difference from the shape of a message.
+     * A cancellation is the case §6 names: closing the picker must not raise a false error. The screen has to be
+     * able to see that without re-deriving it from the shape of a string, which is why the answer is a missing id
+     * rather than an empty one.
      */
-    val messageForReader: String? get() = when (this) {
+    @get:StringRes
+    val messageRes: Int? get() = when (this) {
         Cancelled -> null
-        is Saved -> message
+        is Saved -> R.string.report_saved_format
         is Failed -> message
         is PeriodRejected -> message
     }
@@ -105,10 +107,28 @@ data class ReportZone(val id: String, val label: String)
 data class ReportState(
     val kind: ReportKind,
     val period: ReportPeriod,
+
+    /**
+     * The day the question is anchored on: what a chip means when it says "the week", "the month", "the year".
+     *
+     * Carried beside the period rather than derived from it, because three of the five periods have thrown the
+     * day away — a month does not remember which day of it the reader was standing on — and a screen that
+     * reopened the picker on the first of the month would move the reader to a date they never chose.
+     */
+    val anchor: LocalDate,
     val zone: ZoneId,
 
     /** Whether the zone on screen is the device's own, which is what the picker marks as where it started. */
     val followsDeviceZone: Boolean,
+
+    /**
+     * The zone as the screen states it: its id beside the offset it is standing at today.
+     *
+     * Spelled here rather than in the fragment because the offset is asked of `java.time`, and a screen that
+     * worked out which hour a calendar is at would be a screen that could get it wrong in a different way from
+     * the report.
+     */
+    val zoneLabel: String,
     val format: ReportFormat,
 
     /**
@@ -147,11 +167,12 @@ data class ReportState(
     /** The Sharesheet request, handed over once: the fragment launches it and the screen forgets it. */
     val share: Intent? = null,
     val feedback: ReportFeedback? = null,
-    val readError: String? = null,
-    val previewError: String? = null,
+
+    @StringRes val readError: Int? = null,
+    @StringRes val previewError: Int? = null,
 
     /** Why there is nothing to show when nothing failed: nobody is signed in, so there is no report to read. */
-    val emptyMessage: String? = null
+    @StringRes val emptyMessage: Int? = null
 ) {
     val isLoading: Boolean get() = reading || previewing
 
@@ -214,7 +235,6 @@ private data class Question(
  */
 @HiltViewModel
 class ReportViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val reportRepository: ReportRepository,
     private val exportRepository: ReportExportRepository,
     private val sessionRepository: SessionRepository,
@@ -234,8 +254,10 @@ class ReportViewModel @Inject constructor(
         ReportState(
             kind = ReportKind.MONTH,
             period = question.value.period,
+            anchor = anchor.value,
             zone = deviceZone,
             followsDeviceZone = true,
+            zoneLabel = zoneLabel(deviceZone.id),
             format = ReportFormat.PDF
         )
     )
@@ -268,7 +290,7 @@ class ReportViewModel @Inject constructor(
         anchor.value = date
         val state = _state.value
         val period = periodFor(state.kind, date) ?: return
-        ask(kind = state.kind, period = period, zone = state.zone)
+        ask(kind = state.kind, period = period, zone = state.zone, anchor = date)
     }
 
     /**
@@ -282,7 +304,12 @@ class ReportViewModel @Inject constructor(
         when (val read = ReportPeriod.range(from, to)) {
             is ReportPeriodRead.Accepted -> {
                 anchor.value = from
-                ask(kind = ReportKind.RANGE, period = read.period, zone = _state.value.zone)
+                ask(
+                    kind = ReportKind.RANGE,
+                    period = read.period,
+                    zone = _state.value.zone,
+                    anchor = from
+                )
             }
 
             is ReportPeriodRead.Rejected -> _state.update {
@@ -461,8 +488,13 @@ class ReportViewModel @Inject constructor(
         _state.update { it.copy(feedback = null) }
     }
 
-    /** The words for the reader about the last hand-over, or none for a cancellation. */
-    fun readerMessage(): String? = _state.value.feedback?.messageForReader
+    /**
+     * What the last hand-over has to say, as a resource the screen turns into words.
+     *
+     * Nothing, for a cancellation: §6 is explicit that closing the picker is not an error, and a screen with a
+     * message field to fill has to be able to be told not to fill it.
+     */
+    @StringRes fun readerMessageRes(): Int? = _state.value.feedback?.messageRes
 
     /**
      * The zones the picker offers: the device's own first, the rest in their own order.
@@ -488,13 +520,16 @@ class ReportViewModel @Inject constructor(
         kind: ReportKind,
         period: ReportPeriod,
         zone: ZoneId,
+        anchor: LocalDate = this.anchor.value,
         followsDeviceZone: Boolean = _state.value.followsDeviceZone
     ) {
         _state.update {
             it.copy(
                 kind = kind,
                 period = period,
+                anchor = anchor,
                 zone = zone,
+                zoneLabel = zoneLabel(zone.id),
                 followsDeviceZone = followsDeviceZone,
                 feedback = null
             )
@@ -549,7 +584,7 @@ class ReportViewModel @Inject constructor(
                     reading = false,
                     previewing = false,
                     readError = null,
-                    emptyMessage = context.getString(R.string.report_empty_no_profile)
+                    emptyMessage = R.string.report_empty_no_profile
                 )
             }
             return
@@ -575,7 +610,7 @@ class ReportViewModel @Inject constructor(
                     csvLines = emptyList(),
                     reading = false,
                     previewing = false,
-                    readError = context.getString(R.string.report_fail_read),
+                    readError = R.string.report_fail_read,
                     emptyMessage = null
                 )
             }
@@ -608,15 +643,8 @@ class ReportViewModel @Inject constructor(
      */
     private suspend fun layOut(report: Report, profileName: String?) {
         val built = guarded {
-            withContext(Dispatchers.Default) {
-                val palette = ReportLayout.palette(context)
-                val pages = ReportPagination.paginate(
-                    document = ReportLayout.build(context, report, profileName, palette),
-                    measurer = PaintReportMeasurer(),
-                    palette = palette
-                )
-                Laid(pages, csvLinesOf(report))
-            }
+            val pages = exportRepository.pages(report, profileName)
+            Laid(pages, csvLinesOf(report))
         }
         // A report that is no longer the one on screen has no business being drawn over the one that is.
         if (_state.value.report !== report) return
@@ -624,7 +652,7 @@ class ReportViewModel @Inject constructor(
         val failure = built.exceptionOrNull()
         if (failure != null) {
             _state.update {
-                it.copy(previewing = false, previewError = context.getString(R.string.report_fail_preview))
+                it.copy(previewing = false, previewError = R.string.report_fail_preview)
             }
         } else {
             val laid = built.getOrThrow()
@@ -672,8 +700,8 @@ class ReportViewModel @Inject constructor(
         }
     )
 
-    private fun failed(reason: ReportFailure, message: Int) =
-        ReportFeedback.Failed(reason, context.getString(message))
+    private fun failed(reason: ReportFailure, @StringRes message: Int) =
+        ReportFeedback.Failed(message, reason)
 
     /**
      * The exporter's answer, in the shape the screen reports it.
@@ -682,25 +710,17 @@ class ReportViewModel @Inject constructor(
      * count is the exporter's own, taken through the stream as it was written, with its unit printed beside it.
      */
     private fun describe(outcome: ReportExport): ReportFeedback = when (outcome) {
-        is ReportExport.Saved -> ReportFeedback.Saved(
-            size = outcome.bytes,
-            message = context.getString(
-                R.string.report_saved_format,
-                context.getString(R.string.report_bytes_format, ReportFormatting.count(outcome.bytes))
-            )
-        )
-
+        is ReportExport.Saved -> ReportFeedback.Saved(size = outcome.bytes)
         ReportExport.Cancelled -> ReportFeedback.Cancelled
         is ReportExport.Failed -> failed(outcome.reason)
     }
 
     /** One sentence per reason the period type has, because each one asks for a different fix. */
-    private fun rejected(reason: ReportPeriodRejection): String = context.getString(
+    @StringRes private fun rejected(reason: ReportPeriodRejection): Int =
         when (reason) {
             ReportPeriodRejection.ENDS_BEFORE_IT_STARTS -> R.string.report_period_rejected
             ReportPeriodRejection.YEAR_OUT_OF_CALENDAR_RANGE -> R.string.report_year_out_of_range
         }
-    )
 
     /**
      * The zone's id beside the offset it is standing at right now.

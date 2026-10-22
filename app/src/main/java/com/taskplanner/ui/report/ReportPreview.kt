@@ -13,6 +13,7 @@ import com.taskplanner.data.report.export.PdfReport
 import com.taskplanner.data.report.export.ReportPageGeometry
 import com.taskplanner.data.report.export.ReportSurface
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 
 /**
@@ -83,6 +84,22 @@ class ReportPageFit(
     /** A rule's thickness, scaled with everything else so a hairline stays a hairline at any level. */
     fun stroke(points: Float): Float = points * scale
 
+    /**
+     * Which sheets of a [pageCount]-sheet document fall inside the band [top]..[bottom].
+     *
+     * A sheet is drawn whole or not at all — a half-visible page whose top is off-screen still has to be walked
+     * from its own first mark — so the band is turned into sheet numbers rather than into a clip. An empty band
+     * and an empty document both answer with an empty range, because a canvas asked to draw nothing must not be
+     * handed the first sheet anyway.
+     */
+    fun sheetsCovering(top: Float, bottom: Float, pageCount: Int): IntRange {
+        if (pageCount <= 0 || bottom <= top) return 0..-1
+        val pitch = pageHeight + gap
+        val first = floor(max(0f, top) / pitch).toInt().coerceAtMost(pageCount - 1)
+        val last = floor(max(0f, bottom - 1f) / pitch).toInt().coerceAtMost(pageCount - 1)
+        return first..last
+    }
+
     companion object {
 
         /** Fitting the page to the view: the level a report is opened at. */
@@ -117,10 +134,42 @@ class ReportPageFit(
  * It is white whatever the app's theme is, because a preview of a printed page that inverted its ink would be a
  * preview of a document nobody would recognise as the one they are about to save.
  */
-class CanvasReportSurface(
-    private val canvas: Canvas,
-    private val fit: ReportPageFit
-) : ReportSurface {
+class CanvasReportSurface : ReportSurface {
+
+    /**
+     * The frame being drawn.
+     *
+     * Set rather than passed in, because a screen redraws on every scroll frame and a surface that rebuilt its
+     * font and colour caches each time would be a preview that allocates in `onDraw` — the one place Android
+     * tells you not to. What is cached here is what the last frame needed too, and nothing in it changes between
+     * frames of one document.
+     */
+    private var canvas: Canvas? = null
+    private var fit: ReportPageFit? = null
+
+    /** The sheets this frame is asked to put ink on. Everything else is walked and left alone. */
+    private var drawn: IntRange = 0..-1
+    private var drawing = false
+    private var scaleAtCache = Float.NaN
+
+    /**
+     * The frame about to be drawn: which canvas, at what size, showing which sheets.
+     *
+     * [sheets] is the band the canvas can see. A mark on a sheet outside it is skipped rather than clipped,
+     * because the point of the range is the cost of the text engine, not the cost of the coordinate.
+     */
+    fun start(canvas: Canvas, layout: ReportPageFit, sheets: IntRange) {
+        this.canvas = canvas
+        this.fit = layout
+        this.drawn = sheets
+        if (layout.scale != scaleAtCache) {
+            // A zoom changes what a point means, and a cached Paint remembers the size it was made at.
+            paints.clear()
+            scaleAtCache = layout.scale
+        }
+        sheet = -1
+        drawing = false
+    }
 
     private val paper = Paint().apply {
         color = Color.WHITE
@@ -136,15 +185,26 @@ class CanvasReportSurface(
     }
 
     private val paints = HashMap<Triple<Float, Boolean, Int>, Paint>()
+    private val fills = HashMap<Int, Paint>()
+
+    /**
+     * The sheet being drawn, counted from the first one the view was asked to draw rather than from the top of
+     * the document — which is what lets a preview of a twenty-page report draw the three sheets the reader can
+     * actually see and leave the other seventeen alone.
+     */
     private var sheet = -1
 
     override fun startPage(width: Int, height: Int) {
         sheet++
-        val top = fit.topOf(sheet)
-        val right = fit.x(width.toFloat())
-        val bottom = fit.y(sheet, height.toFloat())
-        canvas.drawRect(0f, top, right, bottom, paper)
-        canvas.drawRect(0f, top, right, bottom, edge)
+        drawing = sheet in drawn
+        if (!drawing) return
+        val laid = fit ?: return
+        val holder = canvas ?: return
+        val top = laid.topOf(sheet)
+        val right = laid.x(width.toFloat())
+        val bottom = laid.y(sheet, height.toFloat())
+        holder.drawRect(0f, top, right, bottom, paper)
+        holder.drawRect(0f, top, right, bottom, edge)
     }
 
     override fun finishPage() {
@@ -153,25 +213,31 @@ class CanvasReportSurface(
     }
 
     override fun text(x: Float, baseline: Float, sizePt: Float, bold: Boolean, color: Int, text: String) {
-        if (text.isEmpty()) return
-        canvas.drawText(text, fit.x(x), fit.y(sheet, baseline), paint(sizePt, bold, color))
+        val laid = fit ?: return
+        if (text.isEmpty() || !drawing) return
+        canvas?.drawText(text, laid.x(x), laid.y(sheet, baseline), paint(sizePt, bold, color))
     }
 
     override fun rule(left: Float, right: Float, y: Float, thickness: Float, color: Int) {
-        val half = fit.stroke(thickness) / 2f
-        val line = fit.y(sheet, y)
-        canvas.drawRect(fit.x(left), line - half, fit.x(right), line + half, fill(color))
+        val laid = fit ?: return
+        if (!drawing) return
+        val half = laid.stroke(thickness) / 2f
+        val line = laid.y(sheet, y)
+        canvas?.drawRect(laid.x(left), line - half, laid.x(right), line + half, fill(color))
     }
 
     override fun rect(left: Float, top: Float, right: Float, bottom: Float, color: Int) {
-        if (right <= left || bottom <= top) return
-        canvas.drawRect(fit.x(left), fit.y(sheet, top), fit.x(right), fit.y(sheet, bottom), fill(color))
+        val laid = fit ?: return
+        if (!drawing || right <= left || bottom <= top) return
+        canvas?.drawRect(laid.x(left), laid.y(sheet, top), laid.x(right), laid.y(sheet, bottom), fill(color))
     }
 
     private fun paint(sizePt: Float, bold: Boolean, color: Int): Paint =
-        paints.getOrPut(Triple(fit.size(sizePt), bold, color)) {
+        paints.getOrPut(Triple(sizePt, bold, color)) {
             Paint().apply {
-                textSize = fit.size(sizePt)
+                // The size the sheet is being drawn at, not the size the document was written in: the cache key
+                // is the point size, and a zoom changes what a point means.
+                textSize = (fit?.size(sizePt) ?: sizePt)
                 // The same family the PDF is written with, so the widths the pagination measured are the widths
                 // the reader is looking at rather than the widths a different font would have needed.
                 typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.SANS_SERIF
@@ -180,10 +246,12 @@ class CanvasReportSurface(
             }
         }
 
-    private fun fill(color: Int): Paint = Paint().apply {
-        this.color = color
-        style = Paint.Style.FILL
-        isAntiAlias = true
+    private fun fill(color: Int): Paint = fills.getOrPut(color) {
+        Paint().apply {
+            this.color = color
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
     }
 
     private companion object {
@@ -205,6 +273,10 @@ class ReportPreviewView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private var document: PagedReport? = null
+
+    /** Reused across frames: a preview redraws on every scroll, and this one is not allowed to allocate then. */
+    private val clip = android.graphics.Rect()
+    private val surface = CanvasReportSurface()
 
     /** The width the page is fitted to before the zoom multiplies it. */
     private var viewport: Float = resources.displayMetrics.widthPixels.toFloat()
@@ -266,10 +338,18 @@ class ReportPreviewView @JvmOverloads constructor(
         super.onDraw(canvas)
         val paged = document ?: return
         val layout = fit()
+        // One Rect for every frame, because `getClipBounds()` without an argument makes a new one each time and a
+        // view that allocates while drawing is a view that scrolls badly.
+        canvas.getClipBounds(clip)
+        val sheets = layout.sheetsCovering(clip.top.toFloat(), clip.bottom.toFloat(), paged.pageCount)
+        if (sheets.isEmpty()) return
+
         canvas.save()
         canvas.translate(paddingStart.toFloat(), paddingTop.toFloat())
-        // The same call the pdf writer is handed. Nothing here decides where a line goes.
-        PdfReport.draw(paged, CanvasReportSurface(canvas, layout))
+        // The same call the pdf writer is handed, with the sheets outside the band walked and left alone. Nothing
+        // here decides where a line goes.
+        surface.start(canvas, layout, sheets)
+        PdfReport.draw(paged, surface)
         canvas.restore()
     }
 

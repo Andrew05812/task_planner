@@ -17,6 +17,7 @@ import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.taskplanner.R
 import com.taskplanner.data.recurrence.RecurrenceScheduler
+import com.taskplanner.data.report.export.ReportExportRepository
 import com.taskplanner.data.reminder.ReminderNotifier
 import com.taskplanner.data.reminder.ReminderScheduler
 import com.taskplanner.data.tracking.TrackingPhase
@@ -25,7 +26,9 @@ import com.taskplanner.ui.util.WorkTimeFormat
 import com.taskplanner.ui.work.ActiveWorkBarViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
@@ -36,6 +39,15 @@ class MainActivity : AppCompatActivity() {
 
     /** The measurement in progress, wherever the user is. */
     private lateinit var workBar: ActiveWorkBarViewModel
+
+    /**
+     * The exporter, here for one thing: the copies it leaves in the cache for a share.
+     *
+     * A staged report is a file another app was meant to pick up, and a share that was never finished leaves it
+     * behind. The cap that every new export already enforces is the real rule; this is the same sweep for the
+     * start of a session, when a reader may have shared, changed their mind, and closed the app since.
+     */
+    @Inject lateinit var reportExports: ReportExportRepository
 
     /** The last bar rendered, kept only so the row can say which task a tap should open. */
     private var activeBar: ActiveWorkBarViewModel.Bar? = null
@@ -56,6 +68,12 @@ class MainActivity : AppCompatActivity() {
         // lost alarm cost a delay instead of a missing notification.
         ReminderScheduler.ensureSweep(this)
         reminderNotifier.ensureChannel()
+        // Once per start, not once per screen: it is a directory listing and a delete, so it goes to a worker
+        // thread rather than to the one drawing the first frame, and a restored activity does not repeat work the
+        // process already did. The sweep is idempotent by construction — it keeps the newest few copies and
+        // takes the rest — so running it twice is the same answer as running it once, and nothing with a timer
+        // can delete a file a share is still reading.
+        if (savedInstanceState == null) sweepStagedReports()
 
         val navHostFragment = supportFragmentManager
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
@@ -65,6 +83,12 @@ class MainActivity : AppCompatActivity() {
             .setupWithNavController(navController)
 
         setupWorkBar(navController)
+    }
+
+    private fun sweepStagedReports() {
+        lifecycleScope.launch {
+            runCatching { withContext(Dispatchers.IO) { reportExports.pruneStaged() } }
+        }
     }
 
     /**

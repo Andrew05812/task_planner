@@ -116,6 +116,41 @@ class ReportPageFitTest {
         )
     }
 
+    /**
+     * Only the sheets the canvas can actually see are asked to draw.
+     *
+     * A report of twenty pages is two thousand marks, and redrawing all of them on every scroll frame is how a
+     * preview that looks right feels wrong in the hand. The band the canvas is clipped to decides which sheets
+     * are worth drawing, and this is that arithmetic — the same [ReportPageFit] the drawing uses, so the range
+     * cannot disagree with the coordinates it selects.
+     */
+    /**
+     * Only the sheets the canvas can actually see are asked to draw.
+     *
+     * A report of twenty pages is two thousand marks, and redrawing all of them on every scroll frame is how a
+     * preview that looks right feels wrong in the hand. The band the canvas is clipped to decides which sheets
+     * are worth drawing, and this is that arithmetic — the same [ReportPageFit] the drawing uses, so the range
+     * cannot disagree with the coordinates it selects.
+     */
+    @Test
+    fun `the sheets asked for are the ones inside the band being drawn`() {
+        val layout = fit(595f, gap = 5f)
+        // A sheet is 842 * (595/595) = 842 tall here, and the 5 px gap after it makes a pitch of 847: sheet 0
+        // spans 0..841, sheet 1 starts at 847.
+        assertEquals(842f, layout.pageHeight, 0.01f)
+
+        assertEquals(0..0, layout.sheetsCovering(0f, 400f, pageCount = 3))
+        assertEquals(0..1, layout.sheetsCovering(800f, 900f, pageCount = 3))
+        assertEquals(1..2, layout.sheetsCovering(900f, 1_800f, pageCount = 3))
+        assertEquals("a band above the first sheet asks for the first one only",
+            0..0, layout.sheetsCovering(-5_000f, -1f, pageCount = 3))
+        assertEquals("and a band past the last sheet asks for the last one only",
+            2..2, layout.sheetsCovering(4_000f, 5_000f, pageCount = 3))
+        assertEquals("an empty band asks for nothing", 0..-1, layout.sheetsCovering(500f, 500f, pageCount = 3))
+        assertEquals("and a document with no sheets asks for nothing",
+            0..-1, layout.sheetsCovering(0f, 1_000f, pageCount = 0))
+    }
+
     @Test
     fun `an unknown zoom level lays out the page the nearest real level would`() {
         val clamped = fit(800f, zoom = ReportPageFit.clamp(99))
