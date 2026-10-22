@@ -179,11 +179,15 @@ data class ReportState(
     /**
      * Whether a file may be asked for right now.
      *
-     * A report has to be on screen, its pages have to have landed so the reader knows what they are saving, and
-     * no other hand-over may be in flight. A save started against a half-loaded screen would write a file for a
-     * period the reader is about to change.
+     * Two answers have to be on screen for it: the report, which is what the file will hold, and the pages laid
+     * out from that same report, which is what the reader pressed Save looking at. While a layout is running the
+     * second belongs to the report before it, and a file written then would disagree with the screen it came
+     * from. No other hand-over may be in flight either.
+     *
+     * A refresh of the question already on screen leaves both answers where they are, so the two buttons stay
+     * live through it: the document the reader is looking at is still the one they may have.
      */
-    val canExport: Boolean get() = report != null && !isLoading && !saving && !staging
+    val canExport: Boolean get() = report != null && pages != null && !previewing && !saving && !staging
 
     /** How many lines the csv view holds, which is what the "first of these" caption counts against. */
     val csvRowCount: Int get() = csvLines.size
@@ -196,6 +200,44 @@ data class ReportState(
      */
     val canZoomIn: Boolean get() = zoom < ReportPageFit.MAX_ZOOM
     val canZoomOut: Boolean get() = zoom > ReportPageFit.MIN_ZOOM
+
+    /**
+     * Whether the screen is holding sheets rather than rows.
+     *
+     * The zoom belongs to a sheet: sideways scroll, the page gap, a bigger drawing of the same document. While
+     * the rows are on screen there is nothing for those controls to act on, and a control that answers a press
+     * with silence is indistinguishable from one that has broken — so they are put away with the pages they
+     * belong to, and come back when the reader asks for the document again.
+     */
+    val showingPages: Boolean get() = format == ReportFormat.PDF && pages != null
+
+    /**
+     * The lines the csv view prints: the file's own, from the beginning, capped at what a preview may hold.
+     *
+     * Empty while the sheets are on screen, so the fragment shows one of the two and never both at once.
+     */
+    val csvPreview: List<String> get() =
+        if (format == ReportFormat.CSV) csvLines.take(CSV_ROWS_SHOWN) else emptyList()
+
+    /**
+     * Whether the preview is the whole file rather than its beginning.
+     *
+     * The note under the preview has to say which of the two the reader is looking at, and it cannot work that
+     * out from a list that has already been cut — hence the cap and the answer living in the same place.
+     */
+    val csvRowsAllShown: Boolean get() = csvLines.size <= CSV_ROWS_SHOWN
+
+    companion object {
+
+        /**
+         * How many csv lines the screen prints.
+         *
+         * A long report's rows run into the hundreds, and a screen that built all of them into one span of text
+         * would spend longer laying out the preview than reading the report was. The cap is stated here rather
+         * than in the fragment because the note above the rows counts against it.
+         */
+        const val CSV_ROWS_SHOWN = 120
+    }
 }
 
 /**
@@ -370,10 +412,17 @@ class ReportViewModel @Inject constructor(
     /**
      * Re-reads for the screen coming back into view, leaving a message the reader has not seen yet alone.
      *
-     * A report read before the reader went elsewhere is now a report read some minutes ago, and the work done
-     * in the meantime belongs in it.
+     * A report read before the reader went elsewhere is now a report read some minutes ago, and the work done in
+     * the meantime belongs in it.
+     *
+     * Not while a hand-over is in flight. The screen is resumed both when the reader returns and when the picker
+     * hands the file back, so a refresh asked for at that moment would be a second question started against the
+     * very report being written — and the answer to a save is one the screen has to wait for rather than talk
+     * over. The next return asks again.
      */
     fun refresh() {
+        val state = _state.value
+        if (state.saving || state.staging) return
         askAgain()
     }
 
@@ -539,7 +588,20 @@ class ReportViewModel @Inject constructor(
     }
 
     private fun askAgain() {
-        begin()
+        // A refresh is not a new question. The period, the zone and the profile have not moved, so the figures
+        // already on screen are not mislabelled — they are only a few minutes old — and they stay until the newer
+        // ones arrive. Putting them away would blink the document out for a reader who only stepped into the
+        // picker and back, would grey the two hand-overs at the moment they are most likely to be pressed, and
+        // would leave a save handed over to a screen that no longer held the report it was writing.
+        _state.update {
+            it.copy(
+                reading = true,
+                previewing = false,
+                readError = null,
+                previewError = null,
+                emptyMessage = null
+            )
+        }
         question.update { it.copy(attempt = it.attempt + 1) }
     }
 

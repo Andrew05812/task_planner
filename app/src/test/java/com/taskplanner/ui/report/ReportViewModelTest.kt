@@ -40,6 +40,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -471,8 +472,70 @@ class ReportViewModelTest {
     }
 
     @Test
-    fun `a new report is laid out again rather than reused`() {
+    fun `the zoom belongs to the pages and is put away with them`() {
         signIn()
+        openScreen()
+        awaitReport()
+        assertTrue("a sheet on screen has a zoom to offer", viewModel.state.value.showingPages)
+
+        viewModel.zoomIn()
+        viewModel.chooseFormat(ReportFormat.CSV)
+
+        val rows = viewModel.state.value
+        assertFalse("rows have nothing to zoom, and a control that does nothing reads as broken",
+            rows.showingPages)
+
+        viewModel.chooseFormat(ReportFormat.PDF)
+        val back = viewModel.state.value
+        assertTrue("the sheet is offered its zoom again", back.showingPages)
+        assertEquals("at the level the reader left it", 1, back.zoom)
+    }
+
+    @Test
+    fun `a file short enough to show whole is stated as shown whole`() {
+        signIn()
+        openScreen()
+        viewModel.chooseKind(ReportKind.DAY)
+        awaitReport()
+        viewModel.chooseFormat(ReportFormat.CSV)
+
+        val state = viewModel.state.value
+        assertTrue(
+            "a day's file is short enough to show whole, so the caption must not count a part of it: " +
+                "${state.csvRowCount} rows",
+            state.csvRowsAllShown
+        )
+        assertEquals("every line of the file reaches the screen", state.csvLines, state.csvPreview)
+    }
+
+    @Test
+    fun `a longer file is previewed from its beginning and says so`() {
+        val lines = List(ReportState.CSV_ROWS_SHOWN + 7) { "summary,,report,row$it,$it,tasks,period,," }
+
+        val state = ReportState(
+            kind = ReportKind.DAY,
+            period = ReportPeriod.Day(LocalDate.of(2026, 6, 1)),
+            anchor = LocalDate.of(2026, 6, 1),
+            zone = ZoneId.of("UTC"),
+            zoneLabel = "UTC",
+            format = ReportFormat.CSV,
+            followsDeviceZone = true,
+            reading = false,
+            csvLines = lines
+        )
+
+        assertEquals("the preview stops at the cap", ReportState.CSV_ROWS_SHOWN, state.csvPreview.size)
+        assertEquals(lines.take(ReportState.CSV_ROWS_SHOWN), state.csvPreview)
+        assertFalse(
+            "a part of the file is never called the whole of it",
+            state.csvRowsAllShown
+        )
+        assertEquals("while the count the note compares against stays the file's own",
+            lines.size, state.csvRowCount)
+    }
+
+    @Test
+    fun `a new report is laid out again rather than reused`() {        signIn()
         openScreen()
         awaitReport()
         val pages = viewModel.state.value.pages!!
@@ -799,6 +862,83 @@ class ReportViewModelTest {
     }
 
     // -- failures the screen has to survive -----------------------------------------------------------
+
+    // -- coming back to the screen ---------------------------------------------------------------------
+
+    /**
+     * The screen re-reads when the reader returns to it, because what they did in the meantime belongs in the
+     * report. What it must not do is put the document away while asking: a reader who pressed Save, stood in the
+     * picker for a moment and came back would otherwise find the figures gone, the buttons greyed, and — worst —
+     * a save handed over to a screen that no longer had a report to write.
+     */
+    @Test
+    fun `a refresh keeps the document that is on screen while the newer one is read`() {
+        val userId = signIn()
+        seedWork(userId)
+        openScreen()
+        awaitReport()
+        val before = viewModel.state.value.report!!
+
+        viewModel.refresh()
+
+        val during = viewModel.state.value
+        assertSame("the report the reader left is still the report they see", before, during.report)
+        assertNotNull("and its pages are still drawn", during.pages)
+        assertTrue("while the newer figures are on their way", during.isLoading)
+
+        awaitReport()
+        assertNotSame("the refresh really asked again", before, viewModel.state.value.report)
+    }
+
+    @Test
+    fun `the report on screen can still be saved while a refresh is on its way`() {
+        val userId = signIn()
+        seedWork(userId)
+        openScreen()
+        awaitReport()
+        viewModel.chooseFormat(ReportFormat.CSV)
+        val capture = fixture.capture("during-refresh.csv")
+
+        viewModel.refresh()
+        assertTrue("the screen is re-reading", viewModel.state.value.isLoading)
+        assertTrue(
+            "and the document it is re-reading over is still the one to save",
+            viewModel.state.value.canExport
+        )
+
+        viewModel.saveTo(capture.uri)
+        awaitUntil("a finished save") { it.feedback != null }
+
+        val feedback = viewModel.state.value.feedback
+        assertTrue(
+            "a reader who came back and pressed Save got a file, not a complaint: $feedback",
+            feedback is ReportFeedback.Saved
+        )
+        assertTrue("and the file holds the report", csvText(capture.bytes).startsWith("section,"))
+    }
+
+    @Test
+    fun `a refresh asked for during a save waits instead of starting a second question`() {
+        val userId = signIn()
+        seedWork(userId)
+        openScreen()
+        awaitReport()
+        viewModel.chooseFormat(ReportFormat.CSV)
+        val blocked = Uri.parse("content://document/blocked")
+        shadowOf(context.contentResolver).registerOutputStream(blocked, slowStream(fixture.capture("waiting.csv")))
+
+        viewModel.saveTo(blocked)
+        awaitUntil("the save in flight") { it.saving }
+        val beingWritten = viewModel.state.value.report!!
+
+        viewModel.refresh()
+
+        val state = viewModel.state.value
+        assertFalse("no second question while bytes are being written", state.isLoading)
+        assertSame("and the report being written is untouched", beingWritten, state.report)
+        awaitUntil("the save finished") { it.feedback != null }
+        assertTrue("the save came to its own answer", viewModel.state.value.feedback is ReportFeedback.Saved)
+    }
 
     @Test
     fun `a read that fails is a complaint with a retry, not an endless spinner`() {
