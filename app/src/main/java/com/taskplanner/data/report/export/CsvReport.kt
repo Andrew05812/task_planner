@@ -494,7 +494,7 @@ object CsvReport {
     }
 
     private const val CRLF = "\r\n"
-    private const val BYTE_ORDER_MARK = "﻿"
+    private const val BYTE_ORDER_MARK = "\uFEFF"
     private const val APOSTROPHE = "'"
     private val FORMULA_LEADERS = charArrayOf('=', '+', '-', '@')
 }

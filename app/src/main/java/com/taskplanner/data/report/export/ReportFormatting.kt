@@ -45,12 +45,19 @@ object ReportFormatting {
     fun month(date: LocalDate): String =
         DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()).format(date)
 
-    /** An instant, with the time the reader's locale shows and the zone it was resolved in named once. */
+    /**
+     * The moment the report was written, in the locale's own date-and-time style.
+     *
+     * [zone] is the zone the instant is resolved into — the report's, not the device's — so a report of a
+     * Berlin week rebuilt in Tokyo says when it was written in the calendar it was written for. The zone
+     * itself is named by its own line above this one, which is why it does not appear here: a caption that
+     * repeated it twice would be a caption that could disagree with itself.
+     */
     fun instant(context: Context, millis: Long, zone: ZoneId): String {
         val text = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
             .withLocale(Locale.getDefault())
             .format(Instant.ofEpochMilli(millis).atZone(zone))
-        return context.getString(R.string.report_instant_format, text, zone.id)
+        return context.getString(R.string.report_instant_format, text)
     }
 
     fun count(value: Int): String = integer().format(value.toLong())

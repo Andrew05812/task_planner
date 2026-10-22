@@ -94,6 +94,9 @@ class ReportLayoutTest {
         assertTrue(meta, meta.contains("A month: Jun 1, 2026 to Jun 30, 2026"))
         assertTrue(meta, meta.contains("Europe/Berlin"))
         assertTrue(meta, meta.contains("Written"))
+        // Named once, by the line that owns it. A caption that echoed the zone into a second line is two
+        // claims the report would then have to keep in step.
+        assertEquals(1, document.meta.count { it.contains("Europe/Berlin") })
     }
 
     @Test
