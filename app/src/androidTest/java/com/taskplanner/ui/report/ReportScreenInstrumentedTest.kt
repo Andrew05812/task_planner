@@ -39,6 +39,7 @@ import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matchers.startsWith
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -402,9 +403,9 @@ class ReportScreenInstrumentedTest {
             "and Save is offered again once the re-read has landed",
             waitUntil("Save live again") { findView(R.id.reportSaveButton)?.isEnabled == true }
         )
-        assertTrue(
-            "a save nobody finished wrote nothing: this app's cache holds no pdf",
-            staged().none { it.name.endsWith(".pdf") }
+        assertNull(
+            "a save nobody finished is silence, not a promise: ${savedMessage()}",
+            savedMessage()
         )
     }
 

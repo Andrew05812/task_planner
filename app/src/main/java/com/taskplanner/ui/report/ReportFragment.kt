@@ -62,7 +62,16 @@ class ReportFragment : Fragment() {
     private var kindChips: List<Pair<Chip, ReportKind>> = emptyList()
     private var renderedKind: ReportKind? = null
     private var renderedFormat: ReportFormat? = null
-    private var lastMessage: String? = null
+
+    /**
+     * The hand-over this screen has already spoken about, held by identity rather than by its words.
+     *
+     * Two frames of one save carry one message, and printing it twice is noise. But a *second* save that
+     * happens to produce the same sentence — the same period, so the same byte count — is a different answer
+     * to a different press, and a screen that stayed silent about it would leave the reader pointing at a
+     * location, waiting, and hearing nothing about a file that exists.
+     */
+    private var lastSaid: ReportFeedback? = null
 
     /** The opening resume is not a reason to read again: arriving already asks the question. */
     private var opened = false
@@ -91,6 +100,14 @@ class ReportFragment : Fragment() {
     ): View {
         _binding = FragmentReportBinding.inflate(inflater, container, false)
         return binding.root
+    }
+
+    override fun onDestroyView() {
+        // The preview holds a Canvas, a clip rect and a surface with paint caches inside it; keeping the
+        // binding alive past the view would keep all of that reachable from a fragment that has no screen to
+        // draw on. Every other fragment in this app lets go the same way.
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -169,7 +186,7 @@ class ReportFragment : Fragment() {
                     renderFormat(state)
                     renderDocument(state)
                     renderActions(state)
-                    say(message(state))
+                    say(state.feedback, message(state))
                     // The message is spent whether or not it had words in it: a cancelled picker is a feedback
                     // that stays silent, and leaving it on the state would let the next frame say it twice.
                     state.feedback?.let { viewModel.feedbackShown() }
@@ -493,9 +510,9 @@ class ReportFragment : Fragment() {
     }
 
     /** A message once: the same sentence printed on two frames of one save is noise, not emphasis. */
-    private fun say(message: String?) {
-        if (message == null || message == lastMessage) return
-        lastMessage = message
+    private fun say(feedback: ReportFeedback?, message: String?) {
+        if (message == null || feedback === lastSaid) return
+        lastSaid = feedback
         Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG).show()
     }
 

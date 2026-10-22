@@ -323,6 +323,43 @@ class ReportViewModelTest {
         assertEquals(CalendarMath.firstDayOfWeek(), week.firstDay)
     }
 
+    /**
+     * The same question, asked twice, is a question that gets answered twice.
+     *
+     * A day picked inside the month already on screen does not move the period, and the zone row the picker
+     * shows first is the zone already chosen — so both commands can arrive with a question identical to the one
+     * on file. The screen had already put its answer away by then, and nothing downstream noticed: the wait for
+     * a read that would never start is §9's endless spinner, reached by two ordinary presses.
+     */
+    @Test
+    fun `a day inside the month on screen asks the same question again and is answered`() {
+        signIn()
+        openScreen()
+        awaitReport()
+        val first = viewModel.state.value.report!!
+
+        viewModel.chooseDate(LocalDate.of(2026, 6, 17))
+
+        awaitReport()
+        assertNotSame("the report really was read again", first, viewModel.state.value.report)
+        assertEquals("on the period it was already showing", ReportPeriod.Month(YearMonth.of(2026, 6)),
+            viewModel.state.value.period)
+    }
+
+    @Test
+    fun `the zone already chosen asks the same question again and is answered`() {
+        signIn()
+        openScreen()
+        awaitReport()
+        val zone = viewModel.state.value.zone
+
+        viewModel.chooseZone(zone)
+
+        awaitReport()
+        assertEquals(zone, viewModel.state.value.zone)
+        assertFalse("and the screen stopped waiting", viewModel.state.value.isLoading)
+    }
+
     @Test
     fun `a reversed range is refused and the period does not move`() {
         signIn()
@@ -740,6 +777,34 @@ class ReportViewModelTest {
         assertEquals(R.string.report_fail_empty, feedback.message)
     }
 
+    /**
+     * A failure the exporter does not name.
+     *
+     * The writer's own taxonomy covers a location that will not open, a stream that breaks and a document that
+     * came out empty. Anything else — a runtime exception from deeper down — is not one of those four, and the
+     * screen's obligation is the same whatever it is called: stop saying it is writing, and say something.
+     * Leaving `saving` on the state would be an endless spinner beside two dead buttons, which is the failure
+     * §9 refuses in every form.
+     */
+    @Test
+    fun `a save that fails with something nobody predicted still comes to an end`() {
+        signIn()
+        openScreen()
+        awaitReport()
+        viewModel.chooseFormat(ReportFormat.CSV)
+        val uri = Uri.parse("content://document/exploding")
+        shadowOf(context.contentResolver).registerOutputStream(uri, explodingStream())
+
+        viewModel.saveTo(uri)
+        awaitUntil("an answer about the save") { it.feedback != null }
+
+        val state = viewModel.state.value
+        assertFalse("the screen stops claiming it is writing", state.saving)
+        val feedback = state.feedback
+        assertTrue("and complains rather than saying nothing: $feedback", feedback is ReportFeedback.Failed)
+        assertFalse("no success for bytes that never landed", state.canExport && feedback is ReportFeedback.Saved)
+    }
+
     @Test
     fun `a second save while one is running is refused`() {
         signIn()
@@ -1030,6 +1095,17 @@ class ReportViewModelTest {
 
         override fun write(b: ByteArray, off: Int, len: Int) {
             throw IOException("boom")
+        }
+    }
+
+    /** A stream that fails with something outside the exporter's own four answers. */
+    private fun explodingStream(): OutputStream = object : OutputStream() {
+        override fun write(b: Int) {
+            throw IllegalArgumentException("the writer refused in a way nobody predicted")
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            throw IllegalArgumentException("the writer refused in a way nobody predicted")
         }
     }
 

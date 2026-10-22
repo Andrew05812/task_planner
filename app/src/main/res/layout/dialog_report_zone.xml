@@ -41,11 +41,13 @@
         android:visibility="gone"
         tools:visibility="visible" />
 
+    <!-- A height rather than wrap_content: an unbounded list measures every row it is handed before it draws
+         one, and this one is handed several hundred when the search box is empty. A band the reader scrolls
+         costs the dialog the rows it can actually see. -->
     <ListView
         android:id="@+id/reportZoneList"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="240dp"
+        android:layout_height="280dp"
         android:paddingTop="@dimen/spacing_xs"
         android:paddingBottom="@dimen/spacing_xs"
         android:scrollbars="vertical" />

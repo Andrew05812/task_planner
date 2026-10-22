@@ -212,6 +212,21 @@ class CanvasReportSurface : ReportSurface {
         // cursor down by its own height and gap.
     }
 
+    /**
+     * The frame is over, and nothing here may keep hold of the surface it drew on.
+     *
+     * What cost something to rebuild stays — the paints and the scale they were made at, which survive a frame
+     * precisely so that scrolling does not allocate. What does not survive is the canvas and the geometry it was
+     * being scaled against: a view that has finished drawing has no business holding a drawing surface, and a
+     * software-rendered one carries a bitmap with it.
+     */
+    fun endFrame() {
+        canvas = null
+        fit = null
+        drawing = false
+        sheet = -1
+    }
+
     override fun text(x: Float, baseline: Float, sizePt: Float, bold: Boolean, color: Int, text: String) {
         val laid = fit ?: return
         if (text.isEmpty() || !drawing) return
@@ -350,6 +365,7 @@ class ReportPreviewView @JvmOverloads constructor(
         // here decides where a line goes.
         surface.start(canvas, layout, sheets)
         PdfReport.draw(paged, surface)
+        surface.endFrame()
         canvas.restore()
     }
 

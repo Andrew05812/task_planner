@@ -1210,6 +1210,8 @@
     <string name="report_fail_read">The report could not be read.</string>
     <string name="report_fail_preview">The report was read but could not be laid out.</string>
     <string name="report_fail_no_profile">There is no profile to report on. Sign in first.</string>
+    <string name="report_fail_not_ready">The report is not on the screen yet. Wait for it to arrive, then try
+        again.</string>
     <string name="report_fail_unwritable">That place would not open for writing. Choose another one and try again.</string>
     <string name="report_fail_interrupted">The write was interrupted partway, so no file was promised. Try again.</string>
     <string name="report_fail_empty">The file came out with nothing in it. This device could not draw the pages.</string>

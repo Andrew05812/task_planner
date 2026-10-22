@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The five period chips, in the order a reader is asked to choose them.
@@ -455,19 +456,40 @@ class ReportViewModel @Inject constructor(
             return
         }
         val state = _state.value
-        val report = state.report
-        if (report == null) {
-            _state.update { it.copy(feedback = failed(ReportFailure.NO_PROFILE)) }
-            return
-        }
+        val report = state.report ?: return sayNoReportToWrite()
         if (state.saving) return
 
         _state.update {
             it.copy(saving = true, feedback = null, readError = null, previewError = null)
         }
         viewModelScope.launch {
-            val outcome = exportRepository.save(report, uri, state.format)
-            _state.update { it.copy(saving = false, feedback = describe(outcome)) }
+            // Guarded, because the exporter's four answers are not every way this can end. A failure nobody
+            // predicted still has to leave the screen saying it is not writing and saying *something*, since
+            // the alternative is two dead buttons beside a spinner the reader can do nothing about.
+            val answer = guarded { exportRepository.save(report, uri, state.format) }
+            val feedback = answer.fold(
+                { describe(it) },
+                { failed(ReportFailure.WRITE_INTERRUPTED) }
+            )
+            _state.update { it.copy(saving = false, feedback = feedback) }
+        }
+    }
+
+    /**
+     * The complaint for a hand-over asked for while there is no report on screen.
+     *
+     * Two sentences, because they are two situations: nobody signed in, which is what
+     * [ReportFailure.NO_PROFILE] means and what the sign-in string answers, and a reader who *is* signed in and
+     * pressed the button a moment before the answer arrived. Telling that reader to sign in would be simply
+     * untrue, and a screen that says one thing when it means another is the failure §9 refuses.
+     */
+    private fun sayNoReportToWrite() {
+        val nobody = sessionRepository.currentUser.value == null
+        _state.update {
+            it.copy(
+                feedback = if (nobody) failed(ReportFailure.NO_PROFILE)
+                else failed(ReportFailure.NO_PROFILE, R.string.report_fail_not_ready)
+            )
         }
     }
 
@@ -481,11 +503,7 @@ class ReportViewModel @Inject constructor(
      */
     fun share() {
         val state = _state.value
-        val report = state.report
-        if (report == null) {
-            _state.update { it.copy(feedback = failed(ReportFailure.NO_PROFILE)) }
-            return
-        }
+        val report = state.report ?: return sayNoReportToWrite()
         if (state.staging || state.saving) return
 
         _state.update { it.copy(staging = true, feedback = null, share = null) }
@@ -572,6 +590,10 @@ class ReportViewModel @Inject constructor(
         anchor: LocalDate = this.anchor.value,
         followsDeviceZone: Boolean = _state.value.followsDeviceZone
     ) {
+        // Compared against the question that was asked, not against the state this call is about to write: the
+        // state carries the answer's label, and by the time the label has moved every question looks like the
+        // one already on file.
+        val sameQuestion = question.value.period == period && question.value.zone == zone
         _state.update {
             it.copy(
                 kind = kind,
@@ -583,8 +605,18 @@ class ReportViewModel @Inject constructor(
                 feedback = null
             )
         }
+        if (sameQuestion) {
+            // The reader asked the question that is already on screen: the day they picked falls inside the
+            // month being shown, the zone they chose is the one already chosen, the range they applied is the
+            // one already applied. Nothing on screen is mislabelled by that, so it is a refresh and keeps the
+            // answer it has — and it is also the only way this press gets an answer at all, because a question
+            // identical to the one on file moves nothing, a flow that does not move wakes nobody, and the
+            // document that had been put away would never come back.
+            askAgain()
+            return
+        }
         begin()
-        question.update { it.copy(period = period, zone = zone) }
+        question.update { it.copy(period = period, zone = zone, attempt = it.attempt + 1) }
     }
 
     private fun askAgain() {
@@ -621,7 +653,11 @@ class ReportViewModel @Inject constructor(
                 reading = true,
                 previewing = false,
                 emptyMessage = null,
-                readError = null
+                readError = null,
+                // Both complaints are about an answer this question has not given yet, so both go: a layout
+                // that refused the *previous* period has nothing to say about this one, and leaving it up
+                // would put a sentence about a drawn report over a spinner for an undrawn one.
+                previewError = null
             )
         }
     }
@@ -705,8 +741,10 @@ class ReportViewModel @Inject constructor(
      */
     private suspend fun layOut(report: Report, profileName: String?) {
         val built = guarded {
-            val pages = exportRepository.pages(report, profileName)
-            Laid(pages, csvLinesOf(report))
+            withContext(Dispatchers.Default) {
+                val pages = exportRepository.pages(report, profileName)
+                Laid(pages, csvLinesOf(report))
+            }
         }
         // A report that is no longer the one on screen has no business being drawn over the one that is.
         if (_state.value.report !== report) return
