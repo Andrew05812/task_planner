@@ -97,14 +97,28 @@ object CsvReport {
         if (',' == java.text.DecimalFormatSymbols.getInstance(Locale.getDefault()).decimalSeparator) ';' else ','
 
     /**
+     * The file as its writer sees it: one entry per row, each already quoted and joined, with no line ending on
+     * the end of it.
+     *
+     * This exists so a preview of the file and the file itself are the same list. [bytes] joins these with the
+     * line ending, and the report screen shows these — which means a field that carries a line break inside it,
+     * quoted as RFC 4180 says it must be, is one row on the screen and one row in the file. A screen that took
+     * the finished bytes and split them again would have to re-derive where each row ends, and the quoted break
+     * is exactly the case it would get wrong: one row of the report arriving as two lines of the preview, in a
+     * screen whose whole claim is that it is showing what the file holds.
+     */
+    fun lines(report: Report, delimiter: Char = defaultDelimiter()): List<String> =
+        rows(report, delimiter).map { row -> row.joinToString(delimiter.toString()) { quote(it, delimiter) } }
+
+    /**
      * The file as bytes, ready for a stream: UTF-8, the byte-order mark first, RFC 4180 line endings, and a
      * final newline so a reader that appends to the file cannot glue itself onto the last row.
      */
     fun bytes(report: Report, delimiter: Char = defaultDelimiter()): ByteArray {
         val text = StringBuilder()
         text.append(BYTE_ORDER_MARK)
-        rows(report, delimiter).forEach { row ->
-            text.append(row.joinToString(delimiter.toString()) { quote(it, delimiter) })
+        lines(report, delimiter).forEach { line ->
+            text.append(line)
             text.append(CRLF)
         }
         return text.toString().toByteArray(Charsets.UTF_8)

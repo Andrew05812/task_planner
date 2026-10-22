@@ -99,6 +99,12 @@
         <action
             android:id="@+id/action_profile_to_insights"
             app:destination="@id/navigation_insights" />
+        <!-- A report is the account's own document for the same reason the readings are: it is counted from this
+             profile's rows, it names this profile on its first page, and another account has no use for it. It is
+             reached from the account rather than from a column of the task list. -->
+        <action
+            android:id="@+id/action_profile_to_reports"
+            app:destination="@id/navigation_reports" />
     </fragment>
 
     <fragment
@@ -275,5 +281,15 @@
             android:defaultValue="-1L"
             app:argType="long" />
     </fragment>
+
+    <!-- A period, counted in a timezone the reader chooses, as the document the exporter writes. Its own screen
+         because a report is neither a list of tasks nor a dashboard: it is something a reader takes away with
+         them, and the choices that go into it — which days, which calendar, which file — have to stay visible
+         while the document is being read. -->
+    <fragment
+        android:id="@+id/navigation_reports"
+        android:name="com.taskplanner.ui.report.ReportFragment"
+        android:label="@string/title_reports"
+        tools:layout="@layout/fragment_report" />
 
 </navigation> 

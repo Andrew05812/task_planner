@@ -60,13 +60,18 @@ class PdfReportInstrumentedTest {
         assertTrue("the document writer produced no bytes", bytes > 0L)
         assertEquals("%PDF-", String(written, 0, 5, Charsets.ISO_8859_1))
         assertTrue("a PDF ends with its trailer marker", String(written, Charsets.ISO_8859_1).trimEnd().endsWith("%%EOF"))
-        // The font question in one assertion: a PDF that carries a FontFile2 entry has the glyph outlines
-        // inside the file, which is what makes "Привет, ё" readable on a machine that has no Roboto.
+        // The font question, stated the way the platform actually answers it. This assertion used to look for
+        // `/FontFile2` alone and failed on a handset that had every glyph it needed: `Skia/PDF` carries outlines
+        // as Type3 programs and keeps its dictionaries in compressed streams, so the marker is looked for in both
+        // places and under both names. The corrected claim, and why the old one was wrong, is in
+        // [ReportPdfInspection]; [ReportPdfBytesInstrumentedTest] is where the text layer and the ink are checked.
+        val letterforms = ReportPdfInspection.inspect(written)
         assertTrue(
-            "no embedded font program: the Cyrillic would depend on whatever the reader has",
-            String(written, Charsets.ISO_8859_1).contains("/FontFile2")
+            "the file carries no letterforms of its own: the Cyrillic would depend on whatever the reader has " +
+                "(bytes=$bytes inspection=$letterforms)",
+            letterforms.carriesItsOwnLetterforms
         )
-        println("PDF pages=${paged.pageCount} bytes=$bytes layoutAndDrawMillis=$millis")
+        println("PDF pages=${paged.pageCount} bytes=$bytes layoutAndDrawMillis=$millis letterforms=$letterforms")
     }
 
     @Test

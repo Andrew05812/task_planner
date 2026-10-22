@@ -115,13 +115,27 @@
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     app:layout_constraintTop_toBottomOf="@id/openHabitsButton" />
 
+                <!-- The report is the document the account takes away with it, so it is opened from the account
+                     like the aims, the routines and the readings are: it is counted from this profile's rows and
+                     names it on its first page. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/openReportsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/title_reports"
+                    app:icon="@drawable/ic_report"
+                    app:iconGravity="textStart"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    app:layout_constraintTop_toBottomOf="@id/openInsightsButton" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/deleteProfileButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/action_delete_profile"
-                    app:layout_constraintTop_toBottomOf="@id/openInsightsButton"
+                    app:layout_constraintTop_toBottomOf="@id/openReportsButton"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><!-- The two days a chosen range runs between. Both ends are asked for rather
+     than one plus a length, because that is how a reader thinks about a range they already have in mind, and
+     because the ends are what [ReportPeriod.range] refuses to reorder: showing both makes a reversed pair
+     visible before it is applied. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/spacing_normal"
+    android:paddingTop="@dimen/spacing_small"
+    android:paddingEnd="@dimen/spacing_normal">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/reportRangeFrom"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        tools:text="From Jun 1, 2026" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/reportRangeTo"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_small"
+        tools:text="To Jun 30, 2026" />
+
+</LinearLayout>

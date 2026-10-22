@@ -1165,6 +1165,59 @@
         <item quantity="other">%1$d achievements were earned in these days</item>
     </plurals>
 
-    <!-- The sentences a saving or a share answers with are Part 5's, with the screen that has to choose
-         between them; declared here they would only be words nothing points at. -->
+    <!-- The screen that asks for a report, chooses the zone it is counted in and decides what to do with it.
+         The figures and the pages come from underneath; everything here is a question or an answer about the
+         hand-over of a file, which is the only thing the screen owns. -->
+    <string name="title_reports">Reports</string>
+    <string name="report_dates_button">Change the days</string>
+    <string name="report_range_title">From the first day to the last</string>
+    <string name="report_days_between">%1$s: %2$s – %3$s</string>
+    <string name="report_zone_title">Counted in</string>
+    <string name="report_zone_button">Choose a timezone</string>
+    <string name="report_zone_device">The device\'s own timezone</string>
+    <string name="report_zone_search_hint">Search the list</string>
+
+    <string name="report_action_save">Save</string>
+    <string name="report_action_share">Share</string>
+    <string name="report_format_pdf">PDF</string>
+    <string name="report_format_csv">CSV</string>
+    <string name="report_zoom_in">Make the pages bigger</string>
+    <string name="report_zoom_out">Make the pages smaller</string>
+    <string name="report_zone_device_note">%1$s · the device\'s own timezone</string>
+    <string name="report_range_from_format">From %1$s</string>
+    <string name="report_range_to_format">To %1$s</string>
+    <string name="report_apply">Show the report</string>
+    <plurals name="report_pages_count">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+    <plurals name="report_csv_all_rows">
+        <item quantity="one">One row, shown here as it stands in the file.</item>
+        <item quantity="other">%d rows, all of them shown here and in the file.</item>
+    </plurals>
+    <string name="report_csv_shown_format">The first %1$d of %2$d rows are shown. The file holds them all.</string>
+    <plurals name="report_preview_description">
+        <item quantity="one">The report as %d page of a document. Its figures are in the screen beside it and in
+            the file this screen saves.</item>
+        <item quantity="other">The report as %d pages of a document. Its figures are in the screen beside it and
+            in the file this screen saves.</item>
+    </plurals>
+
+    <string name="report_empty_no_profile">Sign in to a profile to see the report it holds.</string>
+    <string name="report_period_rejected">The last day cannot fall before the first. The report stayed on the period you had.</string>
+    <string name="report_year_out_of_range">That year is outside the calendar this app can count. The report stayed on the period you had.</string>
+
+    <string name="report_fail_read">The report could not be read.</string>
+    <string name="report_fail_preview">The report was read but could not be laid out.</string>
+    <string name="report_fail_no_profile">There is no profile to report on. Sign in first.</string>
+    <string name="report_fail_not_ready">The report is not on the screen yet. Wait for it to arrive, then try
+        again.</string>
+    <string name="report_fail_unwritable">That place would not open for writing. Choose another one and try again.</string>
+    <string name="report_fail_interrupted">The write was interrupted partway, so no file was promised. Try again.</string>
+    <string name="report_fail_empty">The file came out with nothing in it. This device could not draw the pages.</string>
+    <string name="report_fail_staging">The copy for sharing could not be written. Nothing was handed over.</string>
+    <string name="report_fail_handover">The copy was written, but this app could not hand it to another one.</string>
+
+    <string name="report_bytes_format">%1$s bytes</string>
+    <string name="report_saved_format">Written to the file you chose — %1$s.</string>
 </resources>

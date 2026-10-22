@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <!-- A page with a folded corner and three lines of figures on it: the report is a document, and this is the
+         only icon in the app that has to say so. -->
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:fillColor="#00000000"
+        android:pathData="M6,3 H14 L18,7 V21 H6 Z" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:fillColor="#00000000"
+        android:pathData="M14,3 V7 H18" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:fillColor="#00000000"
+        android:pathData="M8.5,11 H15.5 M8.5,14 H15.5 M8.5,17 H12.5" />
+</vector>

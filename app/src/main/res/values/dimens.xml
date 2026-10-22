@@ -32,4 +32,9 @@
          not a chart: the weeks ask for room to scroll instead. -->
     <dimen name="chart_heatmap_cell_minimum">9dp</dimen>
     <dimen name="chart_legend_chip_size">12dp</dimen>
-</resources> 
+
+    <!-- The report preview puts one sheet of paper under another; below this the gap reads as a mistake in the
+         document rather than as the space between two pages. -->
+    <dimen name="report_page_gap">12dp</dimen>
+</resources>
+ 

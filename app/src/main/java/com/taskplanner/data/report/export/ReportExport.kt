@@ -267,14 +267,30 @@ class ReportExportRepository @Inject constructor(
             .forEach { it.delete() }
     }
 
-    private suspend fun paginate(report: Report): PagedReport {
+    /**
+     * The pages this exporter would write for [report], laid out for a screen to show before anything is saved.
+     *
+     * Here rather than in the screen because this is the object that already builds them: [save] and [stage] lay
+     * the document out through the same two calls, and a preview assembled by a second caller would be a second
+     * layout that could drift from the file beside it — the one thing a reader has no way to notice.
+     *
+     * [profileName] is given, not looked up. The screen knows which account the figures it is showing were read
+     * for; the exporter, working from the current session at the moment of the write, is the one place that could
+     * print a different profile's name above them.
+     */
+    suspend fun pages(report: Report, profileName: String?): PagedReport =
+        withContext(Dispatchers.Default) { layout(report, profileName) }
+
+    private fun layout(report: Report, profileName: String?): PagedReport {
         val palette = ReportLayout.palette(context)
         return ReportPagination.paginate(
-            document = ReportLayout.build(context, report, profileName(), palette),
+            document = ReportLayout.build(context, report, profileName, palette),
             measurer = PaintReportMeasurer(),
             palette = palette
         )
     }
+
+    private suspend fun paginate(report: Report): PagedReport = layout(report, profileName())
 
     /**
      * The profile the report is about, for the line under its title.

@@ -68,6 +68,15 @@ waking up to an empty list.
   categories, topics, repeat patterns and lead times. Import previews what is in the file first, then
   either merges by stable uuid or replaces, keeping a safety copy in app-private storage before a
   replace, and puts the restored patterns and alarms back to work once the write has committed.
+- **Reports**: the whole account for a chosen period, as a document. Opened from **Profile → Reports**, it
+  asks one question at a time — a day, a week, a month, a year or a span of your own choosing — counted in
+  the device's own timezone or in any zone you pick from a searchable list, each stated with the offset that
+  zone is standing at today. The answer is previewed as the two files it can become: the pages of the PDF,
+  at three sizes, or the rows of the csv exactly as the writer quotes them. **Save** opens the system's own
+  document picker and says nothing about the result until the bytes are on their way; **Share** stages a copy
+  this app can grant over and hands it to the app you chose — a hand-over, never a promise of delivery. No
+  storage permission is asked for anywhere. The figures are the report repository's, unchanged: the screen
+  counts nothing, sums nothing and fills in nothing (see `docs/REPORT_EXPORT.md`).
 - **Accounts**: Google Credential Manager + Firebase Auth. The Firebase UID, never the e-mail, is
   the identity anchor. Signing out ends the session and deletes no data. A local profile can be
   moved onto a Google account explicitly, from Settings.
@@ -319,11 +328,30 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 | `CalendarDragTest` | the clip a drag carries: one task id in, nothing else accepted out |
 | `TaskDetailLayoutTest` | the editor inflates under the app's theme, keeps the recurrence detail collapsed, and lays out inside 320dp |
 | `TasksViewModelTest` | grouping, filters, search, sorting, selection, lifecycle, per-profile isolation |
+| `ReportPeriodTest` | the five periods' boundaries, the week's first day, a window counted across a DST jump, a reversed range refused |
+| `ReportRepositoryTest` | the ten sections read through one window and one zone, standing figures kept apart from period ones, per-profile isolation, the same question answered the same way twice |
+| `ReportWindowBenchmarkTest` | the report's reads against a real account's tables: which index the planner takes, and the ceiling a month may cost |
+| `ReportLayoutTest`, `ReportPaginationTest` | a report turned into blocks and the blocks into A4 sheets: a heading never orphaned, a table continuing with its titles again, a row taller than a page sliced rather than lost |
+| `ReportTextTest` | the sentences: durations, counts, percentages, and what an absent figure is allowed to say |
+| `CsvReportTest` | quoting, the delimiter, the formula marker, and the preview's lines being the file's own bytes |
+| `PdfReportTest` | the drawer's calls against a surface that records them, and the empty file the JVM's writer produces |
+| `ReportExportTest` | the four ways a save can end, the names offered, the staged copy and the cap that keeps the cache small |
+| `ReportExportBenchmarkTest` | a year and the fullest account this app can hold, measured through layout, paging and writing |
+| `ReportViewModelTest` | the screen's whole state machine: period, zone, format, zoom, profile isolation, a refresh that keeps its answer, and both hand-overs |
+| `ReportPageFitTest`, `ReportPreviewViewTest` | the sheet's geometry at each level, the band a frame draws, and a view that measures the document rather than a screen's idea of it |
+| `ReportScreenInstrumentedTest` *(device)* | the screen opened from the account on a handset: the pages drawn, the period and zone changed, the zoom round trip, the rows unwrapped, the picker and the Sharesheet reached, a finished save announcing the bytes it wrote — every step photographed |
+| `ReportPdfBytesInstrumentedTest`, `PdfReportInstrumentedTest` *(device)* | a real pdf's bytes from the platform's own writer: pages, ink on each of them, letterforms and a text layer carried inside the file |
 | `RoomHarnessSmokeTest` | the test harness itself really executes DAO SQL and emits flows |
+
 
 `app/src/androidTest` holds the on-device checks (real database location, process restart, Espresso
 screen smoke tests). They are compile-checked in CI; running them needs a device, which CI does not
 provide.
+
+The report stage's two device suites have been run — on a full Android 15 emulator (API 35, x86_64,
+`swiftshader`), not on a physical handset. What they established there is written beside each claim in
+`docs/REPORT_EXPORT.md`, and what an emulator cannot stand in for — a manufacturer's Documents UI, a
+third-party PDF viewer, a real finger on a real screen — is still open.
 
 ## Documentation
 
@@ -331,6 +359,8 @@ provide.
 - `docs/BACKUP_AND_SYNC.md` — the backup file format, import rules and how sync resolves conflicts.
 - `docs/TIME_TRACKING.md` — the tracking schema, the clock rules, the aggregation contract and what the
   history screen is allowed to read.
+- `docs/REPORT_EXPORT.md` — the report screen's path, the csv and pdf the same figures become, where a
+  file goes, what has been measured on a device and what has not.
 
 ## Known limitations
 
@@ -350,7 +380,9 @@ provide.
   copy that is not newer than the local one is ignored. Two devices that edited the same field
   concurrently are not merged field by field — the row that still has local edits is pushed last and
   wins upstream.
-- On-device (Espresso) tests compile but have not been executed as part of this work.
+- On-device (Espresso) tests other than the report screen's have not been executed as part of this work;
+  they compile, and CI compiles them. The report screen's two suites have been run on an Android 15
+  emulator, which is a device but not a handset — see the paragraph above the *Documentation* list.
 - The calendar's performance numbers come from the JVM's SQLite engine (`org.xerial sqlite-jdbc`, the
   same family Android ships) running against a database built from Room's exported schema. They cover
   the window query and the aggregation, which is where the cost the brief worries about actually sits;
