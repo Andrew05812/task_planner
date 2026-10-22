@@ -199,6 +199,9 @@
     <string name="google_account_missing">Not signed in</string>
     <string name="sign_in_canceled">Sign-in canceled</string>
     <string name="sign_in_failed">Sign-in failed: %1$s</string>
+    <string name="sign_in_email_taken">That Google address already belongs to a profile on this device, so
+        nothing was changed. Open that profile and use "Move local data into this account" to attach it to your
+        Google account.</string>
     <string name="migrate_local_data_done">Local data is now attached to your account</string>
     <string name="error_generic">Operation failed</string>
     <string name="backup_scope_hint">Backup contains tasks, categories, topics, statuses, dates and ordering. It never contains passwords or sign-in tokens.</string>

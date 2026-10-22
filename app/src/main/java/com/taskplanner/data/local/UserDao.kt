@@ -24,7 +24,22 @@ interface UserDao {
     @Query("SELECT EXISTS(SELECT 1 FROM users WHERE email = :email AND id != :excludeUserId)")
     suspend fun isEmailTaken(email: String, excludeUserId: Long = 0): Int
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    /**
+     * Inserts a profile, and refuses an address that another profile already owns.
+     *
+     * It never replaces one. `users.email` is unique, thirteen tables hang off a user `ON DELETE CASCADE`
+     * (topics, recurrence series, goals with their links and value history, habits with their checks and check
+     * history, tracking and work sessions, interval corrections, insights, achievements), and `tasks`,
+     * `categories` and `reminders` carry a `user_id` with no foreign key at all. SQLite resolves
+     * `INSERT OR REPLACE` on a unique-index conflict by deleting the conflicting row first, so `REPLACE` here
+     * was a profile deletion wearing an insert's clothes: the owner vanished, everything that cascaded went
+     * with it, and its tasks were left owned by nobody — ready to be adopted by whoever is handed that row id
+     * next, since `autoGenerate` reuses the highest freed id rather than reserving a new one.
+     *
+     * `ABORT` lets the index do the checking. The statement fails, nothing is removed, and the caller answers
+     * about the conflict instead of causing one.
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertUser(user: User): Long
 
     @Update
