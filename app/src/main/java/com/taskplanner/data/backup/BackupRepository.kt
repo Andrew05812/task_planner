@@ -241,7 +241,10 @@ class BackupRepository @Inject constructor(
                 } else {
                     localIds[incoming.id] = existing.id
                     if (incoming.updatedAt > existing.updatedAt) {
-                        categoryDao.insertCategory(
+                        // An update, not a re-insert: `tasks.category_id` is `ON DELETE SET NULL`, so writing
+                        // the same id back through an insert deletes the category first and every task in it
+                        // silently loses its category.
+                        categoryDao.updateCategory(
                             incoming.forUser(userId).copy(
                                 id = existing.id,
                                 uuid = existing.uuid,
