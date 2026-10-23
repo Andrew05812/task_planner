@@ -205,9 +205,11 @@ value edited into `colors.xml` without the table is reported as drift.
 | `ink_error` | `#C0402F` | `#F0836F` | overdue, destructive |
 | `ink_on_error` | `#FFFFFF` | `#2B0F0A` | text on a filled destructive control |
 
-Plus eight solid pill backgrounds, four per theme, chosen numerically rather than by alpha so each is a
-checked pair: light `#EEF3F2` / `#EEF4F1` / `#F6F2ED` / `#FAF0EE` and their dark counterparts
-`#26322E` / `#283128` / `#362C21` / `#382723`.
+Plus ten solid pill backgrounds, five per theme, chosen numerically rather than by alpha so each is a
+checked pair: light `#EEF3F2` / `#EEF4F1` / `#F6F2ED` / `#FAF0EE` / `#F1EDE7` and their dark counterparts
+`#26322E` / `#283128` / `#362C21` / `#382723` / `#26231F`. The fifth is the neutral pill a `TODO` row
+carries — `ink_text_secondary` on it measures 5.05 light and 5.71 dark, which is why it is a token and not
+`ink_surface_variant` reached for in a layout.
 
 > Corrections from review and from recomputation: `ink_text_tertiary` was `#7A716A`, which measures 4.09:1
 > on the variant surface it was assigned to — below the spec's own AA bar. `ink_warning` was `#9A6320`,
@@ -229,9 +231,16 @@ base M3 themes assign them (an M3 elevated card reads `colorSurfaceContainerLow`
 `?android:attr/textColorSecondary` and hard-coded hex in layouts is replaced by a role.
 
 Existing chart and report colours keep fixed values — a printed report must not change with the device
-theme, which is already documented in `colors.xml`. The chart ramps are re-anchored to the new accent;
-that is a deliberate change and it does break the colour assertions named in §8, which are updated rather
-than left failing.
+theme, which is already documented in `colors.xml`. The chart ramps are re-anchored to the new accent, and
+that re-anchoring happens in the remaining-screens stage with the dashboard, **not** in the token stage:
+`StatisticsLayoutTest` asserts an invariant over the ramp rather than a value — five heat levels sharing one
+RGB with strictly rising alpha, and `chart_heatmap_none` distinct from `chart_heatmap_1` — so the ramp moves
+in the commit that moves the charts' tests, where a break is attributable. The pill rule from revision 2
+(solid tokens, not alpha tints) applies to pills and not to the heat ramp, whose whole point is one hue at
+five densities.
+
+> Correction, revision 6: revision 5's §3.1 implied the ramp moved with the tokens, and §9's stage list put
+> the re-anchoring in both places at once. The plan resolves it in favour of the dashboard stage.
 
 ### 3.2 Contrast, measured
 
@@ -299,18 +308,38 @@ through Robolectric, so a drift that skips the script fails CI. Both are re-run 
 System font only — no font resource, no APK growth, no licensing question. Identity comes from size,
 weight and tracking.
 
-| Style | Size / line | Weight | Tracking | Used for |
-|---|---|---|---|---|
-| `display` | 28 / 34 | 400 | 0 | screen title |
-| `headline` | 22 / 28 | 500 | 0 | group and section headers |
-| `title` | 16 / 22 | 500 | 0 | card title, row title |
-| `body` | 15 / 22 | 400 | 0 | descriptions |
-| `meta` | 13 / 20 | 400 | 0.1 | dates, category, counts |
-| `label` | 11 / 14 | 500 | 0.4, all caps | status pills, section labels |
-| `metric` | 20 / 24 | 500 | 0 | dashboard and report numbers |
+Tracking is written twice because Android's `android:letterSpacing` is not in dp or sp — it is a multiple
+of the font size. A value of `0.4` there means 40 % of an em, which would add half a character of space
+between every letter; the figures below give the intent in sp and the attribute value in em, and a style
+that sets the sp number into the em slot produces text that no longer fits the widths §4.1 budgets.
 
-> Correction from review: revision 1 asked for tabular figures on `metric`. Roboto's `tnum` is not
-> reliably reachable through `android:fontFeatureSettings`, so the promise would have silently done
+| Style | Size / line | Weight | Tracking (sp · em) | Case | Used for |
+|---|---|---|---|---|---|
+| `display` | 28 / 34 | 400 | 0 | normal | screen title |
+| `headline` | 22 / 28 | 500 | 0 | normal | group and section headers |
+| `title` | 16 / 22 | 500 | 0 | normal | card title, row title |
+| `body` | 15 / 22 | 400 | 0 | normal | descriptions |
+| `meta` | 13 / 20 | 400 | 0.25 · 0.019 | normal | dates, category, counts |
+| `caption` | 12 / 16 | 400 | 0.25 · 0.021 | normal | timestamps and figures under `meta` |
+| `pill` | 11 / 14 | 500 | 0.5 · 0.045 | normal | status pills |
+| `label` | 11 / 14 | 500 | 0.5 · 0.045 | all caps | section labels, nav labels |
+| `metric` | 20 / 24 | 500 | 0 | normal | dashboard and report numbers |
+
+The pill and the label share a size and differ only in case, and that split exists for a reason: an
+all-caps "IN PROGRESS" in a 48dp-tall card row measures about 105dp, which is a quarter of the narrowest
+text column §4.1 budgets, while the same words in normal case measure about 82dp and leave the column's
+rest to the date. Section labels stay in caps because they are not competing with anything.
+
+> Corrections, revision 6. Two errors in revision 5's table, both caught in review. The tracking column was
+> written as bare numbers (0.1, 0.4), which `android:letterSpacing` reads as em — the label role would have
+> been set 0.4 em, roughly 4.4dp of extra space per glyph at 11sp, and every width in §4.1 derived from this
+> table would have been wrong by a third. And `caption` is a new eighth role: `StatisticsLayoutTest` requires
+> the five legacy attributes the dashboard asks for — `textAppearanceHeadline5`, `Subtitle1`, `Body1`,
+> `Body2`, `Caption` — to resolve to **five different** styles, which seven roles cannot supply without two
+> of the five collapsing into one. That test is a real constraint on this table, not a nuisance.
+
+> Correction from review, retained: revision 1 asked for tabular figures on `metric`. Roboto's `tnum` is
+> not reliably reachable through `android:fontFeatureSettings`, so the promise would have silently done
 > nothing. Dropped. Where a column of numbers must align, alignment is achieved with fixed-width
 > containers, which is testable, rather than with an OpenType feature that may not apply.
 
@@ -366,18 +395,21 @@ List: topic group headers in `headline` with count and collapse control, exactly
 Card. Three lines inside one card, the same structure at every width, because a card that rearranges
 itself between 320dp and 393dp is two cards to maintain and one of them is never tested:
 
-- **line A** — the title in `title` size, taking the remaining width and truncating at two lines, then the
-  icons for what is present: repeat, pending reminders;
+- **line A** — the 8dp category dot first (the dot carries the colour, never the word, which is what makes
+  the pale category greens in the audit screenshot illegible today), then the title in `title` size taking
+  the remaining width and truncating at two lines, then the icons for what is present: repeat, pending
+  reminders;
 - **line B** — the status pill, then the relative due date ("Today 18:00", "3 days late", "No due date"),
-  then the 8dp category dot with the name in `ink_text_tertiary` after it — the dot carries the colour, not
-  the word, which is what makes the pale category greens in the audit screenshot legible;
+  then the category **name** in `ink_text_tertiary`, shown only when it has room to say something;
 - **line C** — the measured-time figures on the left when there are any, and the action cluster
   right-aligned: the work control, the one lifecycle button the status calls for, and the completion
   toggle, which is the only one with emphasis.
 
-The drag handle and the priority rule share one 52dp column at the card's left edge — the 4dp rule drawn
-at x=0 and the 48dp handle centred beside it — because reserving 64dp for the two of them is 31 % of the
-narrowest text column this design has to survive.
+The drag handle and the priority rule share the card's left column: 48dp handle, 4dp gap, 4dp rule, 8dp gap
+— **64dp** before any text begins. The three lines are children of one `ConstraintLayout`, not three nested
+containers, because `TaskCardWorkTest` asserts that the work line is a *sibling* of the title inside the
+card, and wrapping each line in its own layout would break that assertion for a reason that has nothing to
+do with what it is testing.
 
 > Why the actions moved off line A. At 320dp the card's text column is 208dp wide (§4.1 below), and three
 > 48dp buttons are 144dp of it. Beside the title that leaves 64dp — four or five characters — so a
@@ -427,7 +459,7 @@ The priority rule is 4dp wide, inset from the card border, `ink_error` for HIGH,
 and **no rule at all** for LOW, so absence reads as "not urgent" rather than as a colour nobody learned.
 
 **The card at 320dp, as a budget.** 320dp is the narrowest width the stage is verified at. Every fixed cost
-below comes from §3.4's own scale, so the arithmetic is checkable against the tokens and not against a
+below comes from §3.3 and §3.4, so the arithmetic is checkable against the tokens and not against a
 screenshot:
 
 | cost | dp | running |
@@ -435,47 +467,48 @@ screenshot:
 | row | 320 | 320 |
 | card margins, 8 each side | −16 | 304 |
 | card padding, 16 each side | −32 | 272 |
-| drag handle 48 + 4 gap, sharing its column with the 4dp rule + 8 gap | −52 | **208 = the text column** |
+| drag handle 48 + 4 + priority rule 4 + 8 | −64 | **208 = the text column** |
 
-| line | fixed parts | dp left |
+| line | fixed parts | dp left for the flexible element |
 |---|---|---|
-| A | title (flex) · 8 gap · repeat 16 · 4 · reminder 16 | title **164** |
-| B | pill 102 · 8 · due 70 · 8 · dot 8 · 4 · category (flex) | category **8 → hidden** |
-| C | work figures (flex) · 8 · three 48dp buttons = 144 | figures **56** |
+| A | dot 8 · 4 · **title** · 8 · repeat 16 · 4 · reminder 16 | title **152** |
+| B | pill 82 · 8 · due 84 · 8 · **category name** | name **26 → hidden** |
+| C | **work figures** · 8 · three 48dp buttons = 144 | figures **56** |
 
-The pill is 102dp because "IN PROGRESS" at the `label` role (11sp, 500, 0.4 tracking, all caps) measures
-86dp of glyphs plus 8dp of padding on each side. The due date's 70dp is the widest legal string at `meta`
-13sp. Both are allowances; the test measures the real numbers and fails if they are exceeded.
+The pill's 82dp is "In progress" in the `pill` role — 11 glyphs at roughly 6dp, 5.5dp of tracking, 8dp of
+padding on each side; the same words in the `label` role's all caps would measure about 105dp and take half
+the column. The due date's 84dp is the widest string the card can be given: "Oct 25, 2026" at `meta` 13sp,
+which is what a task further out than tomorrow still shows. Both are allowances, and the test measures the
+real numbers rather than trusting them.
 
-Line B does not close at 320dp, and that is the one consequence worth stating before the code is written
-rather than discovering it in a screenshot: pill + due + dot already take 204 of the 208, so a category
-**name** cannot also be legible there. The rule the design adopts, in the order elements are allowed to
-give way:
+Line B does not close at 320dp, and that is worth stating before the code is written rather than
+discovering it in a screenshot: pill + due date + their gaps take 182 of the 208, so a category **name**
+has 26dp left, which is three characters and an ellipsis. The rule the design adopts, in the order elements
+are allowed to give way:
 
-- the category name is drawn **only when at least 48dp remain for it** — four characters of the longest
-  word in the strings file, which is the point at which a name says something. Below that the dot stands
-  alone, in the category's own colour. The name is not truncated to two letters and an apostrophe;
+- the category name is drawn **only when at least 48dp remain for it** — four characters of the longest word
+  in the strings file, which is where a name starts to say something. Below that the dot on line A stands
+  alone, in the category's own colour; the name is never truncated to two letters and an apostrophe;
+- at 360dp the column is 248dp and the name gets 66dp; at 393dp it gets 99dp. One threshold in one place is
+  what keeps this a single layout rather than three;
 - the due date and the status word never drop, never truncate and never shrink. They are the fact the list
   is sorted by and the state the list is filtered on;
-- the title truncates at two lines with an ellipsis and never below 128dp — the budget leaves 164;
+- the title truncates at two lines with an ellipsis and never below 128dp — the budget leaves 152;
 - icons never scale below their 48dp touch box; if the measured-time figures and the action cluster cannot
   both fit line C, the figures collapse to their icon and the buttons stay;
 - the drag handle is the first thing to go, and it goes only when the sort order is not `MANUAL` — already
   its behaviour, restated so the 320dp screenshots are read against a rule;
-- nothing overlaps: every line is a horizontal chain, and the title's right edge is provably at or before
-  the first icon's left edge;
+- nothing overlaps: every line is a horizontal chain inside one `ConstraintLayout`, and the title's right
+  edge is provably at or before the first icon's left edge;
 - no text-bearing view gets a fixed width a long word can exceed, and the row stays `match_parent`, so
   horizontal overflow is structurally impossible.
-
-At 360dp the text column is 248dp and the category name gets its 48dp back; at 393dp it gets 81dp. The
-threshold is one number in one place, and the same rule at every width is why one layout serves all three.
 
 Being inside the screen is not the bar. The test inflates a row at 320dp with a 120-character title, the
 longest category name in the strings file, a due date, a repeat series, two pending reminders and a running
 stretch — the worst legal row — and then asserts that what is *legible* is the part that matters: the due
 date and the status word are drawn at their full measured width, the title is at least 128dp wide, every
-visible button is at least 48dp on both axes, no two visible views overlap, line B is one line tall, and
-the category name is either given at least 48dp or replaced by its dot — never squeezed between those.
+visible button is at least 48dp on both axes, no two visible views overlap, line B is one line tall, the
+category dot is on screen, and the category name is either given at least 48dp or not shown at all.
 
 ### 4.2 Profile
 
@@ -502,9 +535,15 @@ Same fields, same validation, same `RepeatPreset` behaviour — regrouped into l
 Measured work. Repeat stays collapsed until opened.
 
 Field errors stay inline on the offending field. Save and Cancel become a sticky footer. Delete keeps its
-confirmation. The ids that `TaskDetailLayoutTest` and `WorkAdjustmentUiTest` bind to
-(`repeat_preset`, `repeat_interval_layout`, `repeat_interval`, `work_start_input`, `work_end_input`,
-`task_title`) are preserved or migrated in the same commit as the tests, never silently.
+confirmation. The ids the editor's tests bind to — `repeat_preset`, `repeat_interval_layout`,
+`repeat_interval`, `task_title` in `fragment_task_detail.xml`, and `workStartInput`, `workEndInput`,
+`workReasonInput`, `workPrevious` in the `dialog_work_interval.xml` the adjustment form opens — are
+preserved or migrated in the same commit as the tests, never silently.
+
+> Correction, revision 6: revision 5 listed `work_start_input` and `work_end_input`, which exist nowhere in
+> the repository, and put them in the editor layout when the adjustment dialog holds them. The names are
+> camelCase and they live one file over; a plan that preserved the wrong ids would have "passed" while
+> breaking the dialog.
 
 ### 4.4 Navigation and the remaining screens
 
@@ -580,6 +619,19 @@ child order and `ColorStateList.defaultColor`), `DashboardRendererTest` and `Cha
 `R.dimen.chart_*` and `R.color.chart_heatmap_*`, which §3.1 deliberately re-anchors),
 `WorkloadPanelTest` (asserts `R.color.priority_*`), `InsightsLayoutTest` (inflates the empty state that
 §3.5 turns into a composition).
+
+Three of those tests are not colour assertions but constraints the redesign has to satisfy, and each one
+falsifies something revision 5 asserted:
+
+- `StatisticsLayoutTest` asks the theme to resolve `textAppearanceHeadline5`, `Subtitle1`, `Body1`, `Body2`
+  and `Caption` and requires **five different** styles back. Seven roles cannot serve five attributes and
+  the legacy `Headline5` at all, which is why §3.3 has eight roles now and why the theme maps each of those
+  five attributes to a distinct one.
+- `TaskCardWorkTest` asserts the work line is a sibling of the title inside the card. The three-line card is
+  therefore three chains inside one `ConstraintLayout`, not three nested layouts — a structure change that
+  would otherwise break a test about something else entirely.
+- `fragment_report.xml` reads `@dimen/text_caption`. The legacy `text_*` dimensions are not unused, as
+  revision 5's audit claimed, so they are retired with the report screen and not with the token stage.
 
 New coverage at the fragment level, following the pattern PR #21 introduced: Tasks renders topic groups,
 the three statuses, the computed overdue treatment, long titles, the empty state and a fully closed swipe

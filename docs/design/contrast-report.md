@@ -1,6 +1,6 @@
 ## dark theme
 
-Tokens: `dark` — 19 declared.
+Tokens: `dark` — 20 declared.
 
 | pair | foreground | background | ratio | bar | verdict |
 |---|---|---|---|---|---|
@@ -42,6 +42,7 @@ Tokens: `dark` — 19 declared.
 | text on its pill | ink_accent #6FD3B8 | pill_accent #26322E | 7.40 | 4.5 | pass |
 | text on its pill | ink_error #F0836F | pill_error #382723 | 5.52 | 4.5 | pass |
 | text on its pill | ink_success #7CC98F | pill_success #283128 | 6.80 | 4.5 | pass |
+| text on its pill | ink_text_secondary #A39B92 | pill_neutral #26231F | 5.71 | 4.5 | pass |
 | text on its pill | ink_warning #E0A95F | pill_warning #362C21 | 6.50 | 4.5 | pass |
 
 Minimum over the surfaces each colour is allowed on (dark) — the shipped figures:
@@ -71,7 +72,7 @@ Not gated (dark) — decorative, outside WCAG 1.4.11:
 
 ## light theme
 
-Tokens: `light` — 19 declared.
+Tokens: `light` — 20 declared.
 
 | pair | foreground | background | ratio | bar | verdict |
 |---|---|---|---|---|---|
@@ -113,6 +114,7 @@ Tokens: `light` — 19 declared.
 | text on its pill | ink_accent #2F6F5E | pill_accent #EEF3F2 | 5.27 | 4.5 | pass |
 | text on its pill | ink_error #C0402F | pill_error #FAF0EE | 4.67 | 4.5 | pass |
 | text on its pill | ink_success #2F7A4B | pill_success #EEF4F1 | 4.70 | 4.5 | pass |
+| text on its pill | ink_text_secondary #6B635C | pill_neutral #F1EDE7 | 5.05 | 4.5 | pass |
 | text on its pill | ink_warning #8F5B18 | pill_warning #F6F2ED | 5.12 | 4.5 | pass |
 
 Minimum over the surfaces each colour is allowed on (light) — the shipped figures:
