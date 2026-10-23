@@ -55,6 +55,13 @@ enum class RepeatPreset(
 
     fun intervalOf(field: Int): Int = if (editableInterval) field.coerceAtLeast(1) else fixedInterval
 
+    /**
+     * The words the editor puts under the interval field, resolved through the caller's resources so
+     * the preset stays a value and never a `Context`. [string] is `Fragment::getString`, and the id it
+     * is handed is a `@StringRes`.
+     */
+    fun intervalHint(string: (Int) -> String): String = string(unitLabelRes)
+
     companion object {
         /** The preset a stored series shows as when the editor opens it. */
         fun of(rule: RecurrenceRule?): RepeatPreset = when {
