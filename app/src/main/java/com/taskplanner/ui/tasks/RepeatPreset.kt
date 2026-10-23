@@ -64,7 +64,9 @@ enum class RepeatPreset(
      * Whether the user types the interval themselves.
      *
      * Derived rather than declared, because it is not a second fact: a preset asks for a number
-     * exactly when it has a unit to say what the number counts.
+     * exactly when it has a unit to say what the number counts. That coupling is deliberate, and it is
+     * why a preset cannot be both — giving one a [unitLabelRes] makes it editable and stops using
+     * [fixedInterval], which is the behaviour the counted presets have always had.
      */
     val editableInterval: Boolean get() = unitLabelRes != null
 

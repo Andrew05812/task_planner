@@ -41,9 +41,10 @@ import org.junit.runner.RunWith
  * Everything else in `src/test` stops one step short of the screen: it inflates the layout, or it drives
  * the view model, and neither of those executes `onViewCreated`. That gap is how a crash survived five
  * stages. [TaskDetailFragment.setupRepeat] resolved the repeat unit's label for the preset the editor
- * opens with, and the presets that repeat at a fixed rate have no unit to name — an absence that used to
- * be spelled `0`, which is not a string resource. `getString(0)` threw, and the editor came down before
- * a single field was drawn: pressing `+` was enough to crash the app, and so was opening a saved task.
+ * opens with, and the six presets that repeat at a fixed rate — `NONE`, `DAILY`, `WEEKLY`, `BIWEEKLY`,
+ * `MONTHLY`, `YEARLY` — have no unit to name, an absence that used to be spelled `0`, which is not a
+ * string resource. `getString(0)` threw, and the editor came down before a single field was drawn:
+ * pressing `+` was enough to crash the app, and so was opening a saved task.
  *
  * Three things are checked here, all of them on the screen itself:
  *
@@ -54,7 +55,8 @@ import org.junit.runner.RunWith
  *  * the interval field appears exactly where the preset asks for a number and carries the words naming
  *    what the number counts, and stays away — naming nothing — where it does not.
  *
- * The wording is asserted alongside the survival on purpose: a "fix" that stopped the exception by never
+ * The wording is asserted alongside the survival on purpose, and against the resource the preset was
+ * given rather than against the same helper the screen used: a "fix" that stopped the exception by never
  * labelling anything would keep the app alive and fail here.
  *
  * The presets reach the screen through stored series rather than through the picker because the picker's
@@ -76,19 +78,26 @@ class TaskEditorInstrumentedTest {
     /** The task written for each preset, so the editor can be opened the way a saved task opens. */
     private val taskOf = mutableMapOf<RepeatPreset, Long>()
 
+    /** The profile this class seeded, remembered so `@After` can take it and everything under it away. */
+    private var seededUserId: Long = 0
+
     @Before
     fun signInAProfileWithOneTaskPerPreset() {
         val database = openDatabase()
         runBlocking {
             // The address is this test's own: users.email is unique, and a second test signing in under
             // the same one would take the first test's profile — and its tasks — away with it.
-            val userId = database.userDao().insertUser(
+            seededUserId = database.userDao().insertUser(
                 User(email = "editor-${System.nanoTime()}@example.test", name = "Анна Ковалёва")
             )
-            database.userDao().setCurrentUser(database.userDao().getUserById(userId)!!)
+            database.userDao().setCurrentUser(database.userDao().getUserById(seededUserId)!!)
             RepeatPreset.values().forEach { preset ->
+                // The series belongs to the profile seeded above, not to whoever happens to own rowid 1:
+                // recurrences cascade from users, and an open rule on another profile is a series that
+                // profile's start-up will catch up and materialise. The uuid carries the profile id
+                // because every method re-seeds and `tasks` has a unique (series_uuid, occurrence_at).
                 val seriesUuid = preset.unit?.let {
-                    val rule = ruleFor(preset)
+                    val rule = ruleFor(preset, seededUserId)
                     database.recurrenceDao().upsertRule(rule)
                     rule.uuid
                 }
@@ -97,7 +106,7 @@ class TaskEditorInstrumentedTest {
                         uuid = UUID.randomUUID().toString(),
                         title = "Редактор: ${preset.name}",
                         description = "",
-                        userId = userId,
+                        userId = seededUserId,
                         seriesUuid = seriesUuid,
                         occurrenceAt = seriesUuid?.let { ANCHOR }
                     )
@@ -109,8 +118,15 @@ class TaskEditorInstrumentedTest {
     }
 
     @After
-    fun closeTheApp() {
+    fun closeTheAppAndTakeTheSeedAway() {
         scenario.close()
+        // Deleting the profile is enough: thirteen tables answer it with a cascade, so the tasks and the
+        // series go with it and the next suite does not inherit a device holding a stranger's schedule.
+        val database = openDatabase()
+        runBlocking {
+            database.userDao().getUserById(seededUserId)?.let { database.userDao().deleteUser(it) }
+        }
+        database.close()
     }
 
     /** The press that used to crash the app: a reader wanting a new task. */
@@ -154,9 +170,10 @@ class TaskEditorInstrumentedTest {
     /**
      * Every preset, rendered by the real Fragment.
      *
-     * The four fixed-rate ones are what crashed; the counted ones are here so the labels that do exist
-     * are seen to exist on the screen rather than only in a JVM; `MONTHLY` and `WEEKDAYS` because each
-     * hides the interval field while showing a different one.
+     * The six fixed-rate ones are what crashed — `NONE`, `DAILY`, `WEEKLY`, `BIWEEKLY`, `MONTHLY` and
+     * `YEARLY` — and the counted ones are here so the labels that do exist are seen to exist on the
+     * screen rather than only in a JVM. `MONTHLY` and `WEEKDAYS` each hide or show a different field
+     * beside the interval, so they are checked for that too.
      */
     @Test
     fun theEditorOpensForAStoredSeriesOfEveryKind() {
@@ -175,6 +192,19 @@ class TaskEditorInstrumentedTest {
                 intervalLayout().visibility == View.VISIBLE
             )
             assertEquals("${preset.name}: the hint under the field", preset.hint(), intervalHint())
+            if (preset.editableInterval) {
+                assertTrue(
+                    "${preset.name}: a field the reader can type in is never left unnamed",
+                    intervalHint().isNotBlank()
+                )
+                assertEquals(
+                    "${preset.name}: the field carries the unit resource this preset was given",
+                    context.getString(preset.unitLabelRes!!),
+                    intervalHint()
+                )
+            } else {
+                assertEquals("${preset.name}: a fixed rate names no unit", "", intervalHint())
+            }
             if (preset.unit != null) {
                 assertEquals(
                     "${preset.name}: the number the series runs on",
@@ -242,9 +272,9 @@ class TaskEditorInstrumentedTest {
      * the interval the preset stands for, the weekday block if it asks for one, the day of the month if
      * it does. `RepeatPreset.of` is then what decides which hint the screen resolves.
      */
-    private fun ruleFor(preset: RepeatPreset): RecurrenceRule = RecurrenceRule(
-        uuid = "series-${preset.name.lowercase()}",
-        userId = 1,
+    private fun ruleFor(preset: RepeatPreset, userId: Long): RecurrenceRule = RecurrenceRule(
+        uuid = "series-${preset.name.lowercase()}-$userId",
+        userId = userId,
         unit = preset.unit ?: RepeatUnit.DAY,
         interval = preset.intervalOf(STORED_INTERVAL),
         weekDays = if (preset.showsWeekDays) "1,3" else "",
@@ -289,26 +319,43 @@ class TaskEditorInstrumentedTest {
 
     private fun text(id: Int): String = (view(id) as? TextView)?.text?.toString().orEmpty()
 
+    /**
+     * Waiting for the screen, carrying away what it threw if it never answered.
+     *
+     * The condition is polled through `runCatching` because the thing being waited for is a view that may
+     * not exist yet — but the failure mode this file exists for is a crash, so the last exception is kept
+     * and reported as the cause. Without that, a screen that dies on the first frame reads as a timeout
+     * and sends the next reader looking for a slow device.
+     */
     private fun waitUntil(description: String, condition: () -> Boolean): Boolean {
         val deadline = System.currentTimeMillis() + TIMEOUT_MILLIS
+        var lastFailure: Throwable? = null
         while (System.currentTimeMillis() < deadline) {
-            if (runCatching(condition).getOrDefault(false)) return true
+            val outcome = runCatching(condition)
+            if (outcome.isSuccess) return true
+            lastFailure = outcome.exceptionOrNull()
             Thread.sleep(50)
         }
         throw AssertionError(
             "$description did not happen within $TIMEOUT_MILLIS ms. state=${scenario.state} " +
                 "preset='${text(R.id.repeat_preset)}' hint='${runCatching { intervalHint() }.getOrNull()}' " +
                 "interval='${text(R.id.repeat_interval)}' " +
-                "field=${runCatching { intervalLayout().visibility }.getOrNull()}"
+                "field=${runCatching { intervalLayout().visibility }.getOrNull()}",
+            lastFailure
         )
     }
 
+    /**
+     * A screen of this app, photographed where adb can reach it afterwards.
+     *
+     * A refused screenshot fails the run rather than passing quietly: the photographs are cited as
+     * evidence in the README, and a green suite that wrote none would make that claim untrue.
+     */
     private fun shot(name: String) {
         runCatching { instrumentation.waitForIdleSync() }
         val bitmap = runCatching { instrumentation.uiAutomation.takeScreenshot() }.getOrNull()
         if (bitmap == null) {
-            System.err.println("screenshot $name was refused by the platform")
-            return
+            throw AssertionError("the platform refused the screenshot '$name' this run cites as evidence")
         }
         val directory = File(
             context.getExternalFilesDir(null) ?: Environment.getExternalStorageDirectory(), "shots"

@@ -115,7 +115,8 @@ start-up, a profile switch, a sync pass and the background worker can all call i
   hotfix, not a style choice: the absence of a unit label used to be spelled `0`, the editor resolved
   it unconditionally, and `getString(0)` threw `Resources$NotFoundException` on the screen's first
   line. Pressing `+`, or opening any saved task, crashed the app — for `Does not repeat`, `Every day`,
-  `Every week`, `Every two weeks` and `Every year`, which is most of the list. Nothing caught it for
+  `Every week`, `Every two weeks`, `Every month` and `Every year`, which is six of the eleven presets.
+  Nothing caught it for
   five stages because no test had ever run a Fragment: the suite inflates layouts and drives view models,
   and `onViewCreated` was outside both. `TaskEditorInstrumentedTest` is the first test in this project
   to open a real screen, and it opens the editor three ways — the `+` button, a task with no series, and
@@ -372,7 +373,7 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 screen smoke tests). They are compile-checked in CI; running them needs a device, which CI does not
 provide.
 
-The report stage's two device suites and the task editor's have been run — on a full Android 15
+The report stage's device suites and the task editor's have been run — on a full Android 15
 emulator (API 35, x86_64, `swiftshader`), not on a physical handset. What they established there is
 written beside each claim in `docs/REPORT_EXPORT.md` and in the recurring-tasks section above, and what
 an emulator cannot stand in for — a manufacturer's Documents UI, a third-party PDF viewer, a real finger
