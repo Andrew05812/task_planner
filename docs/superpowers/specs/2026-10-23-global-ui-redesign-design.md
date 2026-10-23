@@ -366,16 +366,18 @@ List: topic group headers in `headline` with count and collapse control, exactly
 Card. Three lines inside one card, the same structure at every width, because a card that rearranges
 itself between 320dp and 393dp is two cards to maintain and one of them is never tested:
 
-- **line A** — the drag handle, then the 4dp priority rule inset from the border (`ink_error` for HIGH,
-  `ink_warning` for MEDIUM, **no rule** for LOW, so absence reads as "not urgent"), then the title in
-  `title` size taking the remaining width and truncating at two lines, then the status pill at the end;
-- **line B** — one `meta` line: relative due date ("Today 18:00", "3 days late", "No due date"), an 8dp
-  category dot with the name in `ink_text_tertiary` — the dot carries the colour, not the word, which is
-  what makes the pale category greens in the audit screenshot legible — then icons only for what is
-  present: repeat, pending reminders;
+- **line A** — the title in `title` size, taking the remaining width and truncating at two lines, then the
+  icons for what is present: repeat, pending reminders;
+- **line B** — the status pill, then the relative due date ("Today 18:00", "3 days late", "No due date"),
+  then the 8dp category dot with the name in `ink_text_tertiary` after it — the dot carries the colour, not
+  the word, which is what makes the pale category greens in the audit screenshot legible;
 - **line C** — the measured-time figures on the left when there are any, and the action cluster
   right-aligned: the work control, the one lifecycle button the status calls for, and the completion
   toggle, which is the only one with emphasis.
+
+The drag handle and the priority rule share one 52dp column at the card's left edge — the 4dp rule drawn
+at x=0 and the 48dp handle centred beside it — because reserving 64dp for the two of them is 31 % of the
+narrowest text column this design has to survive.
 
 > Why the actions moved off line A. At 320dp the card's text column is 208dp wide (§4.1 below), and three
 > 48dp buttons are 144dp of it. Beside the title that leaves 64dp — four or five characters — so a
@@ -421,35 +423,59 @@ the list.
 Selection mode replaces the header with `.SelectionBar`. Swipe reveals edit and delete over a
 surface-coloured panel, now correctly hidden when closed (§2.1).
 
-**The card at 320dp.** 320dp is the narrowest width the stage is verified at, and the card is designed
-against a budget rather than a hope: 320dp of row, minus 16dp of card margins, minus 32dp of card padding,
-minus 52dp of drag handle and 12dp of priority rule, leaves **208dp** of text column. Line C's three
-buttons take 144dp of it and leave 64dp for the measured-time figures; line A's pill takes 69dp and leaves
-131dp for the title; line B's fixed parts take 140dp and leave 68dp for the category name. The plan's Task
-12 states that arithmetic in full, and its test measures the inflated row against it.
+The priority rule is 4dp wide, inset from the card border, `ink_error` for HIGH, `ink_warning` for MEDIUM
+and **no rule at all** for LOW, so absence reads as "not urgent" rather than as a colour nobody learned.
 
-The rules, in the order the elements are allowed to give way:
+**The card at 320dp, as a budget.** 320dp is the narrowest width the stage is verified at. Every fixed cost
+below comes from §3.4's own scale, so the arithmetic is checkable against the tokens and not against a
+screenshot:
 
-- nothing overlaps: every line is a horizontal chain, and the title's right edge is provably at or before
-  the pill's left edge;
-- the title truncates at two lines with an ellipsis and never shrinks below one line's height;
-- the `meta` line drops its tail before it wraps — category name first, then the reminder count, then the
-  repeat icon. The due date and the status word are the two things that never drop, because they are the
-  facts the list is sorted by and the state the list is filtered on. Wrapping is forbidden: a second meta
-  line pushes a four-line card past what the list can hold at that width;
+| cost | dp | running |
+|---|---|---|
+| row | 320 | 320 |
+| card margins, 8 each side | −16 | 304 |
+| card padding, 16 each side | −32 | 272 |
+| drag handle 48 + 4 gap, sharing its column with the 4dp rule + 8 gap | −52 | **208 = the text column** |
+
+| line | fixed parts | dp left |
+|---|---|---|
+| A | title (flex) · 8 gap · repeat 16 · 4 · reminder 16 | title **164** |
+| B | pill 102 · 8 · due 70 · 8 · dot 8 · 4 · category (flex) | category **8 → hidden** |
+| C | work figures (flex) · 8 · three 48dp buttons = 144 | figures **56** |
+
+The pill is 102dp because "IN PROGRESS" at the `label` role (11sp, 500, 0.4 tracking, all caps) measures
+86dp of glyphs plus 8dp of padding on each side. The due date's 70dp is the widest legal string at `meta`
+13sp. Both are allowances; the test measures the real numbers and fails if they are exceeded.
+
+Line B does not close at 320dp, and that is the one consequence worth stating before the code is written
+rather than discovering it in a screenshot: pill + due + dot already take 204 of the 208, so a category
+**name** cannot also be legible there. The rule the design adopts, in the order elements are allowed to
+give way:
+
+- the category name is drawn **only when at least 48dp remain for it** — four characters of the longest
+  word in the strings file, which is the point at which a name says something. Below that the dot stands
+  alone, in the category's own colour. The name is not truncated to two letters and an apostrophe;
+- the due date and the status word never drop, never truncate and never shrink. They are the fact the list
+  is sorted by and the state the list is filtered on;
+- the title truncates at two lines with an ellipsis and never below 128dp — the budget leaves 164;
 - icons never scale below their 48dp touch box; if the measured-time figures and the action cluster cannot
   both fit line C, the figures collapse to their icon and the buttons stay;
 - the drag handle is the first thing to go, and it goes only when the sort order is not `MANUAL` — already
   its behaviour, restated so the 320dp screenshots are read against a rule;
+- nothing overlaps: every line is a horizontal chain, and the title's right edge is provably at or before
+  the first icon's left edge;
 - no text-bearing view gets a fixed width a long word can exceed, and the row stays `match_parent`, so
   horizontal overflow is structurally impossible.
+
+At 360dp the text column is 248dp and the category name gets its 48dp back; at 393dp it gets 81dp. The
+threshold is one number in one place, and the same rule at every width is why one layout serves all three.
 
 Being inside the screen is not the bar. The test inflates a row at 320dp with a 120-character title, the
 longest category name in the strings file, a due date, a repeat series, two pending reminders and a running
 stretch — the worst legal row — and then asserts that what is *legible* is the part that matters: the due
 date and the status word are drawn at their full measured width, the title is at least 128dp wide, every
-visible button is at least 48dp on both axes, no two visible views overlap, and the category name is the
-one element allowed to have given way.
+visible button is at least 48dp on both axes, no two visible views overlap, line B is one line tall, and
+the category name is either given at least 48dp or replaced by its dot — never squeezed between those.
 
 ### 4.2 Profile
 
