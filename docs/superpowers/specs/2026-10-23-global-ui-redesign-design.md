@@ -5,7 +5,7 @@ Branch: `feat/global-ui-redesign` (one branch, one PR, staged commits)
 Baseline: `master` = `origin/master` = `c2c767d1b80db756c1a3517eecc083de598ff7af` (merge of PR #21)
 Direction approved by the user: **Ink & Accent**.
 
-Revision 7. The header and the body had drifted apart — revisions 4 through 7 were each committed with
+Revision 8. The header and the body had drifted apart — revisions 4 through 7 were each committed with
 their own correction notes in place while this line still read "revision 3", which is what an audit of the
 downloaded copy caught. The history, in order:
 
@@ -352,8 +352,10 @@ rest to the date. Section labels stay in caps because they are not competing wit
 > table would have been wrong by a third. And `caption` is a new role, taking the scale to nine:
 > `StatisticsLayoutTest` requires
 > the five legacy attributes the dashboard asks for — `textAppearanceHeadline5`, `Subtitle1`, `Body1`,
-> `Body2`, `Caption` — to resolve to **five different** styles, which seven roles cannot supply without two
-> of the five collapsing into one. That test is a real constraint on this table, not a nuisance.
+> `Body2`, `Caption` — to resolve to **five different** styles, and the mapping written in revision 5 sent
+> `Body1` and `Body2` to the same `body` style, collapsing two of the five into one. Seven roles were
+> enough; the mapping was the defect, not the count. `caption` was still added, because a 12sp normal-case
+> role is what `textAppearanceCaption`'s users need and `label`'s caps are not it.
 
 > Correction from review, retained: revision 1 asked for tabular figures on `metric`. Roboto's `tnum` is
 > not reliably reachable through `android:fontFeatureSettings`, so the promise would have silently done
@@ -615,7 +617,9 @@ wrong leaves a silently stale row, which is worse than one extra bind. Group col
 Pressed states use the standard ripple.
 
 Durations come from one place. The system's animator scale is honoured, but not by the route this
-specification first assumed: `androidx.recyclerview` 1.3.2 contains no check of
+specification first assumed: `androidx.recyclerview` **1.1.0** — the version this APK actually resolves,
+per `app/build/outputs/logs/manifest-merger-debug-report.txt:92`; the module's catalog declares 1.3.2 but no
+build file asks for it — contains no check of
 `ValueAnimator.getDurationScale()` — verified against the artifact in the Gradle cache — so at scale 0 the
 framework's animators merely finish instantly while the work of building and starting them still happens.
 Hand-written motion therefore reads the scale and skips outright; that is the version of "respected" which
@@ -666,7 +670,7 @@ carrying seventeen `@Test` methods** — `TaskEditorInstrumentedTest` 4, `TasksS
 All of them stay enabled and unweakened. Tests that assert on ids, view structure, dimensions or colours
 and therefore move with this redesign are updated in the same commit as the layout they cover, and the
 assertion is rewritten to the new truth rather than deleted:
-`TaskCardWorkTest`, `TaskCardReminderTest`, `TaskDetailLayoutTest`, `WorkAdjustmentUiTest`,
+`TaskDetailLayoutTest`, `WorkAdjustmentUiTest`,
 `TasksScreenInstrumentedTest`, `TaskEditorInstrumentedTest`, `ReportScreenInstrumentedTest`,
 `CalendarScreenTest` (asserts `currentTextColor` and dp measurements), `StatisticsLayoutTest` (asserts
 child order and `ColorStateList.defaultColor`), `DashboardRendererTest` and `ChartViewDrawTest` (assert

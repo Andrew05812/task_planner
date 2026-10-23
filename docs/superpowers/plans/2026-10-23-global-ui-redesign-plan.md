@@ -350,7 +350,7 @@ Modified files, by stage:
 | S4 | `res/layout/item_task.xml`, `res/layout/item_group_header.xml`, `main/.../ui/tasks/TasksAdapter.kt`, `main/.../ui/tasks/TasksViewModel.kt` (constructor param only), `main/.../ui/tasks/TasksFragment.kt`, `res/values/dimens.xml`, `res/values/strings.xml`; tests `TaskCardWorkTest`, `TaskCardReminderTest`, `TasksScreenInstrumentedTest` |
 | S5 | `res/layout/fragment_profile.xml`, `main/.../ui/profile/ProfileFragment.kt`, `res/values/strings.xml` |
 | S6 | `res/layout/fragment_task_detail.xml`, `main/.../ui/tasks/TaskDetailFragment.kt`; tests `TaskDetailLayoutTest`, `util/WorkAdjustmentUiTest`, `TaskEditorInstrumentedTest` |
-| S7 | `res/layout/activity_main.xml`, `res/values/themes.xml`, `res/menu/bottom_nav_menu.xml` — and
+| S7 | `res/layout/activity_main.xml`, `res/menu/bottom_nav_menu.xml` — not `res/values/themes.xml`, which 1.5 already owns, and not
      **not** `MainActivity.kt`, which an earlier draft listed with no step that touched it: the bar's
      label mode, surface and indicator are all XML and theme, and the nav controller already drives it |
 | S8 | the layouts and adapters listed per sub-stage in §Stage 8 |
@@ -795,6 +795,8 @@ changes the colour.
 > M2-compat names first (`textAppearanceSubtitle2`, `textAppearanceButton`) since those are the least
 > likely to exist in an M3 parent.
 
+- [ ] **1.5a Skeleton first.** Before 1.6a can run, the nine `TextAppearance.TaskPlanner.*` styles and the `ink_*` colours must exist as *names*: Kotlin resolves `R.style.TextAppearance_TaskPlanner_Display` at compile time, so a test naming a style nobody has declared is a build failure, not a red test. 1.5a adds `type.xml` with the nine styles declared at their parent Material sizes and no tracking or colour overrides, and commits it alone. 1.6a then writes the failing assertions against names that resolve.
+
 - [ ] **1.6 Type scale** in new `res/values/type.xml`: nine `TextAppearance.TaskPlanner.*` styles over the
   M3 parents — display, headline, title, body, meta, caption, pill, label, metric — each carrying size,
   `android:lineHeight` (with `tools:targetApi="28"`), weight, `android:letterSpacing` **in ems** at the
@@ -837,15 +839,15 @@ class TypeScaleTest {
         TextView(themed, null, 0, styleRes).textSize / themed.resources.displayMetrics.scaledDensity
 
     @Test fun `each role is the size the scale says it is`() {
-        assertEquals(28f, sizeSp(R.style.TextAppearance_TaskPlanner_Display), 1f)
-        assertEquals(22f, sizeSp(R.style.TextAppearance_TaskPlanner_Headline), 1f)
-        assertEquals(16f, sizeSp(R.style.TextAppearance_TaskPlanner_Title), 1f)
-        assertEquals(15f, sizeSp(R.style.TextAppearance_TaskPlanner_Body), 1f)
-        assertEquals(13f, sizeSp(R.style.TextAppearance_TaskPlanner_Meta), 1f)
-        assertEquals(12f, sizeSp(R.style.TextAppearance_TaskPlanner_Caption), 1f)
-        assertEquals(11f, sizeSp(R.style.TextAppearance_TaskPlanner_Pill), 1f)
-        assertEquals(11f, sizeSp(R.style.TextAppearance_TaskPlanner_Label), 1f)
-        assertEquals(20f, sizeSp(R.style.TextAppearance_TaskPlanner_Metric), 1f)
+        assertEquals(28f, sizeSp(R.style.TextAppearance_TaskPlanner_Display), 0.2f)
+        assertEquals(22f, sizeSp(R.style.TextAppearance_TaskPlanner_Headline), 0.2f)
+        assertEquals(16f, sizeSp(R.style.TextAppearance_TaskPlanner_Title), 0.2f)
+        assertEquals(15f, sizeSp(R.style.TextAppearance_TaskPlanner_Body), 0.2f)
+        assertEquals(13f, sizeSp(R.style.TextAppearance_TaskPlanner_Meta), 0.2f)
+        assertEquals(12f, sizeSp(R.style.TextAppearance_TaskPlanner_Caption), 0.2f)
+        assertEquals(11f, sizeSp(R.style.TextAppearance_TaskPlanner_Pill), 0.2f)
+        assertEquals(11f, sizeSp(R.style.TextAppearance_TaskPlanner_Label), 0.2f)
+        assertEquals(20f, sizeSp(R.style.TextAppearance_TaskPlanner_Metric), 0.2f)
     }
 
     /**
@@ -889,7 +891,7 @@ class TypeScaleTest {
 
     @Test fun `a layout asking for the old body2 attribute gets the meta role`() {
         val tv = TextView(themed, null, 0, com.google.android.material.R.attr.textAppearanceBody2)
-        assertEquals(sizeSp(R.style.TextAppearance_TaskPlanner_Meta), sizeSpOf(tv), 1f)
+        assertEquals(sizeSp(R.style.TextAppearance_TaskPlanner_Meta), sizeSpOf(tv), 0.2f)
     }
 
     private fun sizeSpOf(tv: TextView): Float =
@@ -1106,6 +1108,23 @@ commit, a passing test could not say which of them removed the strip.
 ```kotlin
 package com.taskplanner.ui.tasks
 
+import android.content.Context
+import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.R
+import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskStatus
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+
 /**
  * The panel is behind the card, and the user is never meant to see it until the card moves.
  *
@@ -1272,6 +1291,8 @@ reorder each photographed working; the red column is gone from `s2-tasks-closed.
 Purpose: give Tasks a header that exists, so search, sort, new group, archive and work history become
 reachable. Depends on: S2. Tools: `frontend-design`, `android-jetpack`.
 
+- [ ] **3.0 Skeleton first, for the same reason as 1.5a.** Declare `header_screen.xml` with its six ids, `filterRail`/`categoryScroll` retained, and `menu_tasks_sort.xml` / `menu_tasks_overflow.xml`, in one commit with no behaviour wired. Only then can 3.1's tests be *run* and be seen failing on the missing wiring rather than on `unresolved reference: tasksHeader`.
+
 - [ ] **3.1 Write the failing tests first.** Two of them:
 
 `app/src/test/java/com/taskplanner/ui/tasks/TasksHeaderLayoutTest.kt` — inflates `fragment_tasks.xml` under
@@ -1306,9 +1327,15 @@ matchers on this device:
         val field = root.findViewById<EditText>(R.id.headerSearchField)
         field.visibility = View.VISIBLE
         field.setText("обзор")
-        onView(withId(R.id.recyclerView)).check(matches(isDisplayed()))
     }
-    // then assert the row count dropped to the one seeded task whose title contains it
+    // The assertion is the row count, not the list being on screen: a search that filters nothing
+    // still leaves a displayed RecyclerView, which is exactly the false pass to avoid. Two tasks are
+    // seeded, one of which contains the query.
+    awaitUntil("the filtered list to settle") {
+        scenario.onActivity { activity -> rowCountOf(activity) == 1 }
+    }
+    onView(withText("Написать обзор литературы")).check(matches(isDisplayed()))
+    onView(withText("Сформировать цель ВКР")).check(matches(not(isDisplayed())))
 }
 ```
 
@@ -1334,7 +1361,7 @@ matchers on this device:
      * no other entry point in the app at all.
      */
     private fun setupHeader() {
-        binding.headerSearchButton.setOnClickListener {
+        binding.tasksHeader.headerSearchButton.setOnClickListener {
             binding.tasksHeader.headerSearchField.visibility = View.VISIBLE
             binding.tasksHeader.headerSearchField.requestFocus()
         }
@@ -1379,7 +1406,8 @@ Split `menu_tasks.xml` into `menu_tasks_sort.xml` (the four entries) and `menu_t
 group, archive, work history), delete the `SearchView` item, and **remove `setupMenu()`** — leaving the
 `MenuProvider` in place would keep two paths to the same actions, one of them invisible.
 
-- [ ] **3.5 Bind the title and count** in `setupObservers()`: `binding.headerTitle.setText(R.string.title_tasks)`
+- [ ] **3.5 Bind the title and count** in `setupObservers()`: `binding.tasksHeader.headerTitle
+  .setText(R.string.title_tasks)`
   and `binding.tasksHeader.headerSubtitle.text =
   getString(R.string.tasks_open_count_format, state.activeTaskCount)`.
   `activeTaskCount` already exists on `TasksState` and is shown nowhere today.
@@ -1393,9 +1421,15 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
   the `Filters · n` chip. Write its test first:
 
 ```kotlin
-    @Test fun `the rail is one scrolling row with three status chips and no fourth`() {
-        val rail = view.findViewById<HorizontalScrollView>(R.id.filterRail)
-        assertNotNull("one scrolling rail, not a scrolling row above a wrapping one", rail)
+    @Test fun `the categories scroll, the statuses do not, and there is no fourth chip`() {
+        val rail = view.findViewById<HorizontalScrollView>(R.id.categoryScroll)
+        assertNotNull("the category row still scrolls", rail)
+        // Containment is the assertion. A two-block non-scrolling rail would pass a test that only
+        // checks an id exists; this one fails, because the category group must sit inside the scroll.
+        assertSame("chipGroupCategory is the scroller's child",
+            rail, view.findViewById<ChipGroup>(R.id.chipGroupCategory).parent.parent)
+        assertSame("the status chips are NOT inside it, so all three stay on screen",
+            view, view.findViewById<ChipGroup>(R.id.chipGroupStatus).parent)
         assertEquals(
             "the app has four statuses and the active list can hold three of them",
             listOf(R.id.chipTodo, R.id.chipInProgress, R.id.chipPaused),
@@ -1616,6 +1650,8 @@ data class CardPresentation(
     }
 ```
 
+- [ ] **4.1a Skeleton for the card.** Declare `cardContent`, `categoryDot` and `repeatIcon` in `item_task.xml` inside the existing structure, and `CardPresentation` as a data class with the fields and no logic, in one commit. 4.1's and 4.2's tests then compile and fail on behaviour. Without this step the predicted RED in 4.3 is a compile error, which is the mistake §3's rule exists to prevent.
+
 - [ ] **4.2 Write the width-budget test** — `TaskCardWidthBudgetTest`, the 320dp contract. It measures, not
   eyeballs:
 
@@ -1641,6 +1677,27 @@ class TaskCardWidthBudgetTest {
 
     private fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
     private fun Float.asDp() = this / context.resources.displayMetrics.density
+    private fun Int.asDp() = toFloat() / context.resources.displayMetrics.density
+
+    private companion object {
+        const val DAY = 86_400_000L
+
+        /** A real stored series, so the repeat icon is drawn from data and not from a mock. */
+        fun aWeeklyRule() = RecurrenceRule(
+            userId = 1, unit = RepeatUnit.WEEK, interval = 1, weekDays = "1,3",
+            dayOfMonth = 0, anchorAt = 0, cursorAt = 0
+        )
+    }
+
+    /** Copied from TaskCardWorkTest, which needs the same patience for ListAdapter's async diff. */
+    private fun awaitUntil(what: String, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!condition()) {
+            if (System.currentTimeMillis() > deadline) throw AssertionError("no $what")
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(10)
+        }
+    }
 
     /**
      * The worst legal row, with the two inputs that decide the budget pinned rather than defaulted.
@@ -1649,7 +1706,9 @@ class TaskCardWidthBudgetTest {
      * 64dp column. `sortOrder = MANUAL` because anything else hides the drag handle and the column
      * collapses to 12dp — which is its own case, asserted separately below.
      */
-    private fun bindWorstCase(widthDp: Int = 320, fontScale: Float = 1.0f): View {
+    private fun bindWorstCase(
+        widthDp: Int = 320, fontScale: Float = 1.0f, sortOrder: SortOrder = SortOrder.MANUAL
+    ): View {
         val app = ApplicationProvider.getApplicationContext<Context>()
         val config = Configuration(app.resources.configuration).apply { this.fontScale = fontScale }
         // ContextThemeWrapper does not override createConfigurationContext, so the theme has to be
@@ -1677,6 +1736,7 @@ class TaskCardWidthBudgetTest {
             )
         )
         awaitUntil("the row to be diffed") { adapter.itemCount == 1 }
+        adapter.reorderEnabled = sortOrder == SortOrder.MANUAL
         val holder = adapter.createViewHolder(FrameLayout(context), adapter.getItemViewType(0))
         adapter.bindViewHolder(holder, 0)
         return holder.itemView.also {
@@ -1829,16 +1889,25 @@ class TaskCardWidthBudgetTest {
         )
     }
 
-    @Test fun `nothing overlaps and line B is one line tall`() {
+    @Test fun `nothing overlaps, and each line keeps its own band`() {
         val row = bindWorstCase()
+        val dot = row.findViewById<View>(R.id.categoryDot)
         val title = row.findViewById<View>(R.id.taskTitle)
-        val due = row.findViewById<View>(R.id.taskDueDate)
+        val repeat = row.findViewById<View>(R.id.repeatIcon)
         val pill = row.findViewById<View>(R.id.taskStatus)
+        val due = row.findViewById<TextView>(R.id.taskDueDate)
         val group = row.findViewById<View>(R.id.buttonGroup)
-        assertTrue("title right ${title.right} before the repeat icon", title.right <= due.left)
-        assertTrue("due right ${due.right} before the pill", due.right <= pill.right)
-        assertTrue("title bottom ${title.bottom} above the action group ${group.top}", title.bottom <= group.top)
-        assertEquals("one line, not a wrapped meta row", 1, due.lineCount)
+
+        // Line A is dot, title, icons — in that order, so each right edge precedes the next left.
+        assertTrue("dot ${dot.left} before title ${title.left}", dot.left <= title.left)
+        assertTrue("title ${title.right} before the repeat icon ${repeat.left}", title.right <= repeat.left)
+        // Line B is pill, then date, then the name (spec 4.1). Asserting it the other way round would
+        // pass on a card that had swapped them, which is the whole thing this test is for.
+        assertTrue("pill ${pill.right} before the date ${due.left}", pill.right <= due.left)
+        // Bands: no view from one line may share a vertical band with the next line.
+        assertTrue("line A bottom ${title.bottom} at or above line B top ${pill.top}", title.bottom <= pill.top)
+        assertTrue("line B bottom ${due.bottom} at or above line C top ${group.top}", due.bottom <= group.top)
+        assertEquals("the date is one line tall at the default scale", 1, due.lineCount)
     }
 }
 ```
@@ -2267,8 +2336,8 @@ scroll. Depends on: S4.
 ```kotlin
 package com.taskplanner.ui.tasks
 
-import android.animation.ValueAnimator
 import android.content.Context
+import android.provider.Settings
 import android.view.animation.DecelerateInterpolator
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.RecyclerView
@@ -2291,11 +2360,25 @@ import com.taskplanner.R
  * at animator scale 0 the framework's animators merely finish instantly while the work of building and
  * starting them still happens. Returning false skips that work, which is the behaviour 9.2 tests.
  */
-class CardItemAnimator(private val context: Context) : DefaultItemAnimator() {
+/**
+ * The scale is injected rather than read from `ValueAnimator.getDurationScale()`, for two reasons worth
+ * stating in the code: that getter is API 33 (`api-versions.xml`: since="33") and this app's floor is 24,
+ * so calling it is a NoSuchMethodError on every device in between and a fresh lint finding the PR criteria
+ * forbid; and Robolectric exposes no public setter, so a test could not drive the branch either way. The
+ * default reads the system setting, which is API 17 and is what the getter itself reports.
+ */
+class CardItemAnimator(
+    private val context: Context,
+    private val animatorScale: () -> Float = {
+        Settings.Global.getFloat(
+            context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+        )
+    }
+) : DefaultItemAnimator() {
 
     override fun animateAdd(holder: RecyclerView.ViewHolder): Boolean {
         val view = holder.itemView
-        if (ValueAnimator.getDurationScale() <= 0f) {
+        if (animatorScale() <= 0f) {
             view.alpha = 1f
             view.translationY = 0f
             dispatchAddStarting(holder)
@@ -2349,23 +2432,26 @@ class CardItemAnimator(private val context: Context) : DefaultItemAnimator() {
   change that also moved the due date or started a timer takes the full bind rather than a half-updated
   card. A wrong payload is a silently stale row, which is worse than an extra bind.
 
-- [ ] **9.2 The animator scale, tested rather than asserted.** RecyclerView 1.3.2 does **not** consult
-  `ValueAnimator.getDurationScale()` itself — verified against the artifact in the Gradle cache, where
-  neither `isAnimatorDisabled` nor a `getDurationScale` reference exists in `androidx.recyclerview` — so the
+- [ ] **9.2 The animator scale, tested rather than asserted.** RecyclerView 1.1.0 — the version this APK
+  resolves — does **not** consult
+  `ValueAnimator.getDurationScale()` itself — verified against recyclerview **1.1.0**, the artifact this
+  build resolves, where neither `isAnimatorDisabled` nor a `getDurationScale` reference exists — so the
   "scale 0 means no motion" behaviour comes from the framework's own animators finishing immediately, not
-  from this class. Two consequences, both tested: the hand-written `animateAdd` must check
-  `ValueAnimator.getDurationScale() == 0f` and skip the animation work outright rather than start an
-  animator that ends instantly, and the group-collapse height animation gets the same guard.
+  from this class, and it is read through the injected `animatorScale` rather than the API: the getter is
+  API 33 on a 24 floor, and Robolectric has no public setter, so the seam is the only way to test the branch
+  at all. Two consequences, both tested.
 
 ```kotlin
     @Test fun `animator scale zero skips the work instead of starting a no-op animator`() {
-        ValueAnimator.setDurationScale(0f)
-        val holder = … // a bound holder
-        val started = animator.animateAdd(holder)
-        assertFalse("nothing to animate, and nothing scheduled", started)
-        ValueAnimator.setDurationScale(1f)
+        val animator = CardItemAnimator(context, animatorScale = { 0f })
+        val holder = …   // a bound ViewHolder, added to a RecyclerView so the dispatch has somewhere to go
+        assertFalse("nothing to animate, and nothing scheduled", animator.animateAdd(holder))
+
+        val running = CardItemAnimator(context, animatorScale = { 1f })
+        assertTrue("at scale 1 the insert does animate", running.animateAdd(holder))
     }
 ```
+
 
 - [ ] **9.3 The threshold.** A `submitList` that grows the list past `motion_entry_max` (12) pending
   additions disables the entry animation for that submission. This is a counter on the animator, not a scan
@@ -2381,7 +2467,7 @@ class CardItemAnimator(private val context: Context) : DefaultItemAnimator() {
 **Acceptance, each one checkable:** a test asserts `animateAdd` is not called for a holder rebound during
 scroll (`RecyclerView` recycles, so the assertion is on the animator's call count across a
 `scrollBy`); a test with 200 rows submitted at once asserts fewer than 12 animated; a test with
-`ValueAnimator.setDurationScale(0f)` asserts `animateAdd` returns false; `getChangePayload` returns
+an injected `animatorScale = { 0f }` asserts `animateAdd` returns false; `getChangePayload` returns
 `PAYLOAD_STATUS` for a status-only change and null for a title change, asserted directly; and
 `dumpsys gfxinfo framestats` after a 20-fling scroll shows no frame over 32ms — the same bar 10.5 holds the
 whole stage to.
@@ -2591,7 +2677,7 @@ Every spec requirement mapped to the step that implements it, so nothing is sile
 | §3.1 | M3 role mapping | 1.5 |
 | §3.1 | chart ramps re-anchored with the dashboard; report colours left fixed | 1.4 leaves them, 8b moves them |
 | §3.2 | contrast measured, not asserted | 1.2, 1.11, 10.1 |
-| §3.2 | variant-surface rule | 1.2's `text_on_surfaces` split, 1.8's pill styles |
+| §3.2 | variant-surface rule | tokens: 1.2's split + 1.8's pills; layouts: **10.1a**, the only step that can see a violation |
 | §3.3 | type scale, system font, tracking in ems | 1.6, and `TypeScaleTest`'s tracking assertion |
 | §3.4 | space and shape | 1.7, 1.8 |
 | §3.5 | styles vs includes vs bind-time code | 1.8, 1.9, 4.1 |
@@ -2733,7 +2819,7 @@ verify. All five are fixed; each was checked against the toolchain or the device
 | c4 | The font-scale test asserted `measuredText - available == 0`, i.e. that text fills its box, and compared `row.height` against `taskCard.height` — two levels of one hierarchy | rewritten to `needed <= available` for the date and the status word, card height against card height, and the "no clipping" claim made through `ellipsize`/layout text rather than equality | a row with a short date in a wide box is correct and would have failed the old assertion |
 | c5 | The APK check hashed the local file and then read `lastUpdateTime` and `pm path`, which proves nothing about identity | a build → install → `pm path` → on-device `sha256sum` → `pull` → local hash → three-state PASS/FAIL/BLOCKED procedure, with `BLOCKED` named as a legitimate outcome | run on `emulator-5554` at `0abd9cb`: `base.apk` is `-rw-r--r-- system system`, pull succeeded, and all three hashes were `28e898e91ad7a18a505b4555f0026dba138463d497e944ccb10ce9a7ad9600f7` — a measured PASS, not an inferred one |
 | c6 | Motion was specified as "animate in `onBindViewHolder`, but not on scroll", which is not implementable: bind runs on every rebind from the pool | Stage 9 rewritten around `DefaultItemAnimator.animateAddImpl` for inserts and a narrow `getChangePayload` for the pill crossfade; spec §5 amended to match | RecyclerView calls `animateAdd` for inserted holders and no animator method for rebound ones |
-| c7 | The plan asserted "Android applies the animator scale automatically" | verified against the actual artifact: `androidx.recyclerview` 1.3.2 contains no `isAnimatorDisabled` and no `getDurationScale` reference, so the framework animators merely finish instantly while the setup work still runs — the hand-written path must check the scale itself | `unzip` of `recyclerview-1.3.2.aar` from the Gradle cache and a search over its `classes.jar` |
+| c7 | The plan asserted "Android applies the animator scale automatically" | verified against the actual artifact: `androidx.recyclerview` 1.1.0 contains no `isAnimatorDisabled` and no `getDurationScale` reference, so the framework animators merely finish instantly while the setup work still runs — the hand-written path must check the scale itself | `unzip` of `recyclerview-1.3.2.aar` from the Gradle cache and a search over its `classes.jar` |
 | c8 | `TypedValue.px2sp(displayMetrics, px)` — arguments reversed; and four snippets used `resources` / `density` that the enclosing class never declared | superseded by §20d: the argument order was fixed onto a method that is **@hide** and does not exist in the public SDK, so the snippet still did not compile; `scaledDensity` is the real route | `javap android.util.TypedValue` on android-34: `px2sp` absent, `applyDimension` present |
 | c9 | "Twelve stages, sixteen commits" undercounted the stage headings | §18 now states thirteen headings, S0 evidence-only and S8 split four ways | counted against the stage bodies |
 
@@ -2778,7 +2864,36 @@ archived = 0 AND UPPER(status) NOT IN ('COMPLETED','DONE')` (`TaskStatisticsDao.
 population the active list is built from, so the card adds nothing to the rule. The finding still earned
 something: spec §4.1 now states the whole predicate rather than the `CASE` fragment, and a test covers the
 row where the two could drift apart.
----
 
-**Document SHAs.** Spec revision 7: `ee75e61b95e671a2ccd753180f6a20a5913e9bdc`. This plan: the commit that adds it, recorded in
-`docs/superpowers/plans/` history and reported to the user with the plan.
+### 20e. Fifth pass: two fresh verifiers, and the fixes of §20d were themselves wrong in five places
+
+Neither verifier was told what the previous rounds concluded. Both worked from the artifacts — `javap` on the
+resolved jars, `api-versions.xml` in the platform SDK, the manifest-merger report — rather than from this
+document's own claims.
+
+| # | finding | severity | evidence | disposition |
+|---|---|---|---|---|
+| e1 | §9.0's production code called `ValueAnimator.getDurationScale()`, which is API 33 on a 24 floor — a `NoSuchMethodError` on every device in between and a new lint finding, which §14 forbids | BLOCKER | `api-versions.xml`: `name="getDurationScale()F" since="33"`; `javap` on android-34's `android.jar` | the scale is injected as `animatorScale: () -> Float`, defaulting to `Settings.Global.ANIMATOR_DURATION_SCALE` (API 17). Same seam argument as the clock in §0: anything a test must drive is a parameter |
+| e2 | §9.2's test called `ValueAnimator.setDurationScale(0f)`, which does not exist as public API, and Robolectric's shadow setter is `protected static` | BLOCKER | `javap android.animation.ValueAnimator`; `javap org.robolectric.shadows.ShadowValueAnimator` | the test injects `{ 0f }` and `{ 1f }` into the animator instead |
+| e3 | 4.2's overlap test asserted `due.right <= pill.right`, inverting spec 4.1's own pill-then-date order, and compared the title's right edge to the date on another line | BLOCKER | read against the spec's line B order | rewritten: dot ≤ title ≤ repeat on line A, pill ≤ date on line B, and band separation asserted between the lines |
+| e4 | 4.2 called `bindWorstCase(sortOrder = …)`, a parameter the fixture did not have, and `TasksAdapter` takes no sort input | BLOCKER | the fixture's own signature | `sortOrder` added to the fixture and threaded through `adapter.reorderEnabled`, which is the real control |
+| e5 | 4.2 applied `Float.asDp()` to `Int` values, and used `awaitUntil`, `DAY` and `aWeeklyRule()` that the class never declared | BLOCKER | Kotlin has no implicit Int→Float | `Int.asDp()` added; the helper and the companion constants declared in the snippet |
+| e6 | The spec header said "Revision 7" while its own table had a row 8 — the identical drift the document was rewritten to prevent | MAJOR | spec line 8 | now "Revision 8", with the rule that a header must name its own newest row |
+| e7 | The recyclerview 1.3.2 citation survived in spec §5 and plan §9.2 after §20d had established the build resolves 1.1.0 | MAJOR | manifest-merger report line 92 | both restated to 1.1.0 |
+| e8 | The §3 "skeleton commit" rule this plan adopted had no skeleton anywhere: 1.6a, 3.1, 4.2 and 1.10 all name `R.style`/`R.id` constants that no earlier step creates, so their predicted "watch it fail" is a compile error | MAJOR | the plan's own step order | steps 1.5a, 3.0 and 4.1a added, each declaring names without behaviour, in its own commit |
+| e9 | 1.6a's note demanded ±0.2f while all ten assertions still used ±1f — wide enough for caption, pill and label to satisfy each other | MAJOR | the snippet | all ten tightened |
+| e10 | 3.1's instrumented test asserted only that the list was displayed and *commented* that a count should follow: a search that filters nothing passes it | MAJOR | the snippet | asserts the row count and the presence and absence of the two seeded titles |
+| e11 | 3.6's rail test checked an id existed; a non-scrolling two-block rail passes it | MAJOR | the snippet | asserts containment — the category group inside the scroller, the status group explicitly not |
+| e12 | Two flattened `binding.headerTitle` / `binding.headerSearchButton` paths survived the §20d include correction | MAJOR | ViewBinding semantics | nested through `binding.tasksHeader` |
+| e13 | `bg_pill_neutral.xml` and `ic_work.xml` were referenced by snippets with no inventory line owning them; `motion_entry_rise`/`motion_standard` were used by 9.0 before 9.1 declared them | MAJOR | §8's file list | inventory lines added; 9.0's note names the declaring step |
+| e14 | S1's file list named `styles.xml` and the two chip colour-state-lists that no S1 step edits, and S7 still listed `themes.xml` and `MainActivity.kt` | MINOR | §8 vs the stage bodies | corrected |
+| e15 | Spec §8 listed `TaskCardWorkTest` among the tests that move, while the plan and §20b preserve it unchanged | MINOR | both documents | removed from the spec's move-list, which is the accurate statement |
+| e16 | Spec §3.3 justified the `caption` role with "seven roles cannot supply five distinct styles", which is false arithmetic | MINOR | five roles suffice; the mapping was the defect | the reasoning rewritten to say what actually broke |
+
+What the two verifiers confirmed rather than refuted: the contrast gate exits 0 and every figure in spec §3.2
+matches the script's output in both themes; the 320dp budget is consistent across the two documents at 208dp
+with line remainders 152 / 26 / 56; the pill allowance recomputes to ≈80dp against a budget of 82; the
+`Wcag` luminance maths is correct; `ListGutterTest` compiles and 56 + 2·16 = 88; all 29 Material attributes the
+theme sets exist in material-1.11.0's `R.txt`; `@GraphicsMode(NATIVE)` is a valid target for a class in
+Robolectric 4.11.1; and `animateAdd`, `dispatchAddStarting` and `onAddFinished` are all public in the
+recyclerview 1.1.0 this build resolves.
