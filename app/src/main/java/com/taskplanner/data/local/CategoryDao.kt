@@ -43,9 +43,24 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE uuid = :uuid LIMIT 1")
     suspend fun getCategoryByUuid(uuid: String): Category?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    /**
+     * Inserts a category. It never replaces one, because replacing is a delete here.
+     *
+     * `tasks.category_id` points at this row `ON DELETE SET NULL`, so an `INSERT OR REPLACE` that lands on an
+     * existing id removes the category and then re-adds it — and every task that was in it comes back with no
+     * category. The row count looks untouched, which is how this survived every test that only counted
+     * categories. A caller that means "change this category" says so with [updateCategory]; the primary key
+     * conflict is otherwise a bug, and it is now reported as one instead of silently resolving itself.
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertCategory(category: Category): Long
 
+    /**
+     * Bulk upsert, with every hazard [insertCategory] just described and none of its callers: nothing in this
+     * app calls this today. Kept because a future bulk load may want it, but a caller has to know that a row
+     * written back with its own id is deleted and re-added first, which un-categorises its tasks — the update
+     * belongs in [updateCategory], per row.
+     */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCategories(categories: List<Category>)
 

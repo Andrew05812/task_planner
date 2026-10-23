@@ -136,7 +136,9 @@ class SyncAppliers @Inject constructor(
             return true
         }
         if (local.isDeleted) return false
-        categoryDao.insertCategory(
+        // An update: the row already exists, and re-inserting it would delete it first, which `tasks`
+        // answers by setting their category to null.
+        categoryDao.updateCategory(
             local.copy(
                 name = remote.name,
                 color = remote.color,

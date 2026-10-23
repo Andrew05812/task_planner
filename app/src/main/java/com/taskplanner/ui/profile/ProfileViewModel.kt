@@ -3,6 +3,7 @@ package com.taskplanner.ui.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.data.model.User
+import com.taskplanner.data.repository.ProfileCreation
 import com.taskplanner.data.repository.SessionRepository
 import com.taskplanner.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -62,24 +63,49 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val trimmedEmail = email.trim()
-                if (trimmedEmail.isNotBlank() && userRepository.isEmailTaken(trimmedEmail)) {
-                    _profileState.value = ProfileState.Error("Email is already taken")
+                if (trimmedEmail.isBlank()) {
+                    // No address to check against, and the profile gets an unreachable placeholder — which is
+                    // the only kind of blank this form accepts.
+                    createProfile(User(
+                        name = name.trim(),
+                        email = "local-${UUID.randomUUID()}@local.invalid",
+                        avatarInitial = name.firstOrNull()?.toString()?.uppercase() ?: "?",
+                        avatarColor = generateAvatarColor(name)
+                    ))
                     return@launch
                 }
-                val user = User(
+                // The check stays because it is the friendly answer: it arrives before the write and names the
+                // field the reader has to fix. It is not what protects the data — the unique index is, and the
+                // repository turns its refusal into the same message for the two-request case this one misses.
+                if (userRepository.isEmailTaken(trimmedEmail)) {
+                    _profileState.value = ProfileState.Error(EMAIL_TAKEN)
+                    return@launch
+                }
+                createProfile(User(
                     name = name.trim(),
-                    // The email column is unique and non-null; a local profile without an
-                    // email gets an unreachable placeholder instead of a colliding "".
-                    email = trimmedEmail.ifBlank { "local-${UUID.randomUUID()}@local.invalid" },
+                    email = trimmedEmail,
                     avatarInitial = name.firstOrNull()?.toString()?.uppercase() ?: "?",
                     avatarColor = generateAvatarColor(name)
-                )
-                val id = userRepository.insertUser(user)
-                sessionRepository.setCurrentUser(user.copy(id = id))
+                ))
             } catch (e: Exception) {
                 _profileState.value =
                     ProfileState.Error(e.message ?: "Failed to create user")
             }
+        }
+    }
+
+    /**
+     * Writes the profile and moves to it, or says the address is taken.
+     *
+     * The repository answers with one of those two and never with a third where the existing profile was
+     * rewritten, because rewriting one is what used to happen and it deleted the profile that owned the
+     * address along with everything cascading off it.
+     */
+    private suspend fun createProfile(user: User) {
+        when (val creation = userRepository.createUser(user)) {
+            is ProfileCreation.Created -> sessionRepository.setCurrentUser(creation.user)
+            ProfileCreation.EmailTaken ->
+                _profileState.value = ProfileState.Error(EMAIL_TAKEN)
         }
     }
 
@@ -95,7 +121,7 @@ class ProfileViewModel @Inject constructor(
                     trimmedEmail != existingUser.email &&
                     userRepository.isEmailTaken(trimmedEmail, userId)
                 ) {
-                    _profileState.value = ProfileState.Error("Email is already taken")
+                    _profileState.value = ProfileState.Error(EMAIL_TAKEN)
                     return@launch
                 }
                 userRepository.updateUser(
@@ -150,6 +176,12 @@ class ProfileViewModel @Inject constructor(
             0xFFFFC107.toInt(), 0xFFFF9800.toInt(), 0xFFFF5722.toInt(), 0xFF795548.toInt()
         )
         return colors[kotlin.math.abs(name.hashCode()) % colors.size]
+    }
+
+    private companion object {
+
+        /** Said by the check before the write and by the index after it, and it is the same sentence. */
+        const val EMAIL_TAKEN = "Email is already taken"
     }
 }
 

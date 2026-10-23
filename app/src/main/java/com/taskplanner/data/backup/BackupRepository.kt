@@ -241,7 +241,10 @@ class BackupRepository @Inject constructor(
                 } else {
                     localIds[incoming.id] = existing.id
                     if (incoming.updatedAt > existing.updatedAt) {
-                        categoryDao.insertCategory(
+                        // An update, not a re-insert: `tasks.category_id` is `ON DELETE SET NULL`, so writing
+                        // the same id back through an insert deletes the category first and every task in it
+                        // silently loses its category.
+                        categoryDao.updateCategory(
                             incoming.forUser(userId).copy(
                                 id = existing.id,
                                 uuid = existing.uuid,
@@ -347,9 +350,23 @@ class BackupRepository @Inject constructor(
                 ?.let { taskDao.findTaskByUuid(it) }
                 ?.takeIf { it.userId == userId }
             when {
-                existing == null -> taskDao.insertTask(linked.copy(id = 0))
+                existing == null ->
+                    // A row carrying a series identity is written the way a materialised instance is: an
+                    // occurrence this profile already holds is left exactly as it is. The insert this used to
+                    // be resolves a conflict on *any* index — including the unique (series, occurrence) one —
+                    // by deleting the row that held it first, and the row it found there was somebody else's:
+                    // a different task, with its own uuid, the user's completion on it and measured work
+                    // attached to that uuid.
+                    if (linked.seriesUuid != null && linked.occurrenceAt != null) {
+                        taskDao.insertSeriesInstance(linked.copy(id = 0))
+                    } else {
+                        taskDao.insertTask(linked.copy(id = 0))
+                    }
+                // Matched by uuid, so this is the same task and an update says so. Writing it back as an
+                // insert with its own id deleted the row and re-added it, which nothing points at by
+                // foreign key today — and hid the (series, occurrence) conflict rather than refusing it.
                 incoming.updatedAt >= existing.updatedAt ->
-                    taskDao.insertTask(linked.copy(id = existing.id, uuid = existing.uuid))
+                    taskDao.updateTask(linked.copy(id = existing.id, uuid = existing.uuid))
             }
         }
     }

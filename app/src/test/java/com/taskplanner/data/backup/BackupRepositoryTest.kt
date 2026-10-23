@@ -5,6 +5,9 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.taskplanner.data.backup.BackupData
+import com.taskplanner.data.backup.BackupFile
+import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
@@ -233,6 +236,53 @@ class BackupRepositoryTest {
         val byUuid = fixture.taskDao.findTaskByUuid(task.uuid)
         assertEquals("Prepare report v2", byUuid?.title)
         assertEquals(2, fixture.taskDao.getAllTasksOnce(userId).size)
+    }
+
+    /**
+     * An import must not delete a local instance it did not match.
+     *
+     * `tasks` has one unique index beyond its primary key — `(series_uuid, occurrence_at)`, the fact that a
+     * series produced exactly one row for one occurrence. A new row is written with `INSERT OR REPLACE`, which
+     * resolves a conflict on *any* index by deleting the row that held it. So a file carrying its own copy of
+     * an occurrence this profile already has — with a different uuid, therefore unmatched by the uuid lookup —
+     * used to remove the local instance, along with the completion the user had put on it and the measured
+     * work attached to its uuid.
+     */
+    @Test
+    fun `an import does not overwrite a local series instance it never matched`() = runTest {
+        val userId = fixture.signIn(email = "series@example.com").id
+        val occurrence = 1_700_000_000_000L
+        val localInstance = Task(
+            uuid = "local-instance", title = "Water plants", description = "", userId = userId,
+            seriesUuid = "rule-1", occurrenceAt = occurrence,
+            status = TaskStatus.COMPLETED, completedAt = occurrence + 60_000
+        )
+        fixture.taskDao.insertTask(localInstance)
+
+        val file = BackupFile(
+            formatVersion = "1.1", appVersion = "test", exportedAt = 1,
+            data = BackupData(
+                tasks = listOf(
+                    Task(
+                        uuid = "file-instance", title = "Water plants", description = "", userId = 99,
+                        seriesUuid = "rule-1", occurrenceAt = occurrence
+                    )
+                ),
+                recurrenceRules = listOf(
+                    RecurrenceRule(
+                        uuid = "rule-1", userId = 99, unit = RepeatUnit.WEEK,
+                        interval = 1, weekDays = "2", dayOfMonth = 0, anchorAt = occurrence,
+                        zoneId = "UTC", cursorAt = occurrence
+                    )
+                )
+            )
+        )
+
+        backup.import(file, replaceExisting = false)
+
+        val survivor = fixture.taskDao.findTaskByUuid("local-instance")
+        assertNotNull("the local instance is still there", survivor)
+        assertEquals("and it is still the one the user finished", occurrence + 60_000, survivor?.completedAt)
     }
 
     @Test
