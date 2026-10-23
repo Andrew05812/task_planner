@@ -290,10 +290,10 @@ class AppFixture(val context: Context) : AutoCloseable {
     /**
      * Signs in a local profile the way the profile screen does.
      *
-     * The address is part of the identity, not a label: `users.email` is unique and the insert replaces, so
-     * calling this twice on the default email does not add a second profile — it deletes the first one, and
-     * every cascade hanging off it takes that profile's rows with it. A test that wants two accounts has to
-     * name the second one differently.
+     * The address is part of the identity, not a label: `users.email` is unique, and it is unique
+     * case-insensitively. Two profiles cannot share one address — the insert refuses rather than replacing the
+     * row it collided with, which used to be a deletion of that profile and a cascade through everything it
+     * owned. A test that wants two accounts has to name the second one differently.
      */
     suspend fun signIn(name: String = "Test User", email: String = "test@example.com"): User =
         signInAs(User(email = email, name = name))

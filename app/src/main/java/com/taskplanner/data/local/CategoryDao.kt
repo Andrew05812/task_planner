@@ -55,6 +55,12 @@ interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertCategory(category: Category): Long
 
+    /**
+     * Bulk upsert, with every hazard [insertCategory] just described and none of its callers: nothing in this
+     * app calls this today. Kept because a future bulk load may want it, but a caller has to know that a row
+     * written back with its own id is deleted and re-added first, which un-categorises its tasks — the update
+     * belongs in [updateCategory], per row.
+     */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCategories(categories: List<Category>)
 

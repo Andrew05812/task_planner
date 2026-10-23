@@ -45,9 +45,8 @@ import org.robolectric.RobolectricTestRunner
  * series, goals with their links and value history, habits with their checks and check history, tracking and
  * work sessions, interval corrections, insights, achievements — declare that link `ON DELETE CASCADE`. Three
  * more (`tasks`, `categories`, `reminders`) carry a bare `user_id` with no foreign key at all, so a vanished
- * owner does not delete them: it leaves them belonging to nobody, and because the primary key is
- * `autoGenerate` rather than `@AutoIncrement`, the freed row id can be handed to the next profile, which then
- * inherits those orphaned rows as its own.
+ * owner does not delete them: it leaves them belonging to nobody, unreadable from any profile that exists.
+ * The primary key is `AUTOINCREMENT`, so the freed id is never handed out again and the orphans stay orphans.
  *
  * So an insert of a *second* profile must never be a delete of the *first* one. SQLite resolves
  * `INSERT OR REPLACE` on a unique-index conflict by deleting the conflicting row first — which is what the
@@ -183,14 +182,16 @@ class UserIdentityConflictTest {
     }
 
     /**
-     * Two requests for the same address, at once.
+     * The second request for an address is answered, not absorbed.
      *
-     * A check-then-insert pair lets both through; the index lets exactly one be written. The room runs its
-     * queries on one executor, so this exercises the ordering rather than pretending to a real race — what it
-     * proves is that whichever request lands second, the first one's profile and rows are the survivors.
+     * This is not a concurrency test and does not claim to be one: the fixture pins Room's queries to a single
+     * executor, so nothing here runs at the same instant. What it pins is the pair of guarantees that make a
+     * race harmless — the unique index lets exactly one write through, and the repository turns the refusal
+     * into `EmailTaken` rather than into an exception or a profile id of -1. A check-then-insert pair would
+     * have passed the first request and answered the second with a row that does not exist.
      */
     @Test
-    fun `two requests for one address leave one profile and no damage`() {
+    fun `the second request for an address is answered rather than absorbed`() {
         val first = runBlocking {
             users.createUser(User(email = "anna@mail.ru", name = "Первый"))
         }
@@ -287,6 +288,66 @@ class UserIdentityConflictTest {
             (one as AuthRepository.ProfileUpsert.Linked).user.id !=
                 (two as AuthRepository.ProfileUpsert.Linked).user.id
         )
+    }
+
+    /**
+     * The premise the whole file rests on, measured rather than assumed.
+     *
+     * Every claim above is about rows disappearing by cascade — but a cascade is invisible to a test that only
+     * ever checks that the *survivor* is intact. If foreign-key enforcement were ever switched off (a Room
+     * upgrade, a hand-built database, a `PRAGMA foreign_keys` that stopped being set), the destructive insert
+     * would stop destroying anything, the fix would look unnecessary, and the documentation would be describing
+     * an engine that no longer exists. So the cascade is asserted directly, on a deliberate delete, which is
+     * the only place it is supposed to happen.
+     */
+    @Test
+    fun `deleting a profile really does take everything that cascades off it`() {
+        val owner = runBlocking { profileWithOneRowInEveryTable("anna@mail.ru", "Анна") }
+        val before = runBlocking { rowsOf(owner) }
+        assertTrue("the seed owns rows in the cascading tables", before.getValue("goals") > 0)
+
+        runBlocking { fixture.userDao.deleteUser(fixture.userDao.getUserById(owner)!!) }
+
+        val after = runBlocking { rowsOf(owner) }
+        OWNED_TABLES.filter { it.first in CASCADING_TABLES }.forEach { (table, _) ->
+            assertEquals("removing the owner removes its $table rows", 0, after.getValue(table))
+        }
+        assertEquals(
+            "and the three tables with no foreign key are left owned by nobody",
+            listOf(1, 1, 1),
+            listOf(after.getValue("tasks"), after.getValue("categories"), after.getValue("reminders"))
+        )
+    }
+
+    /**
+     * The account already on this device changing its address to one a *different* profile owns.
+     *
+     * The uid match is the branch that skips the address check, and it writes the new address into the row it
+     * found — which is the same unique index, and the same collision, arriving from the other direction.
+     */
+    @Test
+    fun `a known account moving onto another profile's address is refused, not thrown`() {
+        val local = runBlocking { profileWithOneRowInEveryTable("anna@mail.ru", "Анна") }
+        val before = runBlocking { rowsOf(local) }
+        val account = runBlocking {
+            fixture.authRepository.linkProfile("google-uid-9", "boris@mail.ru", "Борис", null)
+        }
+        val accountId = (account as AuthRepository.ProfileUpsert.Linked).user.id
+
+        val outcome = runBlocking {
+            fixture.authRepository.linkProfile("google-uid-9", "anna@mail.ru", "Борис", null)
+        }
+
+        assertTrue(
+            "the attempt answers about the address instead of throwing: $outcome",
+            outcome is AuthRepository.ProfileUpsert.AddressTaken
+        )
+        assertEquals(
+            "the account kept the address it had",
+            "boris@mail.ru",
+            runBlocking { fixture.userDao.getUserById(accountId) }?.email
+        )
+        assertEquals("and the other profile kept everything it owned", before, runBlocking { rowsOf(local) })
     }
 
     // -- the steps -----------------------------------------------------------------------------------
@@ -437,6 +498,13 @@ class UserIdentityConflictTest {
             "work_interval_corrections" to "user_id",
             "insights" to "user_id",
             "achievements" to "user_id"
+        )
+
+        /** The thirteen that declare their link to `users` `ON DELETE CASCADE`. */
+        val CASCADING_TABLES = setOf(
+            "task_groups", "recurrence_rules", "tracking_sessions", "work_sessions",
+            "work_interval_corrections", "goals", "goal_tasks", "goal_value_changes",
+            "habits", "habit_checks", "habit_check_changes", "insights", "achievements"
         )
     }
 }

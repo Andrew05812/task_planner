@@ -122,7 +122,7 @@ class SettingsViewModel @Inject constructor(
                 SignInOutcome.Canceled -> context.getString(R.string.sign_in_canceled)
                 SignInOutcome.NotConfigured -> context.getString(R.string.app_locked_message)
                 is SignInOutcome.EmailOwnedByAnotherProfile ->
-                    context.getString(R.string.sign_in_email_taken)
+                    context.getString(R.string.sign_in_email_taken, outcome.email)
                 is SignInOutcome.Failed ->
                     context.getString(R.string.sign_in_failed, outcome.message)
             }

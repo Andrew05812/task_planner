@@ -22,6 +22,7 @@ import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.UserDao
+import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.User
 import com.taskplanner.data.repository.SessionRepository
@@ -165,6 +166,12 @@ class AuthRepository @Inject constructor(
         val address = email?.takeIf { it.isNotBlank() } ?: "google-$uid@firebase.local"
         val initial = name.firstOrNull()?.toString()?.uppercase() ?: "?"
         val existing = userDao.getUserByFirebaseUid(uid)
+        // The address is checked whichever branch this takes. The uid branch used to skip it and write the
+        // address straight into the row it had found — the same unique index, arriving from the other
+        // direction, and an exception escaping past the caller's answer with the cloud session left standing.
+        val holder = userDao.getUserByEmail(address)?.takeIf { it.id != existing?.id }
+        if (holder != null) return ProfileUpsert.AddressTaken(address)
+
         if (existing != null) {
             val updated = existing.copy(
                 name = name,
@@ -175,11 +182,6 @@ class AuthRepository @Inject constructor(
             )
             userDao.updateUser(updated)
             return ProfileUpsert.Linked(updated)
-        }
-
-        val holder = userDao.getUserByEmail(address)
-        if (holder != null) {
-            return ProfileUpsert.AddressTaken(address)
         }
 
         val user = User(
@@ -227,12 +229,15 @@ class AuthRepository @Inject constructor(
 
         withContext(Dispatchers.IO) {
             database.withTransaction {
-                val mergedCategories = attachCategories(sourceUserId, targetUser.id)
+                val categories = attachCategories(sourceUserId, targetUser.id)
                 attachGroups(sourceUserId, targetUser.id)
                 // Before the tasks, so an instance the account already knows arrives together with
                 // the pattern that produced it rather than as an orphan row.
                 attachRules(sourceUserId, targetUser.id)
-                attachTasks(sourceUserId, targetUser.id, mergedCategories)
+                attachTasks(sourceUserId, targetUser.id, categories.survivors)
+                // Only after the tasks: a source category still has rows pointing at it until they move, and
+                // deleting it un-categorises them.
+                removeMergedCategories(categories.toRemove)
                 attachReminders(sourceUserId, targetUser.id)
             }
         }
@@ -259,9 +264,22 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    /** Returns the source category ids whose rows the account already had, mapped to the survivor. */
-    private suspend fun attachCategories(sourceUserId: Long, targetUserId: Long): Map<Long, Long> {
+    /**
+     * The categories that merged into the account's own, and the source rows that may be dropped afterwards.
+     *
+     * The two lists are returned together and the second one is acted on only once the tasks have moved, which
+     * is the whole of the point: `tasks.category_id` points at a category `ON DELETE SET NULL`, so removing
+     * the local copy of a merged category while its tasks are still sitting in the source profile leaves every
+     * one of them with no category — and the map built to re-point them then has nothing left to read.
+     */
+    private class CategoryMerge(
+        val survivors: Map<Long, Long>,
+        val toRemove: List<Category>
+    )
+
+    private suspend fun attachCategories(sourceUserId: Long, targetUserId: Long): CategoryMerge {
         val merged = LinkedHashMap<Long, Long>()
+        val removable = mutableListOf<Category>()
         categoryDao.getAllCategoriesOnce(sourceUserId).forEach { source ->
             val withIdentity = if (source.uuid.isNotBlank()) source else source.copy(
                 uuid = UUID.randomUUID().toString()
@@ -272,10 +290,15 @@ class AuthRepository @Inject constructor(
                 categoryDao.updateCategory(withIdentity.copy(userId = targetUserId))
             } else {
                 merged[source.id] = twin.id
-                categoryDao.deleteCategory(source)
+                removable += source
             }
         }
-        return merged
+        return CategoryMerge(merged, removable)
+    }
+
+    /** Drops the local copies of categories that merged into the account's own. See [attachCategories]. */
+    private suspend fun removeMergedCategories(merged: List<Category>) {
+        for (category in merged) categoryDao.deleteCategory(category)
     }
 
     /** Topics are referenced by uuid, so a topic the account already has needs no re-linking. */

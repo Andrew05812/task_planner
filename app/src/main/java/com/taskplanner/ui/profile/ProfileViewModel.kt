@@ -78,7 +78,7 @@ class ProfileViewModel @Inject constructor(
                 // field the reader has to fix. It is not what protects the data — the unique index is, and the
                 // repository turns its refusal into the same message for the two-request case this one misses.
                 if (userRepository.isEmailTaken(trimmedEmail)) {
-                    _profileState.value = ProfileState.Error("Email is already taken")
+                    _profileState.value = ProfileState.Error(EMAIL_TAKEN)
                     return@launch
                 }
                 createProfile(User(
@@ -105,7 +105,7 @@ class ProfileViewModel @Inject constructor(
         when (val creation = userRepository.createUser(user)) {
             is ProfileCreation.Created -> sessionRepository.setCurrentUser(creation.user)
             ProfileCreation.EmailTaken ->
-                _profileState.value = ProfileState.Error("Email is already taken")
+                _profileState.value = ProfileState.Error(EMAIL_TAKEN)
         }
     }
 
@@ -121,7 +121,7 @@ class ProfileViewModel @Inject constructor(
                     trimmedEmail != existingUser.email &&
                     userRepository.isEmailTaken(trimmedEmail, userId)
                 ) {
-                    _profileState.value = ProfileState.Error("Email is already taken")
+                    _profileState.value = ProfileState.Error(EMAIL_TAKEN)
                     return@launch
                 }
                 userRepository.updateUser(
@@ -176,6 +176,12 @@ class ProfileViewModel @Inject constructor(
             0xFFFFC107.toInt(), 0xFFFF9800.toInt(), 0xFFFF5722.toInt(), 0xFF795548.toInt()
         )
         return colors[kotlin.math.abs(name.hashCode()) % colors.size]
+    }
+
+    private companion object {
+
+        /** Said by the check before the write and by the index after it, and it is the same sentence. */
+        const val EMAIL_TAKEN = "Email is already taken"
     }
 }
 

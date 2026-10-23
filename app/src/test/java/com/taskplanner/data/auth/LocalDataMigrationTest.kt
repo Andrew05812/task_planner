@@ -2,6 +2,7 @@ package com.taskplanner.data.auth
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
@@ -119,6 +120,53 @@ class LocalDataMigrationTest {
 
         val rows = fixture.taskDao.getAllRowsOnce(account.id)
         assertEquals("one uuid must mean exactly one row", listOf("Pay rent (from cloud)"), rows.map { it.title })
+    }
+
+    /**
+     * The merge that keeps the account's copy of a category must not take the task's category with it.
+     *
+     * When both profiles hold the same category uuid, the local copy has to go away — and `tasks.category_id`
+     * points at categories `ON DELETE SET NULL`. Deleting it while the tasks are still sitting in the source
+     * profile leaves each of them with no category, so the map the handover builds in order to re-point them
+     * has nothing left to read: the task arrives, and it arrives uncategorised.
+     */
+    @Test
+    fun `a task whose category merged into the account's copy keeps a category`() = runTest {
+        val sharedUuid = "00000000-0000-0000-0000-0000000000c1"
+        val account = signInAsGoogleAccount()
+        val accountCategory = fixture.categoryDao.insertCategory(
+            Category(
+                uuid = sharedUuid, name = "Home (account)", color = -1,
+                icon = "ic_tag", userId = account.id
+            )
+        )
+        fixture.switchTo(local)
+        val localCategory = fixture.categoryDao.insertCategory(
+            Category(
+                uuid = sharedUuid, name = "Home (local)", color = -1,
+                icon = "ic_tag", userId = local.id
+            )
+        )
+        fixture.addTask(local.id, "Pay rent", categoryId = localCategory)
+
+        fixture.switchTo(account)
+        fixture.authRepository.attachLocalDataToAccount(local.id, account)
+
+        val moved = fixture.taskDao.getAllTasksOnce(account.id).first { it.title == "Pay rent" }
+        assertNotNull(
+            "the task still names a category — the merge may not quietly un-categorise it",
+            moved.categoryId
+        )
+        assertEquals(
+            "and it is the account's copy of the category that merged",
+            accountCategory,
+            moved.categoryId
+        )
+        assertEquals(
+            "one uuid means one category",
+            1,
+            fixture.categoryDao.getAllRowsOnce(account.id).count { it.uuid == sharedUuid }
+        )
     }
 
     @Test

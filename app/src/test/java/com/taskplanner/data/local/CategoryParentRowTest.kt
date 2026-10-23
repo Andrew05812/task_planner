@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -41,6 +42,39 @@ class CategoryParentRowTest {
     @After
     fun tearDown() {
         fixture.close()
+    }
+
+    /**
+     * The premise of this file, measured: a deleted category really does un-categorise its tasks.
+     *
+     * Asserted on a deliberate delete, because that is the only place the behaviour is wanted. If it ever
+     * stopped happening, the refusal added below would be protecting nothing and the documentation beside it
+     * would be describing an engine that no longer exists.
+     */
+    @Test
+    fun `deleting a category un-categorises the tasks that pointed at it`() {
+        val userId = runBlocking { fixture.userDao.insertUser(User(email = "anna@mail.ru", name = "Анна")) }
+        val categoryId = runBlocking {
+            fixture.categoryDao.insertCategory(
+                Category(name = "Диссертация", color = -1, icon = "ic_tag", userId = userId)
+            )
+        }
+        val task = runBlocking {
+            fixture.taskDao.insertTask(
+                Task(title = "Глава 1", description = "", userId = userId, categoryId = categoryId)
+            )
+        }
+
+        runBlocking {
+            fixture.categoryDao.deleteCategory(
+                fixture.categoryDao.getCategoryForUser(userId, categoryId)!!
+            )
+        }
+
+        assertNull(
+            "the link is `ON DELETE SET NULL`, which is why a category may not be deleted by accident",
+            runBlocking { fixture.taskDao.getByIds(listOf(task)).first().categoryId }
+        )
     }
 
     @Test
