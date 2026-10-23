@@ -426,7 +426,7 @@ class TaskDetailFragment : Fragment() {
     /** Only the fields the chosen preset actually uses are shown. */
     private fun applyPreset(preset: RepeatPreset) {
         binding.repeatIntervalLayout.isVisible = preset.editableInterval
-        binding.repeatIntervalLayout.hint = getString(preset.unitLabelRes)
+        binding.repeatIntervalLayout.hint = preset.intervalHint(::getString)
         binding.repeatWeekDaysLabel.isVisible = preset.showsWeekDays
         binding.repeatWeekDays.isVisible = preset.showsWeekDays
         binding.repeatDayLayout.isVisible = preset.showsDayOfMonth

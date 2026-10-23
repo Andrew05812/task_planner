@@ -11,7 +11,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 593 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 1372 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -109,6 +109,29 @@ start-up, a profile switch, a sync pass and the background worker can all call i
   moves that one instance and leaves the series schedule alone, *"This task and all following ones"*
   re-anchors the series. A running series can be paused, resumed, stopped after the current task, or
   deleted together with the instances it still owes; completed history in the archive is never taken.
+- **A preset that fixes its own interval names no unit.** The interval field's hint is the words for
+  what the typed number counts — "Weeks between repeats" — so it exists exactly when the field does,
+  and `RepeatPreset.editableInterval` is derived from that rather than declared beside it. This is a
+  hotfix, not a style choice: the absence of a unit label used to be spelled `0`, the editor resolved
+  it unconditionally, and `getString(0)` threw `Resources$NotFoundException` on the screen's first
+  line. Pressing `+`, or opening any saved task, crashed the app — for `Does not repeat`, `Every day`,
+  `Every week`, `Every two weeks`, `Every month` and `Every year`, which is six of the eleven presets.
+  Nothing caught it for
+  five stages because no test had ever run a Fragment: the suite inflates layouts and drives view models,
+  and `onViewCreated` was outside both. `TaskEditorInstrumentedTest` is the first test in this project
+  to open a real screen, and it opens the editor three ways — the `+` button, a task with no series, and
+  a task belonging to each kind of series.
+
+  | The editor, opened from `+` | The picker, every preset in words |
+  | --- | --- |
+  | ![the editor opens](docs/images/task-editor-hotfix/editor-opens-with-no-repeat.png) | ![the repeat picker](docs/images/task-editor-hotfix/repeat-picker-open.png) |
+  | **A counted preset names its unit** | **A fixed-rate preset names nothing** |
+  | ![every N weeks](docs/images/task-editor-hotfix/counted-preset-names-its-unit.png) | ![every week](docs/images/task-editor-hotfix/fixed-rate-preset-names-nothing.png) |
+
+  Photographed on an emulator, 23 October 2026. The presets reach the screen through stored series in
+  the automated test rather than through the picker, because the picker's list is a popup window this
+  emulator shows to nobody — neither Espresso's root matchers nor the accessibility API can see a row in
+  it — so the presses above were made by hand.
 - **Local work**: `RecurrenceRefreshWorker` keeps series producing their next task while the app is
   closed, with no network constraint and no cloud dependency, and Room stays the source of truth.
 
@@ -327,6 +350,8 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 | `CalendarDayLayoutTest` | the minute arithmetic behind the column: lane counts, offsets, heights, and a marker that owns no stretch of the day |
 | `CalendarDragTest` | the clip a drag carries: one task id in, nothing else accepted out |
 | `TaskDetailLayoutTest` | the editor inflates under the app's theme, keeps the recurrence detail collapsed, and lays out inside 320dp |
+| `TaskEditorRepeatHintTest` | every preset's interval label, resolved through the real resources the editor uses: fixed-rate presets name nothing, counted ones name their unit, and nothing is ever asked for as resource id `0` |
+| `TaskEditorInstrumentedTest` *(device)* | the editor opened as a reader opens it — from `+`, from a saved task, and from a stored series of every kind — with the interval field shown and labelled exactly where the preset asks for a number |
 | `TasksViewModelTest` | grouping, filters, search, sorting, selection, lifecycle, per-profile isolation |
 | `ReportPeriodTest` | the five periods' boundaries, the week's first day, a window counted across a DST jump, a reversed range refused |
 | `ReportRepositoryTest` | the ten sections read through one window and one zone, standing figures kept apart from period ones, per-profile isolation, the same question answered the same way twice |
@@ -348,10 +373,11 @@ thread, so a background job that outlives its test surfaces as a failure in whic
 screen smoke tests). They are compile-checked in CI; running them needs a device, which CI does not
 provide.
 
-The report stage's two device suites have been run — on a full Android 15 emulator (API 35, x86_64,
-`swiftshader`), not on a physical handset. What they established there is written beside each claim in
-`docs/REPORT_EXPORT.md`, and what an emulator cannot stand in for — a manufacturer's Documents UI, a
-third-party PDF viewer, a real finger on a real screen — is still open.
+The report stage's device suites and the task editor's have been run — on a full Android 15
+emulator (API 35, x86_64, `swiftshader`), not on a physical handset. What they established there is
+written beside each claim in `docs/REPORT_EXPORT.md` and in the recurring-tasks section above, and what
+an emulator cannot stand in for — a manufacturer's Documents UI, a third-party PDF viewer, a real finger
+on a real screen — is still open.
 
 ## Documentation
 

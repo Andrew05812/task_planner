@@ -16,10 +16,17 @@ enum class RepeatPreset(
     @param:StringRes val labelRes: Int,
     @param:StringRes val shortLabelRes: Int,
     val unit: RepeatUnit?,
-    /** Interval the preset stands for on its own; [editableInterval] presets use the field. */
+    /** Interval the preset stands for on its own; the presets with a [unitLabelRes] use the field. */
     val fixedInterval: Int = 1,
-    val editableInterval: Boolean = false,
-    @param:StringRes val unitLabelRes: Int = 0,
+    /**
+     * The words naming the unit the typed number counts, or null when the preset fixes its own
+     * interval and there is no number to name.
+     *
+     * Null rather than a missing id: the editor resolves this through `getString`, and `0` is not a
+     * string — it is a `Resources$NotFoundException` that used to take the whole task screen down for
+     * every preset that repeats at a fixed rate.
+     */
+    @param:StringRes val unitLabelRes: Int? = null,
     val showsWeekDays: Boolean = false,
     val showsDayOfMonth: Boolean = false
 ) {
@@ -27,17 +34,17 @@ enum class RepeatPreset(
     DAILY(R.string.repeat_daily, R.string.repeats_daily, RepeatUnit.DAY),
     EVERY_N_DAYS(
         R.string.repeat_every_n_days, R.string.repeats_every_n_days, RepeatUnit.DAY,
-        editableInterval = true, unitLabelRes = R.string.repeat_unit_days
+        unitLabelRes = R.string.repeat_unit_days
     ),
     WEEKLY(R.string.repeat_weekly, R.string.repeats_weekly, RepeatUnit.WEEK),
     BIWEEKLY(R.string.repeat_biweekly, R.string.repeats_biweekly, RepeatUnit.WEEK, fixedInterval = 2),
     EVERY_N_WEEKS(
         R.string.repeat_every_n_weeks, R.string.repeats_every_n_weeks, RepeatUnit.WEEK,
-        editableInterval = true, unitLabelRes = R.string.repeat_unit_weeks
+        unitLabelRes = R.string.repeat_unit_weeks
     ),
     WEEKDAYS(
         R.string.repeat_weekdays, R.string.repeats_weekdays, RepeatUnit.WEEK,
-        editableInterval = true, unitLabelRes = R.string.repeat_unit_weeks, showsWeekDays = true
+        unitLabelRes = R.string.repeat_unit_weeks, showsWeekDays = true
     ),
     MONTHLY(
         R.string.repeat_monthly, R.string.repeats_monthly, RepeatUnit.MONTH,
@@ -45,15 +52,34 @@ enum class RepeatPreset(
     ),
     EVERY_N_MONTHS(
         R.string.repeat_every_n_months, R.string.repeats_every_n_months, RepeatUnit.MONTH,
-        editableInterval = true, unitLabelRes = R.string.repeat_unit_months, showsDayOfMonth = true
+        unitLabelRes = R.string.repeat_unit_months, showsDayOfMonth = true
     ),
     YEARLY(R.string.repeat_yearly, R.string.repeats_yearly, RepeatUnit.YEAR),
     EVERY_N_YEARS(
         R.string.repeat_every_n_years, R.string.repeats_every_n_years, RepeatUnit.YEAR,
-        editableInterval = true, unitLabelRes = R.string.repeat_unit_years
+        unitLabelRes = R.string.repeat_unit_years
     );
 
+    /**
+     * Whether the user types the interval themselves.
+     *
+     * Derived rather than declared, because it is not a second fact: a preset asks for a number
+     * exactly when it has a unit to say what the number counts. That coupling is deliberate, and it is
+     * why a preset cannot be both — giving one a [unitLabelRes] makes it editable and stops using
+     * [fixedInterval], which is the behaviour the counted presets have always had.
+     */
+    val editableInterval: Boolean get() = unitLabelRes != null
+
     fun intervalOf(field: Int): Int = if (editableInterval) field.coerceAtLeast(1) else fixedInterval
+
+    /**
+     * The words the editor puts under the interval field, resolved through the caller's resources so
+     * the preset stays a value and never a `Context`. [string] is `Fragment::getString`, and the id it
+     * is handed is always a real `@StringRes` — never `0`.
+     *
+     * Null says there is nothing to name, and the editor hides the field it would have labelled.
+     */
+    fun intervalHint(string: (Int) -> String): String? = unitLabelRes?.let(string)
 
     companion object {
         /** The preset a stored series shows as when the editor opens it. */
