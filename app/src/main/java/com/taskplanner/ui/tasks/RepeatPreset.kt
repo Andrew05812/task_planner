@@ -79,7 +79,6 @@ enum class RepeatPreset(
      */
     fun intervalHint(string: (Int) -> String): String? = unitLabelRes?.let(string)
 
-
     companion object {
         /** The preset a stored series shows as when the editor opens it. */
         fun of(rule: RecurrenceRule?): RepeatPreset = when {
