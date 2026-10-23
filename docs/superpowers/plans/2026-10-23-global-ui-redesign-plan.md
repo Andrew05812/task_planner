@@ -18,12 +18,14 @@ draws and this plan enforces: **display code may change, data and domain code ma
 Material 1.11.0, Robolectric 4.11.1 over real in-memory SQLite, JUnit 4, Espresso 3.5.1,
 `ActivityScenario`. Python 3 for the contrast script.
 
-**Spec:** `docs/superpowers/specs/2026-10-23-global-ui-redesign-design.md`, revision 6,
-commit `422d7cde72f19be693bb73a81910eb0ec90654a4`. This plan argues from that document; read both. The
-revision matters: revisions 1 through 5 each contained a claim this plan had to change, and the two
-independent reviews that produced revision 6 are summarised in §20.
+**Spec:** `docs/superpowers/specs/2026-10-23-global-ui-redesign-design.md`, revision 7,
+commit `ee75e61b95e671a2ccd753180f6a20a5913e9bdc`. This plan argues from that document; read both. The
+revision matters: revisions 1 through 6 each contained a claim this plan or a reviewer had to change. Two
+independent reviews produced revision 6 and a third produced revision 7; all three are recorded in §20 and
+§20b with the disposition of every finding.
 
-**Baseline:** branch `feat/global-ui-redesign` at `422d7cd`, on top of `master` =
+**Baseline:** branch `feat/global-ui-redesign` at `ee75e61` (spec revision 7) with this plan's own commit
+on top of it, and `master` =
 `c2c767d1b80db756c1a3517eecc083de598ff7af` (merge of PR #21).
 
 **Delivery:** one branch, one PR, one commit per layer. The PR is #22 or the next free number.
@@ -62,7 +64,7 @@ Each figure below was read or run at `a9f70e3` on 2026-10-23, not inherited from
 | Overdue already has one definition | `data/local/TaskStatisticsDao.kt:63` → `due_date IS NOT NULL AND due_date < :now` |
 | `startTask` and `toggleWork` are different operations | `TasksViewModel.kt:418` → `taskRepository.startTask`; `:447` → `workTrackingRepository.start/pause/resume` |
 | Database | `AppDatabase.NAME = "taskplanner.db"`, `version = 16`, `exportSchema = true` |
-| No clock-shaped icon exists to reuse | `ls app/src/main/res/drawable \| grep '^ic_'` lists 41 icons; none is a timer, clock or stopwatch, so the work control's distinct icon is a new vector |
+| No clock-shaped icon exists to reuse | `ls app/src/main/res/drawable \| grep '^ic_'` lists 42 icons; none is a timer, clock or stopwatch, so the work control's distinct icon is a new vector |
 | `contentGroup` is asserted from another screen's test | `TasksScreenInstrumentedTest:56` checks it is displayed after a round trip through Statistics |
 | Two existing tests constrain the design, not just the code | `StatisticsLayoutTest` requires five legacy text attributes to resolve to five **distinct** styles; `TaskCardWorkTest` requires the work line and the title to share a parent |
 | `@dimen/text_caption` has one reader | `fragment_report.xml:244` — the legacy text sizes are not unused |
@@ -222,7 +224,7 @@ adb -s emulator-5554 shell pm path com.taskplanner
 
 ```
 S0 evidence ─┬─► S1 tokens ─┬─► S2 swipe geometry ─► S3 Tasks header ─► S4 Tasks card ─┐
-             │              │        (S1 must land first: S2's test reads ink_* )        │
+             │              │        (S1 must land first: 2.3 paints the panel with ink_* and bg_row_backdrop)        │
              │              ├─► S5 Profile ─────────────────────────────────────────────┤
              │              ├─► S6 Task editor ─────────────────────────────────────────┤
              │              └─► S7 Bottom nav ───────────────────────────────────────────┤
@@ -249,6 +251,10 @@ Hard rules the graph encodes:
 - S9, S10, S11 run after every screen is on the system; S12 opens the PR.
 - S5, S6, S7 are independent of each other and of S3/S4 — they may be reordered, none may be merged into
   one commit.
+- S8 depends on S1 **and** S5 **and** S7, not on S1 alone: 8a and 8c consume `row_list` (created in S5) and
+  the bottom-bar style (S7), so running 8a before S5 would invent a second row layout. The graph edge in §7
+  is drawn from S1 only because the diagram is read left to right; this is the accurate statement, and the
+  precondition line of Stage 8 is the one a worker follows.
 
 ## 8. File inventory
 
@@ -308,7 +314,11 @@ Modified files, by stage:
 ## Stage 0 — Evidence, baseline, audit document
 
 Purpose: fix what "before" means, so no later stage can argue about it. Depends on: nothing.
-Precondition: `git status --short` is empty and HEAD is `a9f70e3`.
+Precondition: `git status --short` is empty and HEAD is the plan commit, whose SHA is on this page's
+header — record it in the audit document as the baseline the before-photographs belong to.
+
+- [ ] **0.0 Create the evidence folders.** `docs/images/ui-redesign/` does not exist yet:
+  `mkdir -p docs/images/ui-redesign/before docs/images/ui-redesign/after`
 
 - [ ] **0.1 Re-count the baseline.** Run the commands in §2. Expected `92 1371 0` and 17 instrumented
   methods. Record the numbers in `docs/UI_UX_AUDIT.md`. If they differ, stop: the spec's §8 needs the same
@@ -417,8 +427,8 @@ Tools: `design-review:design-system-capture`, `ui-ux-pro-max-skill:design-system
   Anything in use but not in the table is either added or explicitly mapped to an alias in 1.3. This is
   what prevents a stage-8 screen discovering it has no token for something.
 
-- [ ] **1.2 Write the failing contrast tests.** `app/src/test/java/com/taskplanner/ui/theme/Wcag.java` is
-  not needed — Kotlin only:
+- [ ] **1.2 Write the failing contrast tests.** New file `app/src/test/java/com/taskplanner/ui/theme/Wcag.kt`
+  holds the arithmetic; the two theme classes below assert the pairs against the shipped resources:
 
 ```kotlin
 package com.taskplanner.ui.theme
@@ -691,7 +701,7 @@ where it is**: the ramp moves in 8b.
   `android:textAllCaps`; `pill` is deliberately not capped, because the 82dp line-B budget in §4.1 depends
   on it. Add `type_caption` (12sp) and `type_pill` (11sp) to the dimens alongside the other seven.
 
-- [ **Failure-first:** write `TypeScaleTest` before `type.xml`. It builds a `TextView` with each style and
+- [ ] **1.6a Failure-first:** write `TypeScaleTest` before `type.xml`. It builds a `TextView` with each style and
   asserts `textSize` in sp and `letterSpacing`:
 
 ```kotlin
@@ -709,7 +719,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * The seven roles of spec 3.3, read back off the styles the layouts will actually use.
+ * The nine roles of spec 3.3, read back off the styles the layouts will actually use.
  *
  * Asserting the style rather than a dimension is the point: a `type_title` dimen of 16sp that no style
  * refers to would satisfy a dimens test and change nothing on screen.
@@ -750,7 +760,7 @@ class TypeScaleTest {
         ).forEach { (style, expected) ->
             val actual = TextView(themed, null, 0, style).letterSpacing
             assertEquals(
-                resources.getResourceEntryName(style), expected, actual, 0.004f
+                resources.getResourceEntryName(style), expected, actual, 0.0015f
             )
         }
     }
@@ -868,8 +878,8 @@ class ListGutterTest {
   surprise failure.
 
 - [ ] **1.8 Component styles** in new `res/values/component_styles.xml`: the fourteen `Widget.TaskPlanner.*`
-  styles spec §3.5 lists, plus `Widget.TaskPlanner.Field.Dropdown` — the fifteenth, needed because five
-  layouts use `Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu` and the spec's
+  styles spec §3.5 lists, plus `Widget.TaskPlanner.Field.Dropdown` — the fifteenth, needed because five uses of
+  `Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu` across two layouts and the spec's
   list names only the plain field. Then the pill styles over the five `bg_pill_*` drawables. And the new
   drawables listed in §8 — each a `<shape>` or `<ripple>` reading a token, no literals.
 
@@ -933,7 +943,7 @@ are deliberately left alone here — they move with the dashboard, whose test as
 ```
 
 **Acceptance:** the two contrast test classes pass in both themes; `--resources --check` prints
-`RESULT: pass` with zero drift lines; no layout changed except the four new includes; the theme diff is
+`RESULT: pass` with zero drift lines; no layout changed except the six new includes; the theme diff is
 tokens and attributes only. **Screenshots:** `s1-tasks-light.png`, `s1-tasks-dark.png`,
 `s1-profile-light.png`, `s1-profile-dark.png`.
 
@@ -1484,6 +1494,48 @@ class TaskCardWidthBudgetTest {
         assertEquals("the left column is 64dp, not the 52 an earlier draft claimed", dp(64), leftColumn)
     }
 
+    /**
+     * Every line's own sum, because a column that adds up proves nothing if a single line quietly
+     * overruns it. These are the five numbers spec 4.1's budget table publishes.
+     */
+    @Test fun `each line keeps to its share of the column`() {
+        val row = bindWorstCase(widthDp = 320)
+        val title = row.findViewById<TextView>(R.id.taskTitle)
+        val pill = row.findViewById<View>(R.id.taskStatus)
+        val due = row.findViewById<View>(R.id.taskDueDate)
+        val name = row.findViewById<TextView>(R.id.taskCategory)
+        val figures = row.findViewById<View>(R.id.workRow)
+        val group = row.findViewById<View>(R.id.buttonGroup)
+
+        assertTrue("line A: title 152dp budget, measured ${title.width / density}", title.width >= dp(152))
+        assertTrue("line B: pill 82 budget, measured ${pill.width / density}", pill.width <= dp(82))
+        assertTrue("line B: date 84 budget, measured ${due.width / density}", due.width <= dp(84))
+        assertTrue("line B: the name is the element that gave way", name.visibility == View.GONE)
+        assertTrue("line C: figures 56 budget, measured ${figures.width / density}",
+            figures.width + group.width <= dp(208))
+    }
+
+    /**
+     * Font scale 1.3 at 320dp cannot hold pill and date on one line — 102 + 109 + 16 is 227 against 208 —
+     * and the design's answer (spec 4.1) is that the card grows rather than the type shrinking or the date
+     * vanishing. This test is the difference between that being a decision and being an accident.
+     */
+    @Test fun `at font scale 1.3 the card grows and nothing is dropped or shrunk`() {
+        val row = bindWorstCase(widthDp = 320, fontScale = 1.3f)
+        val base = bindWorstCase(widthDp = 320, fontScale = 1.0f)
+        val due = row.findViewById<TextView>(R.id.taskDueDate)
+        val pill = row.findViewById<TextView>(R.id.taskStatus)
+
+        assertEquals("the date is still drawn whole", 0f,
+            due.paint.measureText(due.text.toString()) -
+                (due.width - due.paddingLeft - due.paddingRight), due.width * 0.02f)
+        assertTrue("the type grew rather than shrinking",
+            due.textSize > base.findViewById<TextView>(R.id.taskDueDate).textSize)
+        assertTrue("the card got taller instead of dropping a line",
+            row.height > base.findViewById<View>(R.id.taskCard).height)
+        assertTrue("the status word is still there", pill.visibility == View.VISIBLE)
+    }
+
     @Test fun `the title keeps a readable measure`() {
         val row = bindWorstCase()
         val title = row.findViewById<TextView>(R.id.taskTitle)
@@ -1566,12 +1618,24 @@ class TaskCardWidthBudgetTest {
   **one** `ConstraintLayout id=cardContent` holding line A (`categoryDot`, `taskTitle`, `repeatIcon`,
   `reminderBadge`), line B (`taskStatus` as a pill, `taskDueDate`, `taskCategory`), line C (`workRow`
   figures + `buttonGroup` with the five existing button ids), with `dragHandle` and `priorityIndicator`
-  sharing the 64dp left column. Keep every existing id — `taskCard`, `actionPanel`, `editTaskButton`,
-  `deleteTaskButton`, `selectionCheck`, `dragHandle`, `priorityIndicator`, `taskTitle`, `taskDescription`,
-  `taskDueDate`, `taskCategory`, `taskStatus`, `reminderBadge`, `workRow`, `workTime`, `workTicker`,
-  `workDot`, `workControlButton`, `startTaskButton`, `pauseTaskButton`, `resumeTaskButton`,
-  `completeTaskButton` **and `buttonGroup`**, which `TasksAdapter` binds today and which is the action
-  cluster: it is renamed nowhere. New ids: `cardContent`, `categoryDot`, `repeatIcon`.
+  sharing the 64dp left column. The card's padding lives on **`cardContent`** — `paddingStart`/`paddingEnd`
+  16dp, `paddingTop`/`paddingBottom` 14dp, from `spacing_*` and `card_padding_*` — exactly where it lives
+  today on the inner layout, and not on `taskCard`; 4.2's "content is the card less its padding" assertion
+  depends on that choice, and putting it on the card instead would make the MaterialCardView clip its own
+  ripple. Keep every existing id — `taskCard`, `actionPanel`, `editTaskButton`, `deleteTaskButton`,
+  `selectionCheck`, `dragHandle`, `priorityIndicator`, `taskTitle`, `taskDescription`, `taskDueDate`,
+  `taskCategory`, `taskStatus`, `reminderBadge`, `workRow`, `workTime`, `workTicker`, `workDot`,
+  `workControlButton`, `startTaskButton`, `pauseTaskButton`, `resumeTaskButton`, `completeTaskButton`
+  **and `buttonGroup`**, which is the `LinearLayout` the four status buttons sit in today
+  (`item_task.xml:215`) and becomes the action cluster: it is renamed nowhere. New ids: `cardContent`,
+  `categoryDot`, `repeatIcon`.
+
+  Three view **types** are locked by tests and may not change while the ids survive: `workRow` is fetched
+  as a `LinearLayout` (`TaskCardWorkTest:110`), `workControlButton` as an `ImageButton` (`:131`) and
+  `reminderBadge` as an `ImageView` (`TaskCardReminderTest:97`). Swapping the LinearLayout for a second
+  ConstraintLayout, or the ImageButton for a MaterialButton, fails three tests that never mentioned the
+  thing being changed. That is why line C's cluster stays a `LinearLayout` and the buttons stay
+  `ImageButton`s styled rather than replaced.
 
   `taskDescription` stays in the layout but is `View.GONE` unless the task has a description — the current
   behaviour — and when visible it takes a line between A and B.
@@ -1580,13 +1644,24 @@ class TaskCardWidthBudgetTest {
   `CardPresentation.of(context, item, now)` where `now` comes from a `timeBase` the adapter is given, and
   applies it: pill text/background/colour, rule colour or `INVISIBLE`, overdue `ink_error` on the due line,
   the four `showX` flags as `View.GONE`/`VISIBLE`, the category name's 48dp rule measured against the
-  laid-out width in `doOnLayout`.
+  laid-out width in `doOnLayout`. Three further rules from spec §4.1 belong in the same bind path, because
+  each is a behaviour the spec states and no step had yet assigned:
+
+  - the drag handle is `GONE` unless `state.sortOrder == SortOrder.MANUAL` **and** the row is not selected
+    — which is what `bind` does today through `reorderEnabled`, restated so the 320dp screenshots are read
+    against a rule; when it goes, the 64dp left column collapses to the rule's 12dp and the title gains
+    52dp, which 4.2's line-A assertion must allow for;
+  - the measured-time figures collapse to their icon when `workRow` and `buttonGroup` together exceed the
+    208dp column — the figures give way, the buttons never do;
+  - `completeTaskButton` is the only control with emphasis: filled `ink_accent` background, `ink_on_accent`
+    icon. The lifecycle and work buttons stay borderless tints. One primary action per card, which is the
+    whole reason the card stopped looking like a toolbar.
 
   The two play buttons that meant different things at the baseline now differ. `startTaskButton` keeps
   `ic_play` and its `@string/start_task` description. `workControlButton` gets a **new** vector,
   `res/drawable/ic_work.xml` — a stopwatch outline, 24dp viewport, tinted from the theme like its
   neighbours — because the repository has no timer-shaped icon: `ls app/src/main/res/drawable | grep "^ic_"`
-  lists 41 icons and none of them is a clock, so "reuse an existing one" is not an option here. A new
+  lists 42 icons and none of them is a clock, so "reuse an existing one" is not an option here. A new
   drawable is a resource, not a dependency, and it is the only icon this stage adds; `repeatIcon` reuses
   the `ic_repeat.xml` that already exists. The work control keeps its existing phase-driven
   `contentDescription`, which already distinguishes start from pause from resume in words.
@@ -1615,18 +1690,22 @@ class TaskCardWidthBudgetTest {
   `design-review:visual-regression-review` and write down what changed and why it is better, not merely
   different.
 
-- [ ] **4.9 If the budget does not close in code** — a measured due date wider than 70dp, a pill wider than
-  102 — **stop**. Do not shrink a button, a target or a font to make a test pass. Report the measured
+- [ ] **4.9 If the budget does not close in code** — a measured due date wider than 84dp, a pill wider
+  than 82 — **stop**. Do not shrink a button, a target or a font to make a test pass. Report the measured
   numbers and propose the spec amendment (a different line assignment, or a shorter status word), and wait.
   This is the one step in the plan whose correct failure mode is a conversation.
 
 - [ ] **4.10 Commit**, listing in the message every test that moved and why its old assertion was the
   baseline's truth rather than the new one.
 
-**Acceptance:** `TaskCardWidthBudgetTest` and `CardPresentationTest` pass at 320dp; `TaskCardWorkTest` and
-`TaskCardReminderTest` pass against the rewritten card without weakening; the overdue treatment is
-photographed on a real row; the two play buttons are no longer identical; the card at 320dp shows a full
-due date, a full status word and a title of at least 128dp.
+**Acceptance:** `TaskCardWidthBudgetTest` and `CardPresentationTest` pass at 320dp and at font scale 1.3;
+`TaskCardWorkTest` and `TaskCardReminderTest` pass against the rewritten card **with one exception, named
+here rather than discovered in a red build**: `a task with nothing measured and no timer has no work line
+at all` and its siblings assert on `workRow` as a `LinearLayout` and on `workControlButton` as an
+`ImageButton`, and 4.4 keeps both types precisely so those casts still compile and still assert the same
+behaviour. No assertion in either file is deleted or loosened; if one of them fails, the layout changed a
+type it should not have. The overdue treatment is photographed on a real row; the two play buttons are no
+longer identical; the card at 320dp shows a full due date, a full status word and a title of at least 128dp.
 **Screenshots:** `s4-card-todo.png`, `s4-card-inprogress.png`, `s4-card-paused.png`, `s4-card-overdue.png`,
 `s4-card-longtitle.png`, `s4-card-running.png`, `s4-selection.png`, `s4-320.png`, `s4-font13.png`,
 `s4-dark.png`.
@@ -1704,7 +1783,7 @@ Purpose: regroup the same fields. Depends on: S1. Tools: `frontend-design`.
 
 | assertion | file:line | survives the regrouping? |
 |---|---|---|
-| `index(button_container) == content.childCount - 1` | `:133` | yes — the sticky footer leaves the scroll, so this must be **rewritten**, the container is no longer a child of `content` at all |
+| `index(button_container) == content.childCount - 1` | `:133` | **no** — the sticky footer leaves the scroll view entirely, so `button_container` is not a child of `content` any more and the assertion is rewritten to "the footer is a sibling of the scroll and pinned to the bottom" |
 | `index(button_container) == index(repeat_section) + 2` | `:136-137` | no — the gap between Repeat and the footer grows when Reminders and Measured work move after Repeat |
 | `task_category_layout < repeat_section` | `:139` | yes (How before Repeat in the new order too) |
 | `plan_section < work_section` | `:219` | yes |
@@ -1902,6 +1981,16 @@ grep -rn "@dimen/text_\|R\.dimen\.text_" app/src || echo "retired"
 Screenshots: `s8d-calendar.png`, `s8d-calendar-day.png`, `s8d-report.png`, `s8d-report-dark.png`,
 `s8d-calendar-320.png`.
 
+- [ ] **8.4b The three state includes get their consumers.** `state_empty.xml` is used by Insights (8c, it
+  replaces the inline empty row `item_insights_empty.xml` inflates) and by Tasks (4.4's `emptyView`);
+  `state_loading.xml` replaces the bare `ProgressBar` on Tasks (4.4), Statistics (8b) and Profile (5.4), so
+  a wait is the same shape on all three; `state_error.xml` replaces the `Snackbar`-only path on Statistics
+  (8b) and Reports (8d), where a failed read currently leaves the screen showing nothing. Each is a layout
+  substitution plus one `when (state)` branch in the fragment that already has that branch — no new state,
+  no new error handling, and the existing `showError` calls keep working. If a sub-stage reaches its
+  screenshot pass and one of the three includes is still used nowhere, that is a gap in this plan: say so
+  rather than shipping an unused layout and a coverage table claiming it is used.
+
 - [ ] **8.5 After all four commits:** the whole suite, `assembleDebug`, `lintDebug`,
   `assembleDebugAndroidTest`, and the contrast script against the resources. Then delete the alias block
   from `colors.xml` **only if** `grep -rn "@color/primary\b\|@color/surface\b\|@color/on_surface\b" app/src/main/res`
@@ -2036,7 +2125,7 @@ unset TOKEN
 
 | screen | done means | evidence |
 |---|---|---|
-| Tasks | header with title + open count; search, sort, new group, archive, work history all reachable; three status chips and a `Filters · n` chip; closed rows show no panel; card is three lines with contextual actions; overdue legible without colour; 320dp budget measured | S2–S4 tests + 16 screenshots |
+| Tasks | header with title + open count; search, sort, new group, archive, work history all reachable; three status chips and a `Filters · n` chip; closed rows show no panel; card is three lines with contextual actions; overdue legible without colour; 320dp budget measured | S2–S4 tests + 22 screenshots |
 | Profile | four sections; eight rows, the six that navigate each reaching a real destination and the two that open dialogs doing that; delete confirmation unchanged; first tests in the repo's history | S5 two test classes + 6 screenshots |
 | Task editor | six labelled sections; sticky footer; inline errors; eleven repeat presets render; PR #21's fix intact | S6 + `TaskEditor*Test` green |
 | Bottom bar | five labels; pill + weight mark the active item; surface distinct from the screen | S7 test + 7 screenshots |
@@ -2124,7 +2213,7 @@ Every spec requirement mapped to the step that implements it, so nothing is sile
 | §2.2 | FAB is not a defect; gutter derived from the same dimens | 1.7 (`list_bottom_gutter` + test) |
 | §3.1 | tokens in both themes | 1.4 |
 | §3.1 | M3 role mapping | 1.5 |
-| §3.1 | chart ramps re-anchored, report fixed | 1.4, 8b |
+| §3.1 | chart ramps re-anchored with the dashboard; report colours left fixed | 1.4 leaves them, 8b moves them |
 | §3.2 | contrast measured, not asserted | 1.2, 1.11, 10.1 |
 | §3.2 | variant-surface rule | 1.2's `text_on_surfaces` split, 1.8's pill styles |
 | §3.3 | type scale, system font, tracking in ems | 1.6, and `TypeScaleTest`'s tracking assertion |
@@ -2145,10 +2234,10 @@ Every spec requirement mapped to the step that implements it, so nothing is sile
 | §5 | motion rules | 9.1–9.5 |
 | §6 | a11y and the matrix | 10.1–10.3 |
 | §7 | performance, no new dependency | 10.5, PR criterion 9 |
-| §8 | baseline preserved, tests moved honestly | 0.1, 13.1, 14.1 |
+| §8 | baseline preserved, tests moved honestly | 0.1, §14 items 1–2 |
 | §8 | new fragment-level coverage incl. Profile | 5.1, 5.2, 3.1 |
 | §9 | one commit per layer, in order | every stage's final step |
-| §10 | out of scope respected | 1.3, 8 rule, PR criterion 8/9 |
+| §10 | out of scope respected | §3, the Stage 8 rule, §14 criteria 8 and 9 |
 
 ## 18. Commit sequence
 
@@ -2204,7 +2293,7 @@ what the review cost it.
 | 11 | `buttonGroup` is bound by `TasksAdapter` and was silently replaced by a new `actionGroup` id | MINOR | yes | 4.4 keeps `buttonGroup`; the invented id is gone |
 | 12 | `profileCard` and `contentGroup` were not in the keep-list, and `contentGroup` is asserted from another screen's test | MINOR | yes | 5.4 explains both: `contentGroup` survives because `TasksScreenInstrumentedTest:56` checks it; `profileCard` is dropped because nothing binds it |
 | 13 | "row_list is included six times" contradicted the eight rows Profile actually has | MINOR | yes | corrected to eight includes, six of which navigate |
-| 14 | `ic_stopwatch` / `ic_timer` were referenced as if one existed | MINOR | yes, 41 icons, none clock-shaped | 4.5 adds `ic_work.xml` as a new vector and says why reuse is not an option |
+| 14 | `ic_stopwatch` / `ic_timer` were referenced as if one existed | MINOR | yes, 42 icons, none clock-shaped | 4.5 adds `ic_work.xml` as a new vector and says why reuse is not an option |
 | 15 | `daysBetween` divided by 86 400 000, which a DST day breaks | MINOR | yes | rounded over local midnights, with the reason in the comment |
 | 16 | Acceptance lines phrased as qualities ("legible in dark", "became slow", "without colour alone") | MINOR | yes | rewritten as dumps, measured contrasts and named tests in §13, S7, S8b, S9 |
 | 17 | §8's inventory named `ContrastResourcesTest.kt`, which §1.2 does not write | MINOR | yes | inventory now lists `Wcag.kt`, `AbstractContrastTest`, `ContrastLightTest`, `ContrastDarkTest` |
@@ -2222,3 +2311,37 @@ constructor, every preserved view id, the Safe Args directions, the Archive-and-
 point, the absence of any Toolbar, the reference-locking of the four colour tests, the `TimeBase` seam and
 its Hilt provider, the overdue predicate against `TaskStatisticsDao`, the baseline counts, and that every
 pair §1.2 asserts clears its bar at the measured values.
+
+### 20b. Second pass, after the fixes
+
+A third reviewer read the corrected pair and found that fixing seventeen defects had introduced more, and
+that one original finding had been missed entirely. Its dispositions:
+
+| # | finding | severity | disposition |
+|---|---|---|---|
+| b1 | At 320dp and font scale 1.3 the pill (~102dp) plus the widest date (~109dp) plus gaps is 227dp against a 208dp column, so "never drop, never shrink", "line B is one line" and "verified at 1.3" cannot all hold | BLOCKER | spec §4.1 now says the card **grows**: line B reflows at large scale, and the one-line rule is scoped to the default scale. 4.2 gains a test asserting the reflow branch — type grew, card taller, date and status word still whole |
+| b2 | 4.2 asserted only 208 and 64; the published per-line figures (152 / 182 / 26 / 56) were never restated anywhere a build could check them | MAJOR | 4.2 gains `each line keeps to its share of the column` asserting all four against the measured row |
+| b3 | "content is the card less its padding" only holds if the 16dp lives on `cardContent`, which nothing stated | MAJOR | 4.4 now fixes the padding to `cardContent`, with the ripple-clipping reason for not putting it on `taskCard` |
+| b4 | The plan claimed `TaskCardWorkTest` was unaffected while the spec listed it among tests that move, and neither recorded the three view-**type** locks the tests depend on | MAJOR | 4.4 records the `LinearLayout` / `ImageButton` / `ImageView` casts with their line numbers; 4.10's acceptance states which assertion is at risk and why keeping the types is what saves it |
+| b5 | `state_loading.xml` and `state_error.xml` were created and used by nothing, and §17 claimed otherwise | MAJOR | new step 8.4b names the consuming screen for each of the three state includes, and says what to report if one is still unused |
+| b6 | §7's graph let 8a run before S5 created `row_list`, though Stage 8's own text depends on S5 and S7 | MINOR | hard rule added; the diagram stays simple and the rule is the accurate statement |
+| b7 | 4.5's bind list omitted three rules the spec states: the handle dropping away from `MANUAL`, the figures collapsing before the buttons, and the completion toggle being the only emphasised control | MINOR | all three written into 4.5, including the 52dp the title regains when the handle goes |
+| b8 | 6.1's table marked the `button_container` assertion as surviving and then explained it must be rewritten | MINOR | marked **no**, with the replacement assertion named |
+| b9 | Stale numbers survived the first round: 70dp / 102dp in 4.9, "seven roles" and "eighth role", "four new includes", "16 screenshots", the ramp credited to 1.4 in §17 | MINOR | all corrected; the Tasks evidence count is 22 |
+| b10 | False facts introduced by the fixes: `buttonGroup` "bound by TasksAdapter today" (it is bound by nothing — it is a layout id), 41 icons (there are 42), "five layouts use ExposedDropdownMenu" (five uses across two layouts), "five heat levels sharing one RGB" (four, plus a distinct `none`) | MINOR | each corrected at the source, and the spec's ramp sentence with them |
+| b11 | `TypeScaleTest`'s tracking tolerance of 0.004 was wider than the 0.019 / 0.021 separation it polices | MINOR | tolerance 0.0015 |
+| b12 | The `TypeScaleTest` step was a malformed, unnumbered checkbox placed after the step that needs it; §17 cited steps 13.1 and 14.1 that do not exist; 1.2 called the file `Wcag.java` | MINOR | numbered 1.6a and moved before 1.6; coverage rows point at §14 items; filename corrected |
+| b13 | Baseline SHA claims disagreed across the document (a9f70e3, 422d7cd, 71d974a) | MINOR | header states the baseline, S0.0 creates the folders, S0's precondition refers to the plan commit rather than a frozen SHA that moves every time the plan is edited |
+| b14 | `pill_neutral` is byte-identical to `ink_surface_variant`, so the stated reason for it being its own token was vacuous | MINOR | spec §3.1 now gives the real reason: a pill is painted with a pill token, not with a surface token borrowed for the job |
+
+The second pass also confirmed, with its own arithmetic, that the corrected budget closes: 320 − 16 − 32 −
+64 = 208, line A 56 fixed leaving 152 for the title, line B 182 fixed leaving 26 for a name that is therefore
+hidden at 320dp, line C 152 leaving 56 for the figures — and that the pill's 82dp is plausible for Roboto
+Medium at 11sp with 0.045 em of tracking (58dp of glyphs, 5.4dp of tracking, 16dp of padding ≈ 80dp). It
+re-ran the contrast gate and confirmed every figure the spec quotes, in both themes, including the neutral
+pill pair.
+
+---
+
+**Document SHAs.** Spec revision 7: `ee75e61b95e671a2ccd753180f6a20a5913e9bdc`. This plan: the commit that adds it, recorded in
+`docs/superpowers/plans/` history and reported to the user with the plan.
