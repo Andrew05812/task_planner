@@ -17,7 +17,8 @@ downloaded copy caught. The history, in order:
 | 4 | §0 separates forbidden business logic from allowed presentation computation; injected clock; contextual action visibility; the completed treatment scoped | `ea3fff0` |
 | 5 | the 320dp budget written out closes, and the category name is what gives way | `a9f70e3` |
 | 6 | five errors two reviews found: the budget, the `letterSpacing` unit, the pill allowance, five distinct text styles, the ramp staged twice, `@dimen/text_caption`'s reader | `422d7cd` |
-| 7 | the budget meets font scale 1.3 and loses: the card grows rather than the type shrinking, plus four arithmetic and count corrections | `ee75e61b95e671a2ccd753180f6a20a5913e9bdc` |
+| 7 | the budget meets font scale 1.3 and loses: the card grows rather than the type shrinking, plus four arithmetic and count corrections | `ee75e61` |
+| 8 | §5 motion rewritten around the item animator after the plan's version proved non-overridable; the rail split into a scrolling category row and a fixed status row; the chart ramp given its own base token so stage 1 cannot move it by aliasing | `d1839a8` + this commit |
 
 Revision 3's own note, kept because it explains why §3.2 is generated: an independent review of revision 1
 falsified six of its claims against the source, and revision 2's contrast section then proved to carry two
@@ -402,9 +403,15 @@ group / archive / work history. Search becomes a real field in the header drivin
 header button, and it is what finally reaches `actionTasksToArchive` and `actionTasksToWorkHistory` (§1).
 This is not decoration — it is the entry point four working features have been waiting for.
 
-Filter rail: category chips, a hairline divider, then the **three** status chips. When anything is active a
-`Filters · n` chip appears at the end and clears all in one press. The rail scrolls horizontally at 320dp
-instead of wrapping and stealing list height.
+Filter rail: a scrolling category row, a hairline divider, then the **three** status chips. When anything is
+active a `Filters · n` chip appears at the end and clears all in one press.
+
+> Correction, revision 8: earlier revisions said "the rail scrolls horizontally at 320dp", which read as one
+> scrolling strip holding both chip groups. It is not, and the reason is a test. `TasksScreenInstrumentedTest`
+> asserts all three status chips are `isDisplayed()`, and inside a `HorizontalScrollView` the third chip is
+> laid out but scrolled off — so a single scrolling rail would either fail that test or invite someone to
+> weaken it. Categories are unbounded and scroll; the three statuses are bounded and stay fixed. Only the
+> category row can steal width from the list, and that is the row that would otherwise wrap.
 
 List: topic group headers in `headline` with count and collapse control, exactly as today.
 
@@ -455,8 +462,13 @@ do with what it is testing.
 > `contentDescription` follow `TrackingPhase`. At most two icon buttons plus the completion toggle are on
 > screen at a time, and the completion toggle is the only one with emphasis.
 
-Overdue is the presentation computation §0 defines: the same `dueDate != null && dueDate < now` the health
-panel's bucket uses, with `now` from the injected `TimeBase`, and no third spelling of it. Its treatment is
+Overdue is the presentation computation §0 defines, and it is the same predicate the health panel's bucket
+uses over the same population: `due_date IS NOT NULL AND due_date < :now`, restricted to rows that are not
+deleted, not archived and not `COMPLETED`/`DONE` — which is exactly the `WHERE` clause of
+`TaskStatisticsDao.healthCounts`, and exactly the population the active list is built from. The card adds no
+condition of its own and drops none of the domain's, and a test covers the one row where the two could drift:
+a completed task with a past due date is late to the dashboard's bucket query only because that query never
+selects it, and the card must not paint it late either. Its treatment is
 date text and priority rule in `ink_error`, plus the word "late" — never colour alone, never a new group,
 status or filter.
 
