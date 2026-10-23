@@ -5,9 +5,12 @@ Branch: `feat/global-ui-redesign` (one branch, one PR, staged commits)
 Baseline: `master` = `origin/master` = `c2c767d1b80db756c1a3517eecc083de598ff7af` (merge of PR #21)
 Direction approved by the user: **Ink & Accent**.
 
-Revision 2. An independent review of revision 1 falsified six of its claims against the source; they are
-corrected here, and the corrections are marked. Contrast figures were recomputed, and two colours failed
-the first pass.
+Revision 3. An independent review of revision 1 falsified six of its claims against the source; they are
+corrected here. Revision 2's contrast section was then found to carry two arithmetic errors of its own — a
+dark-theme sweep reported as a minimum when it was a single-surface figure, and a priority-indicator pair
+taken from the wrong colour — which is why §3.2 is no longer written by hand at all. Every ratio in this
+document is now printed by `scripts/contrast_report.py` from `docs/design/tokens.json`, and the same
+script re-measures the shipped resources once stage 1 writes them.
 
 ## 0. What this stage is, and what it is not
 
@@ -55,8 +58,23 @@ these as four submenu entries that toggle direction, not seven.
 `RecurrenceRule?` this instance belongs to, the count of pending reminders, and a `CardWork` measured-time
 line. Priorities are `LOW`, `MEDIUM`, `HIGH`.
 
-**Tasks header actions that already exist** (`menu_tasks.xml`): search, new group, archive, work history,
-sort. Archive and work history are reached from Tasks today, so Profile does not duplicate them.
+**The Tasks header actions exist in code and are reachable on no screen.** `menu_tasks.xml` declares
+search, new group, archive, work history and sort, and `TasksFragment` wires all five through
+`requireActivity().addMenuProvider`. Nothing displays that menu: the app's theme is
+`Theme.Material3.DayNight.NoActionBar`, `MainActivity` never calls `setSupportActionBar`, and no layout in
+`res/layout` contains a `Toolbar` — the string appears in none of the fifty-two. `setSearchQuery`,
+`setSortOrder`, `actionTasksToArchive` and `actionTasksToWorkHistory` each have exactly one caller, inside
+that invisible menu, and the Archive screen has no other entry point in the app. Four working features are
+therefore stranded behind chrome that was never built, which is visible in the audit screenshot as a Tasks
+screen with an empty top edge. Revision 2 described these as "reached from Tasks today"; that was read off
+the menu file and is wrong. §4.1's header is what makes them reachable, and it is the largest real problem
+this stage fixes.
+
+**Completed tasks leave the active list.** `TasksViewModel.completeAndArchive` finishes a task and moves it
+out of the list the Tasks screen shows, so a Completed card treatment is only ever seen where completed
+rows really are drawn — the Archive screen, the calendar's finished marks and the report — and never as a
+state of a Tasks row. §4.1's completed style is scoped to those screens; the archiving behaviour itself is
+untouched.
 
 **Achievements: the data layer exists, the screen does not.** `data/achievement/AchievementRule.kt`,
 `AchievementRules.kt`, the `achievements` table from schema v16, `AchievementRepository` and 62
@@ -134,6 +152,11 @@ used sparingly and always with a second signal. No third-party palette, no gradi
 
 Names are semantic roles, not hues. Light values in `values/colors.xml`, dark in `values-night/`.
 
+The table below is a quotation. Its source of truth is `docs/design/tokens.json`, and
+`scripts/contrast_report.py` reads that file, re-measures every pair, and writes
+`docs/design/contrast-report.md`; a later stage points the same script at the shipped resources, so a hex
+value edited into `colors.xml` without the table is reported as drift.
+
 | Token | Light | Dark | Role |
 |---|---|---|---|
 | `ink_background` | `#FBF9F6` | `#12100F` | screen behind everything |
@@ -143,13 +166,14 @@ Names are semantic roles, not hues. Light values in `values/colors.xml`, dark in
 | `ink_text` | `#1A1614` | `#F2EDE7` | primary text |
 | `ink_text_secondary` | `#6B635C` | `#A39B92` | meta text |
 | `ink_text_tertiary` | `#6E655D` | `#968D84` | captions, timestamps |
-| `ink_outline` | `#E3DDD5` | `#312D29` | hairlines (decorative only) |
-| `ink_outline_strong` | `#B9B1A7` | `#5A544D` | strokes that carry state |
+| `ink_outline` | `#E3DDD5` | `#312D29` | hairlines (decorative only, 1.35 / 1.30) |
+| `ink_outline_strong` | `#8C8378` | `#7A736A` | strokes that carry state — 3.73 / 3.78 on a surface |
 | `ink_accent` | `#2F6F5E` | `#6FD3B8` | the one accent |
 | `ink_on_accent` | `#FFFFFF` | `#0E201B` | text on filled accent |
 | `ink_success` | `#2F7A4B` | `#7CC98F` | finished |
 | `ink_warning` | `#8F5B18` | `#E0A95F` | paused, workload |
 | `ink_error` | `#C0402F` | `#F0836F` | overdue, destructive |
+| `ink_on_error` | `#FFFFFF` | `#2B0F0A` | text on a filled destructive control |
 
 Plus eight solid pill backgrounds, four per theme, chosen numerically rather than by alpha so each is a
 checked pair: light `#EEF3F2` / `#EEF4F1` / `#F6F2ED` / `#FAF0EE` and their dark counterparts
@@ -157,9 +181,16 @@ checked pair: light `#EEF3F2` / `#EEF4F1` / `#F6F2ED` / `#FAF0EE` and their dark
 
 > Corrections from review and from recomputation: `ink_text_tertiary` was `#7A716A`, which measures 4.09:1
 > on the variant surface it was assigned to — below the spec's own AA bar. `ink_warning` was `#9A6320`,
-> which measures 4.40:1 on its own 10 % tint. Both were darkened. Revision 1 also drew pill backgrounds as
+> which measures 4.40:1 on its own 10 % tint. Both were darkened. Revision 2 also drew pill backgrounds as
 > a percentage alpha of the text colour; that composites differently on `surface`, `raised`, `bg` and
 > `variant` (4.51 down to 3.91), so backgrounds are now explicit tokens.
+>
+> Revision 3 adds two more, both found by running the script rather than by reading the table.
+> `ink_outline_strong` was `#B9B1A7` / `#5A544D`, which measures 2.12 and 2.37 against its own surface —
+> it was described as carrying state and does not clear the 3:1 that asks for. It is now `#8C8378` /
+> `#7A736A` (3.73 / 3.78 on a surface, 3.20 / 3.34 on the variant), so a resting field outline drawn with
+> it is legible as a boundary. And `ink_on_error` was missing entirely: a filled destructive button had
+> no declared foreground.
 
 The theme maps these onto the Material 3 roles `colorPrimary`, `colorSurface`, `colorSurfaceVariant`,
 `colorOutline`, `colorError` and the `colorSurfaceContainer` family — `color_surface_container`, `_low`,
@@ -172,32 +203,66 @@ theme, which is already documented in `colors.xml`. The chart ramps are re-ancho
 that is a deliberate change and it does break the colour assertions named in §8, which are updated rather
 than left failing.
 
-### 3.2 Contrast, computed
+### 3.2 Contrast, measured
 
-Ratios come from the sRGB relative-luminance formula. Text must meet WCAG 2.1 AA (4.5:1 at the sizes used
-here); graphics that carry state must meet 3:1. Every text colour was measured against **all four**
-backgrounds it may legally appear on, not just the one it was designed for.
+Ratios come from the WCAG 2.1 relative-luminance formula over the sRGB channels, computed by
+`scripts/contrast_report.py` — not transcribed. Text must meet AA (4.5:1 at the sizes used here); graphics
+that carry state must meet 3:1. Every text colour is measured against **all four** backgrounds it may
+legally appear on, and the script prints two different minima because they answer two different questions.
 
-Light, minimum over `background` / `surface` / `raised` / `variant`:
-`ink` 15.41 · `secondary` 5.05 · `tertiary` 4.89 · `accent` 5.06 · `success` 4.49 · `warning` 4.90 ·
-`error` 4.48 · `on_accent` on `accent` 5.91.
+**The shipped minimum** — the lowest ratio a colour reaches over the surfaces the design is allowed to put
+it on:
 
-Dark, same sweep: `ink` 13.44 · `secondary` 5.71 · `tertiary` 4.80 · `accent` 8.70 · `success` 8.94 ·
-`warning` 8.43 · `error` 6.89 · `on_accent` on `accent` 9.42.
+| | light | dark |
+|---|---|---|
+| `ink_text` | 15.41 | 13.44 |
+| `ink_text_secondary` | 5.05 | 5.71 |
+| `ink_text_tertiary` | 4.89 | 4.80 |
+| `ink_accent` | 5.06 | 8.70 |
+| `ink_success` | 4.99 | 8.28 |
+| `ink_warning` | 5.43 | 7.81 |
+| `ink_error` | 4.98 | 6.38 |
 
-**The one rule the sweep forces:** `success` (4.49) and `error` (4.48) fall a hair under AA on
-`ink_surface_variant`. Semantic-coloured text is therefore never placed on a variant surface — pills carry
-their own solid background token, and variant is used only behind `ink`, `secondary`, `tertiary` and
-`accent`. This is a constraint on the design, stated so that it can be tested rather than noticed later.
+**The raw sweep** — the same colours over all four surfaces with the rule switched off, which is what the
+rule was derived from:
+
+| | light | dark |
+|---|---|---|
+| `ink_success` | **4.49** on `ink_surface_variant` | 7.90 |
+| `ink_warning` | 4.90 | 7.46 |
+| `ink_error` | **4.48** on `ink_surface_variant` | 6.09 |
+
+> Correction, revision 3: revision 2 reported the dark figures 8.94 / 8.43 / 6.89 as "the same sweep", but
+> those are the measurements on `ink_surface` (`#1A1817`) alone. Over all four dark surfaces the minima are
+> 7.90 / 7.46 / 6.09, all on `ink_surface_variant`. The distinction matters for the rule, so the rule is
+> now stated with its own evidence: it is **load-bearing in the light theme only**, where success (4.49)
+> and error (4.48) fall under AA on the variant surface. In the dark theme every semantic colour clears AA
+> everywhere, and the ban is kept for consistency of the component rather than for the arithmetic.
+
+**The rule:** semantic-coloured text — `ink_success`, `ink_warning`, `ink_error` — is never placed on
+`ink_surface_variant`. Pills carry their own solid background token, and variant is used only behind
+`ink_text`, `ink_text_secondary`, `ink_text_tertiary` and `ink_accent`.
+
+Text on a filled control: `ink_on_accent` on `ink_accent` 5.91 light / 9.42 dark; `ink_on_error` on
+`ink_error` 5.23 / 6.96.
 
 Pill pairs, text on its own solid background: light 5.27 / 4.70 / 5.12 / 4.67 (accent, success, warning,
 error); dark 7.40 / 6.80 / 6.50 / 5.52.
 
-State-bearing graphics against the surface: priority rules 5.71 (HIGH), 4.90 (MEDIUM), tertiary 5.70
-(LOW has no rule); selected-chip stroke and focus ring 5.91. All above 3:1. `ink_outline` at ~1.35 is
-decorative and is never the sole carrier of a state.
+State-bearing graphics against `ink_surface`: the priority rule is `ink_error` for HIGH at **5.23** and
+`ink_warning` for MEDIUM at **5.71**; LOW draws no rule at all, and where a LOW row needs words the caption
+colour `ink_text_tertiary` measures **5.70** on the same surface. `ink_accent` (selected-chip stroke, focus
+ring) 5.91 light / 9.85 dark; `ink_outline_strong` 3.73 / 3.78. All above 3:1.
 
-These figures are reproduced by a script during implementation and again at the end of the stage.
+> Correction, revision 3: revision 2 listed the indicators as "5.71 (HIGH), 4.90 (MEDIUM)". Those two
+> numbers are `ink_warning` on white and `ink_warning` on the variant surface — the warning colour quoted
+> twice and the error colour never measured.
+
+`ink_outline` at 1.35 light / 1.30 dark is decorative and is never the sole carrier of a state; the script
+reports it outside the gate so the figure is on the record without pretending it passes.
+
+The same pairs are asserted a second time inside the build, as JVM tests that read the shipped resources
+through Robolectric, so a drift that skips the script fails CI. Both are re-run at the end of the stage.
 
 ### 3.3 Type
 
@@ -255,9 +320,12 @@ app reads as stock.
 
 ### 4.1 Tasks
 
-Header: `Tasks` in display size with the open count as a `meta` subtitle. Right side: search, sort, and a
-kebab holding new group / archive / work history. Search becomes a real expanding field in the header
-driving the same `TasksViewModel` query the menu item drives now.
+Header: `Tasks` in display size with the open count as a `meta` subtitle — `TasksState.activeTaskCount`,
+already computed for the state object and shown nowhere. Right side: search, sort, and a kebab holding new
+group / archive / work history. Search becomes a real field in the header driving the same
+`viewModel.setSearchQuery` the invisible menu item drives now; the kebab is a `PopupMenu` anchored to a
+header button, and it is what finally reaches `actionTasksToArchive` and `actionTasksToWorkHistory` (§1).
+This is not decoration — it is the entry point four working features have been waiting for.
 
 Filter rail: category chips, a hairline divider, then the **three** status chips. When anything is active a
 `Filters · n` chip appears at the end and clears all in one press. The rail scrolls horizontally at 320dp
@@ -266,29 +334,71 @@ instead of wrapping and stealing list height.
 List: topic group headers in `headline` with count and collapse control, exactly as today.
 
 Card, left to right:
-- a 4dp priority rule inset from the card border — error for HIGH, warning for MEDIUM, **no rule** for LOW,
-  so absence reads as "not urgent";
+- a 4dp priority rule inset from the card border — `ink_error` for HIGH, `ink_warning` for MEDIUM, **no
+  rule** for LOW, so absence reads as "not urgent";
 - title in `title` size, two lines maximum;
 - one `meta` line: relative due date ("Today 18:00", "3 days late", "No due date"), an 8dp category dot
-  with the name, then icons only for what is present — repeat, pending reminders, measured time;
-- right side: the completion toggle as the single primary action at 48dp.
+  with the name in `ink_text_tertiary` — the dot carries the colour, not the word, which is what makes the
+  pale category greens in the audit screenshot legible — then icons only for what is present: repeat,
+  pending reminders, measured time;
+- right side: the action group, described below.
 
-> Decision the review showed was missing. Today the card carries four status buttons
-> (`startTaskButton`, `pauseTaskButton`, `resumeTaskButton`, `completeTaskButton`) plus a
-> `workControlButton`. Resolution: **start / pause / resume and the work control stay on the card**, in a
-> compact icon group, because they are the actions a daily user takes most and hiding them behind a swipe
-> would be a regression; the completion toggle keeps its current position and gains the strongest
-> emphasis. Edit and delete stay in the swipe panel. Nothing is removed, so `TaskCardWorkTest` and
-> `TaskCardReminderTest` keep asserting against real views.
+> Decision the review showed was missing, and one revision 2 left under-specified. Today the card carries
+> four status buttons (`startTaskButton`, `pauseTaskButton`, `resumeTaskButton`, `completeTaskButton`) plus
+> a `workControlButton`. All five views stay in the layout, because `TaskCardWorkTest` and
+> `TaskCardReminderTest` assert against real views and hiding a control behind a swipe would be a
+> regression on the actions a daily user takes most. **What is fixed is that they are never all visible at
+> once** — the visibility rule the card already half-follows, written out so it can be tested:
+>
+> | Row state | Start | Pause | Resume | Complete | Work control |
+> |---|---|---|---|---|---|
+> | `TODO`, timer idle | visible | — | — | visible | visible only when work has been measured on the task |
+> | `IN_PROGRESS`, timer idle | — | visible | — | visible | as above |
+> | `PAUSED`, timer idle | — | — | visible | visible | as above |
+> | any status, timer running or paused mid-stretch | follows the status column | | | | visible, and it is the one button that answers for that phase |
+> | `COMPLETED` | — | — | — | — | never: its timer stopped when the task was finished |
+>
+> `—` means gone, not invisible-but-present: a hidden button still steals 40dp of a 320dp row. The status
+> transitions themselves are unchanged, and the work control keeps the existing contract in
+> `TasksAdapter.bindWork` — shown with `work.isShown && status != COMPLETED`, one button whose icon and
+> `contentDescription` follow `TrackingPhase`. At most two icon buttons plus the completion toggle are on
+> screen at a time, and the completion toggle is the only one with emphasis.
 
 Overdue is the computed treatment from §1: date text and priority rule take `ink_error`, plus the word
 "late" — never colour alone, never a new group or status.
 
-Completed cards recede: no elevation, tertiary text, strikethrough title, pill still carrying the word
-"Done".
+The completed treatment — no elevation, tertiary text, strikethrough title, a pill still carrying the word
+"Done" — is applied **only where completed rows are actually drawn**: the Archive list, the calendar's
+finished marks, the report and the work history. It is defined as a card style, not switched on for the
+Tasks list, because `completeAndArchive` moves a finished task out of that list and a Tasks row therefore
+never has the state to render. `completeAndArchive` itself is not touched by this stage; the Completed
+style is dead code on the Tasks screen and is not allowed to become a reason to change when a task leaves
+the list.
 
 Selection mode replaces the header with `.SelectionBar`. Swipe reveals edit and delete over a
 surface-coloured panel, now correctly hidden when closed (§2.1).
+
+**The card at 320dp.** 320dp is the narrowest width the stage is verified at, and at that width the row has
+280dp of card to work with after the 8dp gutters and the 14dp of inset the priority rule and the drag
+handle take. The rules, in the order they are allowed to give way:
+
+- the title keeps the whole remaining width and truncates at two lines with an ellipsis. It never shrinks
+  below one line's height, and nothing overlaps it — the action group is a sibling constrained to the
+  card's end, not an overlay on the text;
+- the `meta` line is a single horizontal chain that drops its tail before it wraps: category name, then
+  repeat icon, then reminder count, then measured time, in that order of leaving. The due date is the one
+  thing on the line that never drops, because it is the fact the list is sorted by. Wrapping is forbidden
+  — a second meta line at 320dp pushes a four-line card past the height the list can hold;
+- icons never scale below their 48dp touch box. If the action group and the meta line cannot both fit, the
+  measured-time text collapses to its icon and the buttons stay;
+- the drag handle is the first thing to go, and it goes only when the sort order is not `MANUAL` — which
+  is already its behaviour, restated here so the 320dp screenshots are read against a rule and not against
+  a hope;
+- no view is given a fixed width that a long word can exceed, and the row's `layout_width` stays
+  `match_parent`, so horizontal overflow is structurally impossible: the test inflates a row at 320dp with
+  a 120-character title, a long category name and every icon present, and asserts the card's right edge
+  equals the row's right edge minus its margin, the title's `right` is not greater than the action group's
+  `left`, and the meta line's `bottom` minus `top` is one line.
 
 ### 4.2 Profile
 
@@ -344,7 +454,12 @@ come from one place; the system's animator scale is respected, which Android app
 ## 6. Accessibility and adaptivity
 
 Touch targets ≥48dp. Every icon-only control has a `contentDescription`. Status, priority and overdue are
-each legible without colour. Contrast per §3.2 including the variant-surface rule, re-measured by script.
+each legible without colour. Contrast per §3.2 including the variant-surface rule, measured by
+`scripts/contrast_report.py` and asserted a second time by JVM tests over the shipped resources, so the
+promise survives someone editing a hex value without reading this file.
+
+The narrow-width contract for the task card is §4.1's "card at 320dp" list, and it is tested as a layout
+measurement rather than reviewed as a photograph.
 
 Verified on the emulator at 320dp, 360dp and 393dp widths at font scale 1.0 and 1.3, light and dark. The
 widths are produced reproducibly with `adb shell wm size` / `wm density` overrides, and the exact
@@ -399,14 +514,20 @@ Known open flake: `WorkAdjustmentUiTest > a stretch that ends where or before it
 form` failed mainline run #55 and passed a re-run of the same commit. If it appears in this branch it is
 investigated to root cause, never routed around by weakening an assertion.
 
+Alongside the suite, `python scripts/contrast_report.py --resources app/src/main/res --check` is run at
+stage 1, stage 7 and the end of the stage, and its report is committed to
+`docs/design/contrast-report.md`. It is the arithmetic; the tests are the same arithmetic inside the build.
+
 ## 9. Delivery order
 
 One branch, one PR, one commit per layer, each building and passing tests before the next starts, each
 with its own screenshots:
 
-1. tokens, themes, type, space, component styles and includes;
+1. tokens, themes, type, space, component styles and includes — with `docs/design/tokens.json`, the
+   contrast script and the JVM pair tests landing in this stage, before any screen can drift from them;
 2. Tasks: the swipe-panel geometry fixed at root, with a test that pins the closed bounds;
-3. Tasks: header, filter rail, card composition, and the tests that travel with them;
+3. Tasks: the header that makes search, sort, archive and work history reachable, the filter rail, the
+   card composition with its contextual action visibility, and the tests that travel with them;
 4. Profile rebuilt, with its first-ever tests;
 5. task editor regrouped;
 6. bottom navigation treatment;
