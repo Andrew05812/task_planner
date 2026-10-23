@@ -22,13 +22,43 @@ The stack stays exactly as it is: XML layouts, ViewBinding, Fragments, Navigatio
 Nothing under `data/` changes: no schema, no migration, no repository, no sync, no backup format, no
 business rule. `RepeatPreset` keeps its nullable unit label — the crash fix must not be undone.
 
-**What is in scope in Kotlin.** "Visual stage" does not mean "XML only", and revision 1 implied
-otherwise. This redesign necessarily changes display-layer Kotlin: the task adapter (status, priority and
-overdue presentation, the reveal geometry), the Tasks fragment and view model's *rendering* path (relative
-date wording, an active-filter summary, search surfaced in the header instead of the overflow), the
-Profile fragment's row bindings, and the avatar view. None of it changes a stored value, a query, a
-calculation or a state transition. The line this spec holds is: **display code may change, data and
-domain code may not.**
+**What is in scope in Kotlin.** "Visual stage" does not mean "XML only", and revision 1 implied otherwise.
+The line this spec holds is: **display code may change, data and domain code may not.** The two halves of
+that line are different rules and §0 states them separately, because "presentation-only computation" is the
+phrase most likely to be read as a licence.
+
+*Forbidden.* Nothing that decides what a value **is**. No change to a Room schema, migration, DAO query,
+repository, domain model, state transition, calculation, sync or backup format, or to when a task counts as
+finished, archived, measured or earned. No new persisted field, no new status, no new filter, no new group.
+A screen may not begin to answer a question the domain answers differently.
+
+*Allowed.* A computation whose whole input is data already on the row and whose whole output is a decision
+about **how to draw it**. Two of the redesign's features are exactly this, and they are legitimate:
+
+- **overdue**, which is a rendering decision, not a state — the row already has `dueDate` and `status`;
+- **relative date wording** — "Today 18:00", "3 days late" instead of "Oct 25, 2026" — which re-expresses
+  the same instant the row already carries.
+
+Three conditions attach, and a presentation computation that breaks any of them has become business logic:
+
+1. **Existing data only.** It reads fields the row already has. It issues no query and takes nothing new
+   from a repository.
+2. **No state, no writes.** It changes no stored value, no status, no ordering key, no filter, and nothing
+   the domain can later read back.
+3. **No second definition of a rule the domain already owns.** Overdue already has an answer in this app:
+   `TaskStatisticsDao` counts the health panel's `OVERDUE` bucket as `due_date IS NOT NULL AND due_date <
+   :now`. The card uses that predicate and no other, so a task the dashboard calls late cannot be a task
+   the list calls on time. The wording lives in the display layer; the rule does not.
+
+**Current time is injected, never read from the clock.** A presentation computation that calls
+`System.currentTimeMillis()` inline is untestable at its boundary — the exact case where it is wrong is the
+one no test can set up, and this repository has already been bitten by a midnight-boundary flake
+(`WorkTrackingRepositoryTest`, fixed in stage G). So the computation takes its `now` as a parameter, and
+`TasksViewModel` receives the seam the app already has: `data/tracking/TimeBase`, whose `wallMillis()` is
+already Hilt-provided by `di/AppModule.provideTimeBase()` and already injected into every repository that
+had to be testable to the second. A defaulted constructor parameter is the only change there, and it is
+display-layer. A test then holds the clock still and asserts that a task dated 23:59 is late and one dated
+00:01 is not, on the same row data.
 
 The measurable goal is the user's own: after installing the new APK, Tasks and Profile must not look like
 the screenshots they supplied. Colour and corner-radius edits do not pass.
@@ -333,15 +363,26 @@ instead of wrapping and stealing list height.
 
 List: topic group headers in `headline` with count and collapse control, exactly as today.
 
-Card, left to right:
-- a 4dp priority rule inset from the card border — `ink_error` for HIGH, `ink_warning` for MEDIUM, **no
-  rule** for LOW, so absence reads as "not urgent";
-- title in `title` size, two lines maximum;
-- one `meta` line: relative due date ("Today 18:00", "3 days late", "No due date"), an 8dp category dot
-  with the name in `ink_text_tertiary` — the dot carries the colour, not the word, which is what makes the
-  pale category greens in the audit screenshot legible — then icons only for what is present: repeat,
-  pending reminders, measured time;
-- right side: the action group, described below.
+Card. Three lines inside one card, the same structure at every width, because a card that rearranges
+itself between 320dp and 393dp is two cards to maintain and one of them is never tested:
+
+- **line A** — the drag handle, then the 4dp priority rule inset from the border (`ink_error` for HIGH,
+  `ink_warning` for MEDIUM, **no rule** for LOW, so absence reads as "not urgent"), then the title in
+  `title` size taking the remaining width and truncating at two lines, then the status pill at the end;
+- **line B** — one `meta` line: relative due date ("Today 18:00", "3 days late", "No due date"), an 8dp
+  category dot with the name in `ink_text_tertiary` — the dot carries the colour, not the word, which is
+  what makes the pale category greens in the audit screenshot legible — then icons only for what is
+  present: repeat, pending reminders;
+- **line C** — the measured-time figures on the left when there are any, and the action cluster
+  right-aligned: the work control, the one lifecycle button the status calls for, and the completion
+  toggle, which is the only one with emphasis.
+
+> Why the actions moved off line A. At 320dp the card's text column is 208dp wide (§4.1 below), and three
+> 48dp buttons are 144dp of it. Beside the title that leaves 64dp — four or five characters — so a
+> four-button row is not a tight layout but an impossible one, and the audit screenshot shows the current
+> card discovering this by squeezing the title. Putting the cluster on its own line is the only arrangement
+> in which every action keeps a 48dp touch target *and* the title keeps a readable measure. The plan
+> carries the arithmetic; the test enforces it.
 
 > Decision the review showed was missing, and one revision 2 left under-specified. Today the card carries
 > four status buttons (`startTaskButton`, `pauseTaskButton`, `resumeTaskButton`, `completeTaskButton`) plus
@@ -364,8 +405,10 @@ Card, left to right:
 > `contentDescription` follow `TrackingPhase`. At most two icon buttons plus the completion toggle are on
 > screen at a time, and the completion toggle is the only one with emphasis.
 
-Overdue is the computed treatment from §1: date text and priority rule take `ink_error`, plus the word
-"late" — never colour alone, never a new group or status.
+Overdue is the presentation computation §0 defines: the same `dueDate != null && dueDate < now` the health
+panel's bucket uses, with `now` from the injected `TimeBase`, and no third spelling of it. Its treatment is
+date text and priority rule in `ink_error`, plus the word "late" — never colour alone, never a new group,
+status or filter.
 
 The completed treatment — no elevation, tertiary text, strikethrough title, a pill still carrying the word
 "Done" — is applied **only where completed rows are actually drawn**: the Archive list, the calendar's
@@ -378,27 +421,35 @@ the list.
 Selection mode replaces the header with `.SelectionBar`. Swipe reveals edit and delete over a
 surface-coloured panel, now correctly hidden when closed (§2.1).
 
-**The card at 320dp.** 320dp is the narrowest width the stage is verified at, and at that width the row has
-280dp of card to work with after the 8dp gutters and the 14dp of inset the priority rule and the drag
-handle take. The rules, in the order they are allowed to give way:
+**The card at 320dp.** 320dp is the narrowest width the stage is verified at, and the card is designed
+against a budget rather than a hope: 320dp of row, minus 16dp of card margins, minus 32dp of card padding,
+minus 52dp of drag handle and 12dp of priority rule, leaves **208dp** of text column. Line C's three
+buttons take 144dp of it and leave 64dp for the measured-time figures; line A's pill takes 69dp and leaves
+131dp for the title; line B's fixed parts take 140dp and leave 68dp for the category name. The plan's Task
+12 states that arithmetic in full, and its test measures the inflated row against it.
 
-- the title keeps the whole remaining width and truncates at two lines with an ellipsis. It never shrinks
-  below one line's height, and nothing overlaps it — the action group is a sibling constrained to the
-  card's end, not an overlay on the text;
-- the `meta` line is a single horizontal chain that drops its tail before it wraps: category name, then
-  repeat icon, then reminder count, then measured time, in that order of leaving. The due date is the one
-  thing on the line that never drops, because it is the fact the list is sorted by. Wrapping is forbidden
-  — a second meta line at 320dp pushes a four-line card past the height the list can hold;
-- icons never scale below their 48dp touch box. If the action group and the meta line cannot both fit, the
-  measured-time text collapses to its icon and the buttons stay;
-- the drag handle is the first thing to go, and it goes only when the sort order is not `MANUAL` — which
-  is already its behaviour, restated here so the 320dp screenshots are read against a rule and not against
-  a hope;
-- no view is given a fixed width that a long word can exceed, and the row's `layout_width` stays
-  `match_parent`, so horizontal overflow is structurally impossible: the test inflates a row at 320dp with
-  a 120-character title, a long category name and every icon present, and asserts the card's right edge
-  equals the row's right edge minus its margin, the title's `right` is not greater than the action group's
-  `left`, and the meta line's `bottom` minus `top` is one line.
+The rules, in the order the elements are allowed to give way:
+
+- nothing overlaps: every line is a horizontal chain, and the title's right edge is provably at or before
+  the pill's left edge;
+- the title truncates at two lines with an ellipsis and never shrinks below one line's height;
+- the `meta` line drops its tail before it wraps — category name first, then the reminder count, then the
+  repeat icon. The due date and the status word are the two things that never drop, because they are the
+  facts the list is sorted by and the state the list is filtered on. Wrapping is forbidden: a second meta
+  line pushes a four-line card past what the list can hold at that width;
+- icons never scale below their 48dp touch box; if the measured-time figures and the action cluster cannot
+  both fit line C, the figures collapse to their icon and the buttons stay;
+- the drag handle is the first thing to go, and it goes only when the sort order is not `MANUAL` — already
+  its behaviour, restated so the 320dp screenshots are read against a rule;
+- no text-bearing view gets a fixed width a long word can exceed, and the row stays `match_parent`, so
+  horizontal overflow is structurally impossible.
+
+Being inside the screen is not the bar. The test inflates a row at 320dp with a 120-character title, the
+longest category name in the strings file, a due date, a repeat series, two pending reminders and a running
+stretch — the worst legal row — and then asserts that what is *legible* is the part that matters: the due
+date and the status word are drawn at their full measured width, the title is at least 128dp wide, every
+visible button is at least 48dp on both axes, no two visible views overlap, and the category name is the
+one element allowed to have given way.
 
 ### 4.2 Profile
 
