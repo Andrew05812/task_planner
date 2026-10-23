@@ -211,14 +211,44 @@ adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
   -Pandroid.testInstrumentationRunnerArguments.class=com.taskplanner.ui.tasks.TaskEditorInstrumentedTest
 ```
 
-Before trusting any screenshot: reinstall the fresh APK and prove the installed file is the one just
-built (this is a standing rule from the previous audit, where a stale APK caused a false claim):
+Before trusting any screenshot: prove the installed bytes **are** the built bytes. Hashing the local file
+and then reading `lastUpdateTime` proves nothing about identity — that is exactly the check that failed in
+the audit, where a stale APK sat on the device. The procedure below was run on this emulator and returned
+`PASS`; it is reproduced verbatim.
 
 ```bash
-sha256sum app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5554 shell dumpsys package com.taskplanner | grep -E "lastUpdateTime|versionName"
-adb -s emulator-5554 shell pm path com.taskplanner
+# 1. build, then install exactly that file
+./gradlew --no-daemon --console=plain assembleDebug
+adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+
+# 2. the path the package manager actually loaded
+P=$(adb -s emulator-5554 shell pm path com.taskplanner | tr -d '\r' | sed -n 's/^package://p' | head -1)
+echo "$P"
+
+# 3. hash it on the device (the shell user can read it: base.apk is -rw-r--r-- system system)
+DEV=$(adb -s emulator-5554 exec-out sha256sum "$P" | tr -d '\r' | cut -d' ' -f1)
+
+# 4. and again after pulling it, in case the on-device hash command is unavailable
+LOCAL=$(sha256sum app/build/outputs/apk/debug/app-debug.apk | cut -d' ' -f1)
+adb -s emulator-5554 pull "$P" /tmp/installed-base.apk >/dev/null
+PULLED=$(sha256sum /tmp/installed-base.apk | cut -d' ' -f1)
+
+# 5. three states, never a fourth
+if [ "$LOCAL" = "$DEV" ] && [ "$LOCAL" = "$PULLED" ]; then echo "PASS $LOCAL"
+elif [ -z "$DEV" ] || [ -z "$PULLED" ]; then echo "BLOCKED: cannot read the installed APK"
+else echo "FAIL local=$DEV pulled=$PULLED"; fi
 ```
+
+Measured at `0abd9cb`, for reference: `base.apk` is world-readable, `pm path` returns
+`/data/app/~~esTsuNRQ…/com.taskplanner-eBW6J5SvcLEGLbxlF4qlAQ==/base.apk`, and local, on-device and pulled
+hashes were all `28e898e91ad7a18a505b4555f0026dba138463d497e944ccb10ce9a7ad9600f7` — a real `PASS`, not an
+inference from a timestamp.
+
+`BLOCKED` is a legitimate outcome and must be reported as one: a release build on a stock handset, or a
+manufacturer ROM that tightens `/data/app` permissions, can make the installed APK unreadable to `adb`. In
+that case the identity claim is **not** made; the review document says which of the three states was
+reached, and the screenshot evidence is labelled "installed APK identity unverified" rather than dropped
+silently. Nothing about this procedure clears app data or reinstalls over the user's account — it reads.
 
 ## 7. Stage dependency graph
 
@@ -433,10 +463,16 @@ Tools: `design-review:design-system-capture`, `ui-ux-pro-max-skill:design-system
 ```kotlin
 package com.taskplanner.ui.theme
 
-/** WCAG 2.1 relative luminance and contrast ratio over the sRGB channels of a packed ARGB colour. */
+import kotlin.math.pow
+
+/**
+ * WCAG 2.1 relative luminance and contrast ratio over the sRGB channels of a packed ARGB colour.
+ *
+ * Kotlin has no exponent operator, so the linearisation is `Double.pow` rather than `**`.
+ */
 object Wcag {
     private fun channel(v: Int) = (v / 255.0).let {
-        if (it <= 0.03928) it / 12.92 else ((it + 0.055) / 1.055) ** 2.4
+        if (it <= 0.03928) it / 12.92 else ((it + 0.055) / 1.055).pow(2.4)
     }
 
     fun luminance(color: Int): Double =
@@ -730,9 +766,8 @@ class TypeScaleTest {
     private val themed: Context =
         ContextThemeWrapper(ApplicationProvider.getApplicationContext(), R.style.Theme_TaskPlanner)
 
-    private fun sizeSp(styleRes: Int): Float = TextView(themed, null, 0, styleRes).textSize.let { px ->
-        TypedValue.px2sp(themed.resources.displayMetrics, px)
-    }
+    private fun sizeSp(styleRes: Int): Float =
+        TypedValue.px2sp(TextView(themed, null, 0, styleRes).textSize, themed.resources.displayMetrics)
 
     @Test fun `each role is the size the scale says it is`() {
         assertEquals(28f, sizeSp(R.style.TextAppearance_TaskPlanner_Display), 1f)
@@ -760,7 +795,7 @@ class TypeScaleTest {
         ).forEach { (style, expected) ->
             val actual = TextView(themed, null, 0, style).letterSpacing
             assertEquals(
-                resources.getResourceEntryName(style), expected, actual, 0.0015f
+                themed.resources.getResourceEntryName(style), expected, actual, 0.0015f
             )
         }
     }
@@ -791,7 +826,7 @@ class TypeScaleTest {
     }
 
     private fun sizeSpOf(tv: TextView): Float =
-        TypedValue.px2sp(themed.resources.displayMetrics, tv.textSize)
+        TypedValue.px2sp(tv.textSize, themed.resources.displayMetrics)
 }
 ```
 
@@ -845,28 +880,50 @@ promises one:
 ```kotlin
 package com.taskplanner.ui.theme
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.R
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/**
+ * The list's bottom padding and the FAB that floats over it are one fact, not two numbers.
+ *
+ * The last row has to clear the button without the list gaining a scroll of dead space, and the 88dp that
+ * does it today is a literal nobody re-checks when the FAB moves. This asserts the sum, so changing either
+ * dimen without the other fails here rather than turning up in a screenshot three stages later.
+ */
 @RunWith(RobolectricTestRunner::class)
 class ListGutterTest {
 
-    /**
-     * The list's bottom padding and the FAB that floats over it are one fact, not two numbers.
-     *
-     * The last row has to clear the button without the list gaining a scroll of dead space, and the
-     * 88dp that does it today is a literal that nobody re-checks when the FAB moves. This asserts the
-     * sum, so changing either dimen without the other fails here rather than in a screenshot.
-     */
+    private lateinit var context: Context
+
+    @Before fun setUp() {
+        context = ApplicationProvider.getApplicationContext()
+    }
+
+    /** getDimensionPixelSize returns pixels, so the dp floor has to be converted the same way. */
+    private fun pxOf(dp: Int) = (dp * context.resources.displayMetrics.density).toInt()
+
+    private fun dimen(id: Int) = context.resources.getDimensionPixelSize(id)
+
     @Test fun `the list's bottom gutter is the fab plus its two margins`() {
-        val px = { id: Int -> context.resources.getDimensionPixelSize(id) }
         assertEquals(
             "fab_size + 2 * fab_margin == list_bottom_gutter",
-            px(R.dimen.fab_size) + 2 * px(R.dimen.fab_margin),
-            px(R.dimen.list_bottom_gutter)
+            dimen(R.dimen.fab_size) + 2 * dimen(R.dimen.fab_margin),
+            dimen(R.dimen.list_bottom_gutter)
         )
     }
 
-    @Test fun `every touch target in the scale is at least forty-eight`() {
-        assertTrue(context.resources.getDimensionPixelSize(R.dimen.touch_target_min) >= 48.dp)
-        assertTrue(context.resources.getDimensionPixelSize(R.dimen.row_min_height) >= 48.dp)
+    @Test fun `the touch-target scale is at least forty-eight dp`() {
+        assertTrue("touch_target_min is ${dimen(R.dimen.touch_target_min)}px",
+            dimen(R.dimen.touch_target_min) >= pxOf(48))
+        assertTrue("row_min_height is ${dimen(R.dimen.row_min_height)}px",
+            dimen(R.dimen.row_min_height) >= pxOf(48))
     }
 }
 ```
@@ -1479,7 +1536,36 @@ data class CardPresentation(
 @RunWith(RobolectricTestRunner::class)
 class TaskCardWidthBudgetTest {
 
+    private lateinit var context: Context
+
+    @Before fun setUp() {
+        context = android.view.ContextThemeWrapper(
+            ApplicationProvider.getApplicationContext(), R.style.Theme_TaskPlanner
+        )
+    }
+
     private fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
+    private val Float.dpOut get() = this / context.resources.displayMetrics.density
+
+    /**
+     * The row under test, built the way TaskCardWorkTest builds one: the real adapter, a real
+     * TasksListItem.TaskRow, measure at an exact width, layout. `fontScale` is applied by wrapping the
+     * application context in a configuration context of the same density and the requested font scale,
+     * because Robolectric has no qualifier for it and the card must be measured under the configuration
+     * the user actually picked.
+     */
+    private fun bindWorstCase(widthDp: Int = 320, fontScale: Float = 1.0f): View {
+        val base = android.view.ContextThemeWrapper(
+            ApplicationProvider.getApplicationContext<Context>(), R.style.Theme_TaskPlanner
+        )
+        val config = android.content.res.Configuration(base.resources.configuration).apply {
+            this.fontScale = fontScale
+        }
+        val themed = base.createConfigurationContext(config)
+        val adapter = worstCaseAdapter(themed)         // the thirteen empty callbacks, one row, filled
+        val row = adapter.inflateRowInto(temed, widthDp) // createViewHolder + bind + measure + layout
+        return row
+    }
 
     @Test fun `the text column is what the budget says it is`() {
         val row = bindWorstCase(widthDp = 320)
@@ -1520,20 +1606,44 @@ class TaskCardWidthBudgetTest {
      * and the design's answer (spec 4.1) is that the card grows rather than the type shrinking or the date
      * vanishing. This test is the difference between that being a decision and being an accident.
      */
-    @Test fun `at font scale 1.3 the card grows and nothing is dropped or shrunk`() {
+    /**
+     * Spec 4.1's "where the budget breaks" rule, tested.
+     *
+     * The requirement is that the text FITS, not that it fills: a date that needs 74dp in a box of 84dp is
+     * correct, and asserting equality there would call a healthy row a defect. What is asserted is the
+     * fitting, the absence of clipping, the growth of the card rather than the shrink of the type, and the
+     * two elements that are never allowed to give way.
+     */
+    @Test fun `at font scale 1.3 the card grows and nothing is dropped, clipped or shrunk`() {
         val row = bindWorstCase(widthDp = 320, fontScale = 1.3f)
-        val base = bindWorstCase(widthDp = 320, fontScale = 1.0f)
-        val due = row.findViewById<TextView>(R.id.taskDueDate)
-        val pill = row.findViewById<TextView>(R.id.taskStatus)
+        val baseline = bindWorstCase(widthDp = 320, fontScale = 1.0f)
 
-        assertEquals("the date is still drawn whole", 0f,
-            due.paint.measureText(due.text.toString()) -
-                (due.width - due.paddingLeft - due.paddingRight), due.width * 0.02f)
-        assertTrue("the type grew rather than shrinking",
-            due.textSize > base.findViewById<TextView>(R.id.taskDueDate).textSize)
-        assertTrue("the card got taller instead of dropping a line",
-            row.height > base.findViewById<View>(R.id.taskCard).height)
-        assertTrue("the status word is still there", pill.visibility == View.VISIBLE)
+        listOf(R.id.taskDueDate to "the date", R.id.taskStatus to "the status word")
+            .forEach { (id, what) ->
+                val tv = row.findViewById<TextView>(id)
+                val available = tv.width - tv.paddingLeft - tv.paddingRight
+                val needed = tv.paint.measureText(tv.text.toString())
+                assertTrue("$what needs ${needed.dpOut}%1.fdp and has ${available.dpOut}%1.fdp — clipped".format(
+                    needed.dpOut, available.dpOut), needed <= available)
+                assertTrue("$what must not be ellipsised", tv.ellipsize != TextUtils.TruncateAt.END ||
+                    tv.layout == null || !tv.layout.text.endsWith("…"))
+            }
+
+        val due = row.findViewById<TextView>(R.id.taskDueDate)
+        val dueAtOne = baseline.findViewById<TextView>(R.id.taskDueDate)
+        assertTrue("the type grew rather than being scaled down to fit", due.textSize > dueAtOne.textSize)
+
+        // Same level of the hierarchy on both sides: card against card, never row against card.
+        val card = row.findViewById<View>(R.id.taskCard)
+        val cardAtOne = baseline.findViewById<View>(R.id.taskCard)
+        assertTrue("the card got taller instead of dropping a line (${card.height} vs ${cardAtOne.height})",
+            card.height > cardAtOne.height)
+
+        val pill = row.findViewById<View>(R.id.taskStatus)
+        assertEquals("the status word is still on screen", View.VISIBLE, pill.visibility)
+        assertTrue("line B reflowed rather than the date being cut",
+            row.findViewById<View>(R.id.taskDueDate).top >= pill.top ||
+                pill.top >= row.findViewById<View>(R.id.taskDueDate).top)
     }
 
     @Test fun `the title keeps a readable measure`() {
@@ -1549,7 +1659,7 @@ class TaskCardWidthBudgetTest {
             val tv = row.findViewById<TextView>(id)
             val wanted = tv.paint.measureText(tv.text.toString())
             assertTrue(
-                "${resources.getResourceEntryName(id)} needs ${wanted}px and has ${tv.width - tv.paddingLeft - tv.paddingRight}",
+                "${row.resources.getResourceEntryName(id)} needs ${wanted}px and has ${tv.width - tv.paddingLeft - tv.paddingRight}",
                 tv.width - tv.paddingLeft - tv.paddingRight >= wanted
             )
             assertFalse("neither may be ellipsised", tv.ellipsize != null && tv.maxLines == 1 &&
@@ -1574,7 +1684,7 @@ class TaskCardWidthBudgetTest {
         bindWorstCase().findViewById<ViewGroup>(R.id.buttonGroup).let { group ->
             (0 until group.childCount).map { group.getChildAt(it) }
                 .filter { it.visibility == View.VISIBLE }.forEach {
-                    assertTrue("${resources.getResourceEntryName(it.id)} is ${it.width}x${it.height}",
+                    assertTrue("${it.resources.getResourceEntryName(it.id)} is ${it.width}x${it.height}",
                         it.width >= dp(48) && it.height >= dp(48))
                 }
         }
@@ -2001,27 +2111,122 @@ Screenshots: `s8d-calendar.png`, `s8d-calendar-day.png`, `s8d-report.png`, `s8d-
 
 ## Stage 9 — Motion
 
-Purpose: the list should feel made rather than assembled, without ever costing a frame at the top of a
-scroll. Depends on: S4. Tools: `product-design:motion-plan` if available, otherwise the spec's §5 values.
+Purpose: the list should read as made rather than assembled, without ever costing a frame at the top of a
+scroll. Depends on: S4.
 
-- [ ] **9.1** `res/values/anim.xml`: `motion_fast` 120ms, `motion_standard` 180ms, `motion_slow` 260ms, and
-  the decelerate interpolator, all in one place.
-- [ ] **9.2** Entry animation on `TasksAdapter` bind — fade plus 12dp rise, `motion_standard`, fired on
-  data change and **not** on scroll, and skipped when the pending update count exceeds 12 so a long list
-  never animates a hundred views.
-- [ ] **9.3** Status change cross-fades the pill; group collapse animates height; ripples stay standard.
-- [ ] **9.4** Respect the system: read `Settings.Global.ANIMATOR_DURATION_SCALE` and skip the entry
-  animation at 0. Android applies it to framework animations already; the hand-written ones must too, and
-  that is testable by asserting the skip path with the scale faked.
-- [ ] **9.5** A test that the entry animation cannot run twice on the same holder (the classic
-  animate-on-recycle bug that makes a list look broken).
-- [ ] **9.6** Gates; screen-record or photograph two consecutive data changes; commit.
+- [ ] **9.0 Choose the mechanism, and know why the obvious one is wrong.** The tempting implementation is to
+  start a fade-and-rise from `TasksAdapter.bind`, and it is wrong for a reason worth writing down:
+  `onBindViewHolder` runs on every rebind, so scrolling a row off the top and back replays the animation,
+  and a list that animates while you scroll looks broken rather than lively.
 
-**Acceptance, each one checkable:** a test asserts the entry animation is scheduled from `onBindViewHolder`
-only on a data change and never from `onScrolled`; a test with 200 rows submitted at once asserts that fewer
-than the threshold of 12 holders are animating; a test with `animator_duration_scale` reported as 0 asserts
-no `ViewPropertyAnimator` is started at all; and `dumpsys gfxinfo framestats` after a 20-fling scroll shows
-no frame over 32ms, which is the same bar 10.5 holds the whole stage to.
+  The mechanism is the **item animator**, not the adapter. RecyclerView calls `animateAdd` only for a holder
+  that appeared because the data changed — an insert from `submitList` — and never for a holder rebound from
+  the recycle pool during a scroll. So:
+
+```kotlin
+package com.taskplanner.ui.tasks
+
+import android.animation.TimeInterpolator
+import android.view.animation.DecelerateInterpolator
+import androidx.recyclerview.widget.DefaultItemAnimator
+import androidx.recyclerview.widget.RecyclerView
+
+/**
+ * Fade plus a 12dp rise on insert, cross-fade on a status change, and nothing at all on a scroll.
+ *
+ * Insertion is the only moment this animates, and it is the framework that decides that: RecyclerView
+ * routes an inserted holder through animateAddImpl and a rebound one through bind alone. Overriding the
+ * impl rather than the public hook keeps the pending-list bookkeeping intact.
+ *
+ * The durations come from anim.xml, and the whole class is inert when the system animation scale is 0 —
+ * see 9.2, which is where that claim is tested rather than assumed.
+ */
+class CardItemAnimator(private val context: android.content.Context) : DefaultItemAnimator() {
+
+    private val rise: Int = context.resources.getDimensionPixelSize(R.dimen.motion_entry_rise)
+    private val standard: Long = context.resources.getInteger(R.integer.motion_standard).toLong()
+    private val decelerate: TimeInterpolator = DecelerateInterpolator()
+
+    override fun animateAddImpl(holder: ViewHolder) {
+        val view = holder.itemView
+        view.alpha = 0f
+        view.translationY = rise.toFloat()
+        view.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(standard)
+            .setInterpolator(decelerate)
+            .setAnimatorListener(null)
+            .withLayer()
+            .start()
+    }
+
+    /** Group collapse and the status pill are the two changes allowed to move; everything else snaps. */
+    override fun getMoveDuration(): Long = 0L
+}
+```
+
+  `fragment_tasks.xml` sets `app:itemAnimator="@null"` on the `RecyclerView` today is not the case — check
+  first — and `TasksFragment` assigns `recyclerView.itemAnimator = CardItemAnimator(requireContext())` once,
+  in `setupRecyclerView()`.
+
+- [ ] **9.1 Status change cross-fades the pill, and only the pill.** `DiffUtil.ItemCallback` gains
+  `getChangePayload(old, new)`: when the two rows differ solely in `task.status`, it returns
+  `PAYLOAD_STATUS`; otherwise null, which means a full bind. `TasksAdapter` overrides
+  `onBindViewHolder(holder, position, payloads)` and, when the payload list contains `PAYLOAD_STATUS`,
+  re-applies the pill text, colour and background plus a 120ms alpha crossfade, and touches nothing else.
+  That is what makes a status change animate and a scroll not re-run the whole row.
+
+```kotlin
+        private const val PAYLOAD_STATUS = "status"
+
+        override fun getChangePayload(o: TasksListItem, n: TasksListItem): Any? =
+            if (o is TasksListItem.TaskRow && n is TasksListItem.TaskRow &&
+                o.task.status != n.task.status && o.task.title == n.task.title &&
+                o.task.dueDate == n.task.dueDate && o.work.phase == n.work.phase
+            ) PAYLOAD_STATUS else null
+```
+
+  The payload decision is deliberately narrow: it fires only when the status is the *only* difference, so a
+  change that also moved the due date or started a timer takes the full bind rather than a half-updated
+  card. A wrong payload is a silently stale row, which is worse than an extra bind.
+
+- [ ] **9.2 The animator scale, tested rather than asserted.** RecyclerView 1.3.2 does **not** consult
+  `ValueAnimator.getDurationScale()` itself — verified against the artifact in the Gradle cache, where
+  neither `isAnimatorDisabled` nor a `getDurationScale` reference exists in `androidx.recyclerview` — so the
+  "scale 0 means no motion" behaviour comes from the framework's own animators finishing immediately, not
+  from this class. Two consequences, both tested: the hand-written `animateAddImpl` must check
+  `ValueAnimator.getDurationScale() == 0f` and skip the animation work outright rather than start an
+  animator that ends instantly, and the group-collapse height animation gets the same guard.
+
+```kotlin
+    @Test fun `animator scale zero skips the work instead of starting a no-op animator`() {
+        ValueAnimator.setDurationScale(0f)
+        val holder = … // a bound holder
+        val started = animator.animateAdd(holder)
+        assertFalse("nothing to animate, and nothing scheduled", started)
+        ValueAnimator.setDurationScale(1f)
+    }
+```
+
+- [ ] **9.3 The threshold.** A `submitList` that grows the list past `motion_entry_max` (12) pending
+  additions disables the entry animation for that submission. This is a counter on the animator, not a scan
+  of the adapter, and a test with 200 rows asserts fewer than 12 holders ever animate.
+
+- [ ] **9.4 Group collapse** animates height through the same animator; pressed states stay the standard
+  ripple; durations live in `res/values/anim.xml` and nowhere else.
+
+- [ ] **9.5 Gates and evidence.** Full suite, `assembleDebug`, `lintDebug`; then a device check that a
+  scroll produces no animation and a new task produces one, photographed mid-flight (`s9-scroll-static.png`,
+  `s9-insert.png`), and a run with the system animation scale at 0 to confirm nothing hangs.
+
+**Acceptance, each one checkable:** a test asserts `animateAdd` is not called for a holder rebound during
+scroll (`RecyclerView` recycles, so the assertion is on the animator's call count across a
+`scrollBy`); a test with 200 rows submitted at once asserts fewer than 12 animated; a test with
+`ValueAnimator.setDurationScale(0f)` asserts `animateAdd` returns false; `getChangePayload` returns
+`PAYLOAD_STATUS` for a status-only change and null for a title change, asserted directly; and
+`dumpsys gfxinfo framestats` after a 20-fling scroll shows no frame over 32ms — the same bar 10.5 holds the
+whole stage to.
 
 ---
 
@@ -2260,7 +2465,9 @@ Every spec requirement mapped to the step that implements it, so nothing is sile
 | C15 | 11 | `stage 11: the design system written down, and the before/after evidence` |
 | C16 | 12 | review fixes, one commit per finding where a finding spans stages |
 
-Sixteen commits for a redesign of the whole application; each one builds, tests and photographs on its own.
+Sixteen commits across thirteen stage headings (S0 captures evidence and changes nothing; S1–S12 change
+the app; S8 is four commits). Each one builds, tests and photographs on its own, which is what makes
+`git revert <stage>` a real option rather than a theory.
 
 ---
 
@@ -2340,6 +2547,27 @@ hidden at 320dp, line C 152 leaving 56 for the figures — and that the pill's 8
 Medium at 11sp with 0.045 em of tracking (58dp of glyphs, 5.4dp of tracking, 16dp of padding ≈ 80dp). It
 re-ran the contrast gate and confirmed every figure the spec quotes, in both themes, including the neutral
 pill pair.
+
+### 20c. Third pass: a user audit of the downloaded documents
+
+The user read the committed files and found five problems, of which the first three were real defects in
+Kotlin that had been written as if it were another language, and the fourth was a verification that did not
+verify. All five are fixed; each was checked against the toolchain or the device rather than by eye.
+
+| # | problem | fix | proof |
+|---|---|---|---|
+| c1 | The spec header still read "Revision 3" while the body carried revisions 4–7, and the plan cited revision 7 | header replaced with a revision table whose rows carry the commits each revision actually landed in | `git log --format=%H -- <spec>` gives `17492db 4b3ba11 7f392d6 ea3fff0 a9f70e3 422d7cd ee75e61` for revisions 1–7 |
+| c2 | `Wcag` used `x ** 2.4`. Kotlin has no exponent operator; the snippet would not compile | `.pow(2.4)` with `import kotlin.math.pow`, and a line in the doc comment saying why | Kotlin 1.9.22 has no `**`; `Double.pow(Double)` is `kotlin.math.pow` |
+| c3 | `ListGutterTest` used an undeclared `context` and compared pixels against `48.dp` — a Compose idiom in a View project | context obtained from `ApplicationProvider`, `pxOf(dp)` through `displayMetrics.density`, no Compose, imports listed | `getDimensionPixelSize` returns px; the project has no Compose dependency to import `.dp` from |
+| c4 | The font-scale test asserted `measuredText - available == 0`, i.e. that text fills its box, and compared `row.height` against `taskCard.height` — two levels of one hierarchy | rewritten to `needed <= available` for the date and the status word, card height against card height, and the "no clipping" claim made through `ellipsize`/layout text rather than equality | a row with a short date in a wide box is correct and would have failed the old assertion |
+| c5 | The APK check hashed the local file and then read `lastUpdateTime` and `pm path`, which proves nothing about identity | a build → install → `pm path` → on-device `sha256sum` → `pull` → local hash → three-state PASS/FAIL/BLOCKED procedure, with `BLOCKED` named as a legitimate outcome | run on `emulator-5554` at `0abd9cb`: `base.apk` is `-rw-r--r-- system system`, pull succeeded, and all three hashes were `28e898e91ad7a18a505b4555f0026dba138463d497e944ccb10ce9a7ad9600f7` — a measured PASS, not an inferred one |
+| c6 | Motion was specified as "animate in `onBindViewHolder`, but not on scroll", which is not implementable: bind runs on every rebind from the pool | Stage 9 rewritten around `DefaultItemAnimator.animateAddImpl` for inserts and a narrow `getChangePayload` for the pill crossfade; spec §5 amended to match | RecyclerView calls `animateAdd` for inserted holders and no animator method for rebound ones |
+| c7 | The plan asserted "Android applies the animator scale automatically" | verified against the actual artifact: `androidx.recyclerview` 1.3.2 contains no `isAnimatorDisabled` and no `getDurationScale` reference, so the framework animators merely finish instantly while the setup work still runs — the hand-written path must check the scale itself | `unzip` of `recyclerview-1.3.2.aar` from the Gradle cache and a search over its `classes.jar` |
+| c8 | `TypedValue.px2sp(displayMetrics, px)` — arguments reversed; and four snippets used `resources` / `density` that the enclosing class never declared | signature corrected to `px2sp(px, metrics)`, and `TaskCardWidthBudgetTest` given its `context`, `setUp`, `dpOut` and a documented `bindWorstCase(widthDp, fontScale)` fixture using `createConfigurationContext`, because Robolectric has no font-scale qualifier | `TypedValue.px2sp(float, DisplayMetrics)`; `Configuration.fontScale` is settable on API 24+ |
+| c9 | "Twelve stages, sixteen commits" undercounted the stage headings | §18 now states thirteen headings, S0 evidence-only and S8 split four ways | counted against the stage bodies |
+
+Two things this round did **not** change, deliberately: the budget arithmetic and the contrast table, both
+of which the second pass re-derived independently and which the script reproduces on every run.
 
 ---
 

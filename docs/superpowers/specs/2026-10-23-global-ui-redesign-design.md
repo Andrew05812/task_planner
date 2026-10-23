@@ -5,12 +5,26 @@ Branch: `feat/global-ui-redesign` (one branch, one PR, staged commits)
 Baseline: `master` = `origin/master` = `c2c767d1b80db756c1a3517eecc083de598ff7af` (merge of PR #21)
 Direction approved by the user: **Ink & Accent**.
 
-Revision 3. An independent review of revision 1 falsified six of its claims against the source; they are
-corrected here. Revision 2's contrast section was then found to carry two arithmetic errors of its own — a
-dark-theme sweep reported as a minimum when it was a single-surface figure, and a priority-indicator pair
-taken from the wrong colour — which is why §3.2 is no longer written by hand at all. Every ratio in this
-document is now printed by `scripts/contrast_report.py` from `docs/design/tokens.json`, and the same
-script re-measures the shipped resources once stage 1 writes them.
+Revision 7. The header and the body had drifted apart — revisions 4 through 7 were each committed with
+their own correction notes in place while this line still read "revision 3", which is what an audit of the
+downloaded copy caught. The history, in order:
+
+| revision | what moved | commit |
+|---|---|---|
+| 1 | the first approved design | `17492db` |
+| 2 | six claims an independent review falsified against the source | `4b3ba11` |
+| 3 | contrast arithmetic stops being hand-written; `tokens.json` and `scripts/contrast_report.py` land | `7f392d6` |
+| 4 | §0 separates forbidden business logic from allowed presentation computation; injected clock; contextual action visibility; the completed treatment scoped | `ea3fff0` |
+| 5 | the 320dp budget written out closes, and the category name is what gives way | `a9f70e3` |
+| 6 | five errors two reviews found: the budget, the `letterSpacing` unit, the pill allowance, five distinct text styles, the ramp staged twice, `@dimen/text_caption`'s reader | `422d7cd` |
+| 7 | the budget meets font scale 1.3 and loses: the card grows rather than the type shrinking, plus four arithmetic and count corrections | `ee75e61b95e671a2ccd753180f6a20a5913e9bdc` |
+
+Revision 3's own note, kept because it explains why §3.2 is generated: an independent review of revision 1
+falsified six of its claims against the source, and revision 2's contrast section then proved to carry two
+arithmetic errors of its own — a dark-theme sweep reported as a minimum when it was a single-surface figure,
+and a priority-indicator pair taken from the wrong colour. Every ratio in this document is therefore printed
+by `scripts/contrast_report.py` from `docs/design/tokens.json`, and the same script re-measures the shipped
+resources once stage 1 writes them.
 
 ## 0. What this stage is, and what it is not
 
@@ -579,9 +593,21 @@ calculations and wording logic do not change.
 ## 5. Motion
 
 Entry animation on list items (fade plus 12dp rise, 180ms, decelerate) fires on data change, not on
-scroll, and is skipped above a threshold so a long list never animates a hundred views. Status change
-cross-fades the pill. Group collapse animates height. Pressed states use the standard ripple. Durations
-come from one place; the system's animator scale is respected, which Android applies automatically.
+scroll, and is skipped above a threshold so a long list never animates a hundred views. The mechanism is the
+**item animator**, not the adapter: `onBindViewHolder` runs on every rebind, so a list that animates from
+there replays the entrance each time a row scrolls back into view, which looks broken rather than lively.
+RecyclerView routes an inserted holder through `animateAdd` and a rebound one through no animator call at
+all, and that is the distinction the motion is built on. Status change cross-fades the pill, through a
+`DiffUtil` change payload that fires only when the status is the *only* difference — a payload that guesses
+wrong leaves a silently stale row, which is worse than one extra bind. Group collapse animates height.
+Pressed states use the standard ripple.
+
+Durations come from one place. The system's animator scale is honoured, but not by the route this
+specification first assumed: `androidx.recyclerview` 1.3.2 contains no check of
+`ValueAnimator.getDurationScale()` — verified against the artifact in the Gradle cache — so at scale 0 the
+framework's animators merely finish instantly while the work of building and starting them still happens.
+Hand-written motion therefore reads the scale and skips outright; that is the version of "respected" which
+is observable in a profile rather than only on screen.
 
 ## 6. Accessibility and adaptivity
 
