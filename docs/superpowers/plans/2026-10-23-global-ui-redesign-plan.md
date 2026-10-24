@@ -416,11 +416,11 @@ header — record it in the audit document as the baseline the before-photograph
 - [ ] **0.0 Create the evidence folders.** `docs/images/ui-redesign/` does not exist yet:
   `mkdir -p docs/images/ui-redesign/before docs/images/ui-redesign/after`
 
-- [ ] **0.1 Re-count the baseline.** Run the commands in §2. Expected `92 1371 0` and 17 instrumented
+- [x] **0.1 Re-count the baseline.** *Executed at `42ebfc2`+this commit:* 93 suites / 1373 tests / 0 failures, the extra suite and two tests being `LegacySchemaV7SourceTest`. Instrumented: 17 methods in six classes, confirmed by `grep -c @Test`. Run the commands in §2. Expected `92 1371 0` and 17 instrumented
   methods. Record the numbers in `docs/UI_UX_AUDIT.md`. If they differ, stop: the spec's §8 needs the same
   correction this plan's §16 would otherwise inherit.
 
-- [ ] **0.1a Run the instrumented suite for real, and expect at least one red.** Counting 17 `@Test`
+- [x] **0.1a Run the instrumented suite for real, and expect at least one red.** *Executed; see §20h for the three failures it found, their root causes, and the per-class isolation rule that came out of it.* Counting 17 `@Test`
   annotations proves they exist; CI has only ever compiled them
   (`assembleDebugAndroidTest` in `.github/workflows/android-ci.yml` — there is no instrumentation job), so
   their pass rate is an unmeasured premise this plan relied on. One known defect is already visible in the
@@ -1001,6 +1001,11 @@ class TypeScaleTest {
 - [ ] **1.6b Type scale** (the implementation; it runs after 1.6's test) in new `res/values/type.xml`: nine `TextAppearance.TaskPlanner.*` styles over the
   M3 parents — display, headline, title, body, meta, caption, pill, label, metric — each carrying size,
   `android:lineHeight` (with `tools:targetApi="28"`), weight, `android:letterSpacing` **in ems** at the
+  `lineHeight` is API 28 and the floor is 24, so on 24-27 the pair falls back to the font's own metrics
+  and the line is a little tighter there. That is stated rather than implied because nothing in the JVM
+  suite can see it: the tests read `textSize` and `letterSpacing`, both of which apply on every level,
+  and Robolectric runs at 34. 10.2's device pass is where the fallback is confirmed harmless.
+
   values §3.3 of the spec now states, and colour through a role rather than a hex. Only `label` sets
   `android:textAllCaps`; `pill` is deliberately not capped, because the 82dp line-B budget in §4.1 depends
   on it. Add `type_caption` (12sp) and `type_pill` (11sp) to the dimens alongside the other seven.
@@ -1223,8 +1228,9 @@ tokens and attributes only. **Screenshots:** `s1-tasks-light.png`, `s1-tasks-dar
 
 ## Stage 2 — Tasks foundation: the swipe panel geometry, fixed at root
 
-Purpose: kill the strip that shows on every closed row, and prove it with a measurement. Depends on: S1
-(the test reads `ink_*`). Precondition: S1 committed and green.
+Purpose: kill the strip that shows on every closed row, and prove it with a measurement. Depends on: S1 —
+specifically on `bg_row_backdrop`, `card_gap`, `spacing_xs` and the `ink_*` colours the backdrop paints,
+which is what 2.3's fix consumes; the test itself reads no colour. Precondition: S1 committed and green.
 
 This stage changes geometry on the **current** card on purpose: if the fix and the redesign landed in one
 commit, a passing test could not say which of them removed the strip.
@@ -1380,6 +1386,14 @@ class TaskCardClosedPanelTest {
   `android:layout_marginEnd="@dimen/card_gap"`, `android:layout_marginTop="@dimen/spacing_xs"` and
   `android:layout_marginBottom="@dimen/spacing_xs"`, matching the card's insets, and its background becomes
   `@drawable/bg_row_backdrop` (surface, radius 14)
+
+  > Decision on the 8dp gutter, taken here rather than discovered in 2.4: when a row is **open**, the strip
+  > between the panel's right edge and the screen edge shows `ink_background` — the page — and that is the
+  > answer, not a defect to mask. Painting the row root with the surface backdrop instead would put an 8dp
+  > halo around *every closed card* as well, which is the same visual bug this stage exists to remove, only
+  > in a neutral colour. A revealed action cluster sitting 8dp in from the edge reads as the inset the card
+  > already has, so the two edges agree. Spec §2.1 says the same thing; this is the implementation note that
+  > keeps it from being re-litigated at screenshot time, and 2.4 photographs the open row to confirm it.
 
   > Correction from review: an earlier draft used `android:layout_marginVertical`, which is API 26 on an
   > API 24 floor. On 24 and 25 it is dropped silently, so the strip returns on exactly the devices the fix
@@ -2387,7 +2401,13 @@ class TaskCardWidthBudgetTest {
   `CardPresentation.of(context, item, now)` where `now` comes from a `timeBase` the adapter is given, and
   applies it: pill text/background/colour, rule colour or `INVISIBLE`, overdue `ink_error` on the due line,
   the four `showX` flags as `View.GONE`/`VISIBLE`, the category name's 48dp rule measured against the
-  laid-out width in `doOnLayout`. Three further rules from spec §4.1 belong in the same bind path, because
+  laid-out width in `doOnLayout`. Two of those are deliberately different mechanisms, and the difference is
+  load-bearing for 4.2's arithmetic: the **priority rule** goes `INVISIBLE` for LOW so the 4dp column it
+  occupies is still reserved and the title does not jump between a HIGH row and a LOW row, while the
+  **drag handle** goes `GONE` off a `MANUAL` sort precisely so its 48dp + 4dp collapses and the text column
+  gains 52dp (the `collapsed` case in 4.2). So "the left column is 64dp" and "the column is the rule plus its
+  gap, 12dp" can both be true: the first counts a visible handle, the second counts a hidden one plus a rule
+  that is invisible but not gone. Three further rules from spec §4.1 belong in the same bind path, because
   each is a behaviour the spec states and no step had yet assigned:
 
   - the drag handle is `GONE` unless `state.sortOrder == SortOrder.MANUAL` **and** the row is not selected
@@ -3185,10 +3205,12 @@ All of these, with the command output quoted in the PR body. Nothing counts as d
 1. `./gradlew --no-daemon --console=plain testDebugUnitTest` green, with the suite **larger** than the
    baseline recorded in S0 and zero disabled, deleted or weakened tests. The diff of test names is in the PR.
 2. `assembleDebug`, `lintDebug` and `assembleDebugAndroidTest` green; lint adds no new finding.
-3. The instrumented suite run on a device and passing — with its **starting** state measured by 0.1a rather
-   than assumed, since CI has only ever compiled these tests and one method is known from the source to be
-   red today, with the installed APK's sha256 matching the
-   built one, or an explicit statement of which classes were not run and why.
+3. The instrumented suite run on a device and passing, **one Gradle invocation per class** (the six classes
+   do not share a process safely — §20h: `DatabaseModule.provideDatabase` is a `@Singleton`, and
+   `DatabaseLocationInstrumentedTest` renames the live database file out from under that open connection),
+   with the installed APK's sha256 matching the
+   built one, or an explicit statement of which classes were not run and why. Measured state at the gate:
+   all six classes pass alone, 17 tests, 0 failures.
 4. `python scripts/contrast_report.py --resources app/src/main/res --check` prints `RESULT: pass` with no
    drift lines, and its report is committed.
 5. Every screen in §13 has a before and an after photograph at the same configuration, and
@@ -3244,7 +3266,12 @@ Stop and ask rather than proceed when any of these is true:
 
 Rollback is per stage: every stage is one commit and every commit builds and passes on its own, so
 `git revert <stage>` returns a working app with the earlier stages intact. No stage may be split across
-commits, and no two stages may share a commit — that is what makes reverting possible at all. Never
+commits, and no two stages may share a commit — that is what makes reverting possible at all. Where a stage
+does carry more than one commit (the three skeletons of §3, and S8's four sub-stages), the unit that reverts
+is the **pair**: a change commit and the skeleton that declared its names go back together, newest-first,
+because reverting one without the other leaves either an unused skeleton or a build that names resources
+nobody declares. A single `git revert` of one commit is therefore always either a whole stage or a whole
+skeleton pair — never half of either. Never
 force-push, never rewrite the branch's published history.
 
 ## 17. Requirement coverage
@@ -3597,6 +3624,8 @@ column says what was executed or read.
 
 ### Confirmed, open at the end of this pass
 
+*All five were closed in the commit that records Stage 0.1a (§20h); they are kept here as the order they were found in.*
+
 | finding | severity | why it is still open, and what closes it |
 |---|---|---|
 | §16 calls a stage one revertible unit while §18 gives three stages two or three commits each (the skeletons) | MINOR, wording | §16 should read "revert the change commit and its skeleton together, or neither". One sentence, left to the next document edit so this pass's diff stays reviewable; execution is not ambiguous, because §18 names the commits |
@@ -3614,3 +3643,58 @@ layout that cannot wrap (g24), and no type checker objects to a payload branch t
 (g25). Two of the three items here that were rated critical came from reading the repository, and one —
 g23, §14's instrumented premise — came from noticing that a number was *counted* where a *run* was implied.
 That is the reason §3's rule now names, for every check, the thing it cannot prove.
+
+## 20h — Stage 0.1a executed: the instrumented suite, run for the first time ever
+
+`./gradlew connectedDebugAndroidTest` on `emulator-5554` (`befos_avd`, API 35, `Physical size: 540x1140`,
+`Physical density: 220` → 393dp, `font_scale 1.0`, animation scales 1.0). CI had only ever run
+`assembleDebugAndroidTest`, so this was the first execution of these 17 methods in the repository's
+history. Baseline run at `42ebfc2`, unmodified: **17 tests, 3 failures**. All three were real, none was a
+flake, and one of them was a defect in the plan's own reasoning.
+
+| test | baseline | root cause, measured | fix |
+|---|---|---|---|
+| `DatabaseLocationInstrumentedTest.aLegacyCacheDatabaseIsCopiedIntoPermanentStorageAndLeftInPlace` | FAIL — `SQLiteException: no such column: user_id`, while compiling `CREATE INDEX IF NOT EXISTS index_tasks_user_id_due_date ON tasks (user_id, due_date)` | The fixture planted `CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT)` stamped `user_version = 7`. No release ever had that table. The rescue hands the file to the real chain, and `MIGRATION_9_10` (`AppMigrations.kt:257-273`) builds an index over `user_id`, which the sketch did not have. The test was proving that an invented database cannot be migrated. | The planted schema is now `app/src/androidTest/assets/legacy-v7.sql`, generated verbatim from Room's exported `app/schemas/…/7.json` (four tables, `tasks` with its 19 columns), executed statement by statement; a user and a task are inserted as that schema requires. `LegacySchemaV7SourceTest` (JVM) compares the asset against the JSON so the two cannot drift. |
+| `TasksScreenInstrumentedTest.statisticsAndBackKeepsTheTaskListUsable` | FAIL — `NoMatchingViewException` for `contentGroup` | g23 confirmed on the device: `contentGroup` is a Profile and category-detail container, not a Statistics one (`grep -c contentGroup fragment_statistics.xml` = 0). The assertion could never pass, and nothing noticed for six stages because no job instruments. | Assert Statistics' own always-present chrome — `statisticsPeriodScroll` and `statisticsPeriodChips`, both built in `setupChips()` from `WorkPeriod.entries` regardless of data — then, on the way back, the list **and** the three status chips, so "usable" means the screen came home whole. The dashboard body is deliberately not the subject: `DashboardRenderer.kt:83` sets `dashboardScroll.isVisible = snapshot != null && !snapshot.isEmpty`, which is data-dependent. That fact was learned the hard way — the first version of this fix asserted `dashboardScroll` and failed with `Got: view.getVisibility() was <GONE>`. |
+| `TaskEditorInstrumentedTest.theEditorOpensForAStoredSeriesOfEveryKind` | FAIL — `DAILY: the number the series runs on expected:<[1]> but was:<[]>` | Not an app defect and not the assertion's fault. A two-method probe (`NONE` then `DAILY`) in a fresh process read `'1'` from the field, both through the test's own helper and through `activity.findViewById`, with exactly one `repeat_interval` in the tree. The class then passed on its own. The failure needs another test class to have run first in the same process. | No change to the assertion. It is fixed by the isolation rule below. |
+
+**The isolation finding, which is the part worth keeping.** These classes do not compose in one process:
+
+| invocation | result |
+|---|---|
+| all six classes together, at `42ebfc2` | 3 failures (the three above) |
+| `ReportScreenInstrumentedTest` alone | passes |
+| `DatabaseLocationInstrumentedTest` then `ReportScreenInstrumentedTest`, one process | **Report fails** — `waitUntil` times out at 60 s while `screenState()` immediately after reports `sheet=true496x2139`, i.e. the work completed, later than the budget |
+| each of the six classes in its own invocation, after the two fixes above | **all six pass** |
+| JVM suite, same commit | 93 suites, 1373 tests, 0 failures (the baseline 92/1371 plus `LegacySchemaV7SourceTest`'s 1/2) |
+
+The mechanism is structural, not a race to be tuned away: `DatabaseModule.provideDatabase` is
+`@Provides @Singleton` in `SingletonComponent`, so the Application holds **one** `AppDatabase` — one open
+connection to `databases/taskplanner.db` — for the whole instrumentation process, and
+`DatabaseLocationInstrumentedTest` renames that exact file aside in `@Before` and deletes-then-restores it
+in `@After`. The connection the app still holds then points at an inode that has been unlinked and replaced,
+so whichever class runs next reads a database that is no longer the file. A class that owns the physical
+database file cannot share a process with classes that navigate the screens built on it.
+
+Therefore, and now as a rule rather than an observation: **the instrumented suite is run per class**, each
+in its own Gradle invocation, and §14's instrumented criterion counts those invocations. The command list in
+§6 and the gate in §11.4 use:
+
+```bash
+# one invocation per class; `notClass` exists in androidx.test:runner 1.5.2, which this build resolves
+for C in com.taskplanner.data.local.DatabaseLocationInstrumentedTest \
+         com.taskplanner.data.report.export.PdfReportInstrumentedTest \
+         com.taskplanner.data.report.export.ReportPdfBytesInstrumentedTest \
+         com.taskplanner.ui.TasksScreenInstrumentedTest \
+         com.taskplanner.ui.report.ReportScreenInstrumentedTest \
+         com.taskplanner.ui.tasks.TaskEditorInstrumentedTest; do
+  ./gradlew --no-daemon --console=plain connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class="$C" || exit 1
+done
+```
+
+A stage that changes a screen re-runs **that class** while it is in progress, and the full six-invocation
+matrix runs at 11.4 and again before the PR. This is not a workaround for a flaky test: every class passes
+on its own, and the interference is reproducible in a two-class run. The open question, recorded rather
+than hidden, is whether the 60 s budgets should be raised or the DB-location class restructured so it never
+touches the live path; neither is a redesign change, and neither is done here.
