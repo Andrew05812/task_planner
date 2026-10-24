@@ -271,8 +271,11 @@ while measuring that are part of the record now, because both will otherwise be 
    disconnect() while connecting`, screenshots were refused, and injected input went to whichever window
    had focus. `adb shell dumpsys accessibility | grep -i "ui automation"` returning a line is the symptom;
    a reboot of the AVD clears it. Nothing in the other session's data was touched, and nothing of ours was
-   trustworthy until it was checked — which is why the reveal was finally measured on a second, idle AVD
-   (`Pixel_4`, 1080x2280 at 440 dpi) and the photographs in `after/` say so.
+   trustworthy until it was checked — which is why the reveal was finally measured on a second AVD
+   (`Pixel_4`, 1080x2280 at 440 dpi) and the photographs in `after/` say so. From Stage 4 onward neither of
+   those is the device: this project now owns `taskplanner_avd` (`emulator-5584`), created for this repository
+   at the baseline's own metrics (540x1140 @ 220 dpi = 393x829 dp), so no session borrows another project's
+   emulator and the before/after pairs stay on identical geometry.
 
 `before/manifest.md` lists the 25 files that were taken, each with its configuration and the same 13 visible
 tasks, so every before/after pair later on is taken against the same account and the same data.

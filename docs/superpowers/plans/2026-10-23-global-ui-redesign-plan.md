@@ -224,6 +224,25 @@ procedure — and by the time this pass re-checked it, `adb devices -l` no longe
 all, only a physical handset. Both are recorded, because the evidence in §6 was really produced on the
 emulator while it was live.
 
+**This project owns one AVD: `taskplanner_avd`, on a fixed port.** Instrumented work must not run on an
+emulator that belongs to another project. `befos_avd` (`emulator-5554`) is driven by the user's BeFoS/VKR
+sessions, and borrowing it does two bad things at once: it interferes with work that is not this branch's, and
+it makes this project's own evidence untrustworthy — §20j records a foreign `uiautomator dump` holding the
+single `UiTestAutomationService` slot and another app sitting in `mCurrentFocus`, both of which produced
+failures that looked exactly like app bugs. `taskplanner_avd` was created for this repository at the reference
+display metrics of the before-matrix, so before/after pairs stay comparable while nothing is shared:
+
+```bash
+# once, if the AVD is missing (avdmanager asks whether to create a sdcard; "no" is fine)
+echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n taskplanner_avd -k "system-images;android-35;google_apis;x86_64" -d pixel_5
+# then pin the metrics the baseline was taken at: 540x1140 @ 220 dpi = 393x829 dp
+sed -i 's/^hw.lcd.width=.*/hw.lcd.width=540/; s/^hw.lcd.height=.*/hw.lcd.height=1140/; s/^hw.lcd.density=.*/hw.lcd.density=220/' ~/.android/avd/taskplanner_avd.avd/config.ini
+
+# every session: boot it on the same port, so the serial never moves
+nohup "$SDK/emulator/emulator" -avd taskplanner_avd -port 5584 -no-snapshot-save -no-boot-anim -gpu auto &
+adb -s emulator-5584 wait-for-device
+```
+
 **Two arbitration checks, added from Stage 2's debug session (§20j).** An instrumented run that fails on a
 shared machine can be failing for reasons that have nothing to do with the code, and the two signatures are
 cheap to rule out before reading the app:
@@ -233,17 +252,21 @@ adb -s "$S" shell dumpsys accessibility | grep -i "ui automation"   # a line her
 adb -s "$S" shell dumpsys window | grep mCurrentFocus               # a foreign package = focus is not ours
 ```
 
-`UiAutomationService already registered`, `Cannot call disconnect() while connecting`, a refused
-`takeScreenshot()` and input that moves nothing are all one symptom of the same thing: the AVD carries a
-single `UiTestAutomationService` slot, and a concurrent session or a crashed `uiautomator dump` is holding
-it. Reboot the AVD, or move to an idle one and name it in the evidence — do not "fix" the test. And any
+`UiAutomationService already registered`, `Cannot call disconnect() while connecting`,
+`RootViewWithoutFocusException`, a refused `takeScreenshot()` and input that moves nothing are all one
+symptom of the same thing: the AVD carries a single `UiTestAutomationService` slot and one focused window. A
+freshly booted AVD adds its own case — the launcher ANRs during first boot and the dialog keeps focus until
+BACK or HOME dismisses it, which is exactly what the first smoke run on `taskplanner_avd` hit before it passed
+7/7. Nothing in another session's app or data is ever stopped, cleared or disabled to free a device: this
+project uses its own AVD or waits. And any
 horizontal gesture injected by a test or a script has to start **inside** the target view: on
 `navigation_mode=2` a drag that begins in the screen's edge band is the system's Back gesture, which is how
 a real defect in the task row stayed hidden behind an apparent emulator misbehaviour for two stages.
 
 ```bash
 adb devices -l
-S=$(adb devices -l | awk 'NR>1 && $2=="device" {print $1; exit}')   # the one serial this session can use
+S=emulator-5584        # taskplanner_avd, this project's own AVD — never "whichever device is first"
+adb -s "$S" emu avd name | head -1 | grep -q '^taskplanner_avd$' || { echo "not this project's AVD"; exit 1; }
 echo "$S"; adb -s "$S" shell getprop ro.build.version.sdk; adb -s "$S" shell getprop ro.product.cpu.abi
 adb -s "$S" shell wm size; adb -s "$S" shell wm density
 adb -s "$S" shell settings get system font_scale
