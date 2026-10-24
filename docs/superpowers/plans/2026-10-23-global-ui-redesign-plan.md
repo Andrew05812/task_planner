@@ -115,6 +115,11 @@ Every task below implicitly includes this section. Values are copied from the sp
   red, and the change that turns it green. Where a test can read resources reflectively — as 1.2's
   contrast test does through `R.color::class.java.getField` — it should, because then the red is genuine
   and the missing token is the message.
+- Every Kotlin block in this plan has been **compiled**, not read: 1.9.22 against `android-34`, the
+  recyclerview 1.1.0 the APK resolves and the app's own classes. §20f records the harness, what it proves
+  (syntax, imports, API signatures, override validity) and what it cannot prove (resource names are stubbed
+  from each snippet's own references, so existence is still this plan's own responsibility, and no layout
+  XML is parsed). Re-run it after editing a snippet.
 - No existing test is disabled, deleted or weakened. When an assertion must move, it is rewritten to the new
   truth in the same commit as the layout it covers, and the commit message names it.
 - Never force-push, never rewrite published history, never clear user data or uninstall the app, never
@@ -314,6 +319,10 @@ res/drawable/bg_pill_accent.xml         res/drawable/bg_pill_success.xml    S1
 res/drawable/bg_pill_warning.xml        res/drawable/bg_pill_error.xml      S1
 res/drawable/bg_icon_container.xml      res/drawable/bg_field.xml           S1
 res/drawable/bg_nav_item.xml            res/drawable/bg_hairline.xml        S1
+res/drawable/bg_pill_neutral.xml (the TODO pill; see 4.4)                     S1
+res/values/anim.xml (motion_standard, motion_entry_max)                       S9
+main/.../ui/tasks/CardItemAnimator.kt (new class; 9.0)                                    S9
+test/.../ui/tasks/CardItemAnimatorTest.kt (holds 9.2's scale test and 9.1's three payload cases)  S9
 res/layout/header_screen.xml            res/layout/row_list.xml             S1
 res/layout/state_empty.xml              res/layout/state_loading.xml        S1
 res/layout/state_error.xml              res/layout/bar_selection.xml        S1
@@ -344,7 +353,7 @@ Modified files, by stage:
 
 | stage | files |
 |---|---|
-| S1 | `res/values/colors.xml`, `res/values-night/colors.xml`, `res/values/themes.xml`, `res/values-night/themes.xml`, `res/values/dimens.xml`, `res/values/styles.xml`, delete `res/drawable/bg_action_edit.xml`, `res/drawable/bg_action_delete.xml` (S2), `res/color/chip_background_color.xml`, `res/color/chip_stroke_color.xml` |
+| S1 | `res/values/colors.xml`, `res/values-night/colors.xml`, `res/values/themes.xml`, `res/values-night/themes.xml`, `res/values/dimens.xml`, `res/values/type.xml` (created), `res/values/component_styles.xml` (created). `res/values/styles.xml` is **not** touched here — its two chart text appearances stay where they are until a stage has a reason to move them. The two chip colour state lists, `res/color/chip_background_color.xml` and `chip_stroke_color.xml`, are dropped by stage 8 when the last layout referencing them is migrated, not by stage 1 |
 | S2 | `res/layout/item_task.xml`, `main/.../ui/tasks/TasksAdapter.kt` |
 | S3 | `res/layout/fragment_tasks.xml`, `res/menu/menu_tasks.xml`, `main/.../ui/tasks/TasksFragment.kt`, `res/values/strings.xml` |
 | S4 | `res/layout/item_task.xml`, `res/layout/item_group_header.xml`, `main/.../ui/tasks/TasksAdapter.kt`, `main/.../ui/tasks/TasksViewModel.kt` (constructor param only), `main/.../ui/tasks/TasksFragment.kt`, `res/values/dimens.xml`, `res/values/strings.xml`; tests `TaskCardWorkTest`, `TaskCardReminderTest`, `TasksScreenInstrumentedTest` |
@@ -354,7 +363,7 @@ Modified files, by stage:
      **not** `MainActivity.kt`, which an earlier draft listed with no step that touched it: the bar's
      label mode, surface and indicator are all XML and theme, and the nav controller already drives it |
 | S8 | the layouts and adapters listed per sub-stage in §Stage 8 |
-| S9 | `main/.../ui/tasks/TasksAdapter.kt`, `res/anim/`, `res/values/anim.xml` (new), `res/values/dimens.xml` |
+| S9 | `main/.../ui/tasks/TasksAdapter.kt`, `res/values/anim.xml` (new, in the list above), `res/values/dimens.xml` |
 | S10 | no source; screenshots and `docs/UI_REDESIGN_REVIEW.md` |
 | S11 | `README.md`, `docs/DESIGN_SYSTEM.md`, `docs/UI_UX_AUDIT.md`, `docs/UI_REDESIGN_REVIEW.md`, `docs/design/contrast-report.md` |
 
@@ -804,7 +813,7 @@ changes the colour.
   `android:textAllCaps`; `pill` is deliberately not capped, because the 82dp line-B budget in §4.1 depends
   on it. Add `type_caption` (12sp) and `type_pill` (11sp) to the dimens alongside the other seven.
 
-- [ ] **1.6a Failure-first:** write `TypeScaleTest` before `type.xml`. It builds a `TextView` with each style and
+- [ ] **1.6a Failure-first:** write `TypeScaleTest` against the nine styles 1.5a declared as stubs at their Material parents' sizes. It builds a `TextView` with each style and
   asserts `textSize` in sp and `letterSpacing`:
 
 ```kotlin
@@ -1023,7 +1032,7 @@ grep -n 'paddingBottom="88dp"' app/src/main/res/layout/fragment_tasks.xml && ech
 - [ ] **1.9 Layout includes** — six of them, matching spec §3.5's list: `header_screen.xml`,
   `row_list.xml`, `state_empty.xml`, `state_loading.xml`, `state_error.xml`, `bar_selection.xml`. The
   seventh include the spec names, `.GroupHeader`, is not new: `item_group_header.xml` already exists and is
-  restyled in place at 4.7 rather than replaced by an include, because `TasksAdapter.HeaderViewHolder` binds
+  restyled in place at 4.4 rather than replaced by an include, because `TasksAdapter.HeaderViewHolder` binds
   its four ids (`groupChevron`, `groupName`, `groupCount`, `groupMenu`) and rewriting that binding for a
   layout change would be churn with no user visible behind it.
 
@@ -1291,7 +1300,7 @@ reorder each photographed working; the red column is gone from `s2-tasks-closed.
 Purpose: give Tasks a header that exists, so search, sort, new group, archive and work history become
 reachable. Depends on: S2. Tools: `frontend-design`, `android-jetpack`.
 
-- [ ] **3.0 Skeleton first, for the same reason as 1.5a.** Declare `header_screen.xml` with its six ids, `filterRail`/`categoryScroll` retained, and `menu_tasks_sort.xml` / `menu_tasks_overflow.xml`, in one commit with no behaviour wired. Only then can 3.1's tests be *run* and be seen failing on the missing wiring rather than on `unresolved reference: tasksHeader`.
+- [ ] **3.0 Skeleton first, for the same reason as 1.5a.** One commit, no behaviour. It declares `header_screen.xml` with its six ids (`headerTitle`, `headerSubtitle`, `headerSearchField`, `headerSearchButton`, `headerSortButton`, `headerMenuButton`); **the include itself**, in `fragment_tasks.xml`, as `<include android:id="@+id/tasksHeader" layout="@layout/header_screen"/>`; and `menu_tasks_sort.xml` / `menu_tasks_overflow.xml`. The include's id belongs to the *including* layout, so a skeleton that creates only the child file leaves 3.1's test facing `unresolved reference: tasksHeader` — which is the compile error this step exists to remove, and the reason it is listed before 3.1 rather than folded into 3.4.
 
 - [ ] **3.1 Write the failing tests first.** Two of them:
 
@@ -1331,15 +1340,33 @@ matchers on this device:
     // The assertion is the row count, not the list being on screen: a search that filters nothing
     // still leaves a displayed RecyclerView, which is exactly the false pass to avoid. Two tasks are
     // seeded, one of which contains the query.
-    awaitUntil("the filtered list to settle") {
-        scenario.onActivity { activity -> rowCountOf(activity) == 1 }
-    }
+    awaitUntil("the filtered list to settle") { rowCount() == 1 }
     onView(withText("Написать обзор литературы")).check(matches(isDisplayed()))
     onView(withText("Сформировать цель ВКР")).check(matches(not(isDisplayed())))
 }
 ```
 
-- [ ] **3.2 Run them, watch them fail** (`findViewById` returns null for every new id).
+  `rowCount()` reads the adapter through the same walk that finds the field, and returns an `Int`:
+
+```kotlin
+    private fun tasksRoot(): View = scenario.withActivity {
+        (it.supportFragmentManager.fragments.first { f -> f is NavHostFragment } as NavHostFragment)
+            .childFragmentManager.fragments.filterIsInstance<TasksFragment>().single().requireView()
+    }!!
+
+    private fun headerField(): EditText = tasksRoot().findViewById(R.id.headerSearchField)
+
+    private fun rowCount(): Int =
+        tasksRoot().findViewById<RecyclerView>(R.id.recyclerView).adapter?.itemCount ?: -1
+```
+
+  One walk, three readers, and the count assertion is the point of the test: a search that filters nothing
+  leaves a perfectly displayed `RecyclerView`, which is exactly the false pass the earlier draft of this
+  step would have allowed.
+
+- [ ] **3.2 Run them, watch them fail.** They compile — 3.0 declared the ids — and fail because the field
+  is `GONE`, nothing is wired to it, and the row count does not move. If they fail to *compile*, 3.0 missed
+  a name, and that is the bug to fix here rather than a reason to touch the test.
 
 - [ ] **3.3 Add the strings** to `res/values/strings.xml` — `values/` is the only locale folder in this
   repository, so each needs one entry: `tasks_header_title` (reuse the existing `app_name`/`title_tasks`
@@ -1414,11 +1441,22 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
 
 - [ ] **3.6 Rebuild the filter rail** (spec §4.1). Today the rail is two blocks: a `HorizontalScrollView`
   holding `chipGroupCategory`, and a non-scrolling `chipGroupStatus` below it with `Widget.MaterialComponents.Chip.Filter`
-  styles — which is why the status row wraps and steals list height at 320dp. Change it to one
-  `HorizontalScrollView` containing, in order: the category chips, a 1dp `ink_outline` hairline divider, the
-  **three** status chips (`chipTodo`, `chipInProgress`, `chipPaused` — ids and behaviour unchanged; no
-  fourth chip, because `completeAndArchive` means a Completed filter could never match a row), and finally
-  the `Filters · n` chip. Write its test first:
+  styles — which is why the status row wraps and steals list height at 320dp. The change is to put a 1dp
+  `ink_outline` hairline divider between the two rows and let both share one horizontal band instead of
+  stacking, and to append the `Filters · n` chip to the status row. The three status chips keep their ids
+  and their behaviour; no fourth chip is added, because `completeAndArchive` means a Completed filter could
+  never match a row.
+
+  **The two rows scroll differently, and that is a decision with a test behind it, not an oversight.** The
+  category row stays inside its `HorizontalScrollView`, because its length is whatever the user's
+  categories add up to. The three status chips stay outside any scroller, because
+  `TasksScreenInstrumentedTest:48-50` asserts all three are `isDisplayed()` and a chip scrolled off the end
+  of a `HorizontalScrollView` is laid out but not displayed — so a single scrolling rail would either fail
+  that test or invite someone to weaken it, and weakening it is forbidden. Spec §4.1's revision-8
+  correction says the same thing; an earlier draft of this step said the opposite, and its own test below
+  contradicted it.
+
+  Write its test first:
 
 ```kotlin
     @Test fun `the categories scroll, the statuses do not, and there is no fourth chip`() {
@@ -1538,8 +1576,11 @@ data class CardPresentation(
 
         fun of(context: Context, row: TasksListItem.TaskRow, now: Long): CardPresentation {
             val task = row.task
-            val overdue = task.dueDate != null && task.dueDate < now &&
-                task.status != TaskStatus.COMPLETED
+            // Read once into a local: `task.dueDate != null && task.dueDate < now` smart-casts only while
+            // the property and its getter are in the same module, and a local makes the predicate read
+            // the way the DAO's SQL reads — one value, compared once.
+            val due = task.dueDate
+            val overdue = due != null && due < now && task.status != TaskStatus.COMPLETED
             return CardPresentation(
                 dueLine = dueLine(context, task.dueDate, now, overdue),
                 isOverdue = overdue,
@@ -1656,6 +1697,34 @@ data class CardPresentation(
   eyeballs:
 
 ```kotlin
+package com.taskplanner.ui.tasks
+
+import android.content.Context
+import android.content.res.Configuration
+import android.os.Looper
+import android.view.ContextThemeWrapper
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.TextView
+import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.R
+import com.taskplanner.data.model.Category
+import com.taskplanner.data.model.RecurrenceRule
+import com.taskplanner.data.model.RepeatUnit
+import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.tracking.TrackingPhase
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.GraphicsMode
+
 /**
  * The card at 320dp, as arithmetic (spec 4.1).
  *
@@ -1802,7 +1871,7 @@ class TaskCardWidthBudgetTest {
      * `ShadowPaint` — which is why this class carries `@GraphicsMode(NATIVE)`; without it every fit
      * assertion below is vacuous and the test passes on a broken card.
      */
-    @Test fun `at font scale 1.3 the card grows and nothing is dropped, clipped or shrunk`() {
+    @Test fun `at font scale one point three the card grows and nothing is dropped, clipped or shrunk`() {
         val row = bindWorstCase(widthDp = 320, fontScale = 1.3f)
         val baseline = bindWorstCase(widthDp = 320, fontScale = 1.0f)
         val content = row.findViewById<View>(R.id.cardContent)
@@ -1912,8 +1981,7 @@ class TaskCardWidthBudgetTest {
 }
 ```
 
-- [ ] **4.3 Run 4.1 and 4.2 and watch them fail** — `CardPresentation` does not exist yet, and
-  `R.id.cardContent` and `R.id.categoryDot` are new ids.
+- [ ] **4.3 Run 4.1 and 4.2 and watch them fail.** They compile — 4.1a declared the ids and the data class — and they fail on behaviour: the pill is still the old uncapped caption so its allowance is exceeded, the category name is still drawn at 320dp, and `priorityIndicator` is still painted from `R.color.priority_*` rather than from `CardPresentation`, so a LOW row still shows a rule. If either class fails to *compile* here, 4.1a missed a name — fix that, and do not touch the assertions.
 
 - [ ] **4.3b Add the strings the card says.** `values/strings.xml` is the only locale folder in this
   repository, so each needs exactly one entry: `task_due_today_format` (`"Today %1$s"`),
@@ -2333,6 +2401,11 @@ scroll. Depends on: S4.
   that appeared because the data changed — an insert from `submitList` — and never for a holder rebound from
   the recycle pool during a scroll. So:
 
+  **Declare what the class reads before writing the class** — `motion_entry_rise` (12dp) in
+  `res/values/dimens.xml` and `motion_standard` (180) in `res/values/anim.xml` (an `<integer>`, read with
+  `getInteger()`). A Kotlin file that names `R.dimen.motion_entry_rise` before the resource exists is a
+  compile error, not a red test, and §3's rule is that a step's RED must be an assertion failing.
+
 ```kotlin
 package com.taskplanner.ui.tasks
 
@@ -2359,8 +2432,7 @@ import com.taskplanner.R
  * The scale check is ours on purpose. recyclerview 1.1.0 contains no getDurationScale reference at all, so
  * at animator scale 0 the framework's animators merely finish instantly while the work of building and
  * starting them still happens. Returning false skips that work, which is the behaviour 9.2 tests.
- */
-/**
+ *
  * The scale is injected rather than read from `ValueAnimator.getDurationScale()`, for two reasons worth
  * stating in the code: that getter is API 33 (`api-versions.xml`: since="33") and this app's floor is 24,
  * so calling it is a NoSuchMethodError on every device in between and a fresh lint finding the PR criteria
@@ -2395,7 +2467,7 @@ class CardItemAnimator(
             .translationY(0f)
             .setDuration(context.resources.getInteger(R.integer.motion_standard).toLong())
             .setInterpolator(DecelerateInterpolator())
-            .withEndAction { onAddFinished(holder) }
+            .withEndAction { dispatchAddFinished(holder) }
             .start()
         return true
     }
@@ -2406,31 +2478,57 @@ class CardItemAnimator(
 }
 ```
 
-  Every resource this touches is declared by the stage that uses it: `motion_entry_rise` (12dp) and
-  `motion_standard` (180) land in 9.1's `dimens.xml` and `anim.xml` additions, before this class exists.
+  Both resources this class reads are declared inside 9.0, above, before the file is written. The class goes
+  in `main/java/com/taskplanner/ui/tasks/CardItemAnimator.kt`, beside the adapter that installs it.
+
+  Two facts from `javap -c` on recyclerview 1.1.0 shape the code, and one limitation is stated rather than
+  papered over:
+  - the end action calls **`dispatchAddFinished`**, not `onAddFinished`. `dispatchAddFinished` is
+    `onAddFinished(holder)` followed by `dispatchAnimationFinished(holder)`, and the second half is what
+    reaches `mListener.onAnimationFinished` — RecyclerView's own hook for releasing a holder once its
+    animation ends. Calling the inner hook alone would fade the card and leave RecyclerView guessing.
+  - `dispatchAddStarting`/`dispatchAddFinished` are `public final`, `onAddStarting`/`onAddFinished` are
+    `public` and, in 1.1.0, empty — `DefaultItemAnimator` overrides neither. The tracking lives inside
+    `animateAddImpl`, which is package-private and therefore not reusable from this package.
+  - because the tracking is skipped, `DefaultItemAnimator.mAddAnimations` (package-private, unreachable from
+    here) never learns about these fades, so `isRunning()` can report false while a 180 ms entry fade is
+    still in flight. Nothing in this design waits on `isRunning()`; the behaviours actually required —
+    a scroll starts nothing, a data change starts one, scale 0 starts nothing — are asserted directly on
+    `animateAdd` call counts in 9.5, not inferred from the animator's busy flag.
   `TasksFragment.setupRecyclerView()` assigns `recyclerView.itemAnimator = CardItemAnimator(requireContext())`
   once; `fragment_tasks.xml` sets no `app:itemAnimator` today, so there is nothing to unset.
 
-- [ ] **9.1 Status change cross-fades the pill, and only the pill.** `DiffUtil.ItemCallback` gains
-  `getChangePayload(old, new)`: when the two rows differ solely in `task.status`, it returns
-  `PAYLOAD_STATUS`; otherwise null, which means a full bind. `TasksAdapter` overrides
-  `onBindViewHolder(holder, position, payloads)` and, when the payload list contains `PAYLOAD_STATUS`,
-  re-applies the pill text, colour and background plus a 120ms alpha crossfade, and touches nothing else.
-  That is what makes a status change animate and a scroll not re-run the whole row.
+- [ ] **9.1 Status change cross-fades the pill, and only the pill.** The adapter is
+  `ListAdapter<TasksListItem, RecyclerView.ViewHolder>(DIFF)` (`TasksAdapter.kt:41`), and `DIFF` is an
+  anonymous `DiffUtil.ItemCallback` inside the **companion object** (`:350`), whose `areContentsTheSame` is
+  plain data-class equality (`:359`). Two placements matter and an earlier draft of this step got them
+  wrong: `PAYLOAD_STATUS` must be declared **in the companion object, next to `VIEW_TYPE_TASK`** — a
+  `const` declared inside the anonymous object is not visible to `TasksAdapter.onBindViewHolder`, and the
+  build would stop with `unresolved reference: PAYLOAD_STATUS`; and `getChangePayload` is a member of the
+  callback, not of the adapter. The adapter then overrides
+  `onBindViewHolder(holder, position, payloads)` and, when that list contains `PAYLOAD_STATUS`, re-applies
+  the pill text, colour and background plus a 120 ms alpha crossfade, and touches nothing else.
 
 ```kotlin
-        private const val PAYLOAD_STATUS = "status"
+    // TasksAdapter.kt, companion object — sibling of VIEW_TYPE_TASK, so onBindViewHolder can see it.
+    private const val PAYLOAD_STATUS = "status"
 
-        override fun getChangePayload(o: TasksListItem, n: TasksListItem): Any? =
-            if (o is TasksListItem.TaskRow && n is TasksListItem.TaskRow &&
-                o.task.status != n.task.status && o.task.title == n.task.title &&
-                o.task.dueDate == n.task.dueDate && o.work.phase == n.work.phase
-            ) PAYLOAD_STATUS else null
+    // ... inside `private val DIFF = object : DiffUtil.ItemCallback<TasksListItem>() {`
+    override fun getChangePayload(o: TasksListItem, n: TasksListItem): Any? {
+        if (o !is TasksListItem.TaskRow || n !is TasksListItem.TaskRow) return null
+        if (o.task.status == n.task.status) return null
+        // The payload is a promise that ONLY the status moved. Projecting the new status back onto the
+        // new row must reproduce the old row exactly; both Task and TaskRow are data classes, so this
+        // compares every other field — priority, category, reminders, work, selection — without
+        // naming them, which is what keeps a field added later from slipping through half-drawn.
+        return if (n.copy(task = n.task.copy(status = o.task.status)) == o) PAYLOAD_STATUS else null
+    }
 ```
 
-  The payload decision is deliberately narrow: it fires only when the status is the *only* difference, so a
-  change that also moved the due date or started a timer takes the full bind rather than a half-updated
-  card. A wrong payload is a silently stale row, which is worse than an extra bind.
+  An earlier draft compared `title`, `dueDate` and `work.phase` by hand and nothing else, which would have
+  returned the pill payload for a row whose priority or reminder count also moved — the crossfade would
+  repaint the pill and leave the priority rule drawing the old colour. A stale half-bind is worse than an
+  extra full bind, so the check is the identity above rather than a list of fields.
 
 - [ ] **9.2 The animator scale, tested rather than asserted.** RecyclerView 1.1.0 — the version this APK
   resolves — does **not** consult
@@ -2441,17 +2539,45 @@ class CardItemAnimator(
   API 33 on a 24 floor, and Robolectric has no public setter, so the seam is the only way to test the branch
   at all. Two consequences, both tested.
 
-```kotlin
-    @Test fun `animator scale zero skips the work instead of starting a no-op animator`() {
-        val animator = CardItemAnimator(context, animatorScale = { 0f })
-        val holder = …   // a bound ViewHolder, added to a RecyclerView so the dispatch has somewhere to go
-        assertFalse("nothing to animate, and nothing scheduled", animator.animateAdd(holder))
+  at all. Two consequences, both tested. `CardItemAnimatorTest.kt` builds its own holder: `TaskCardWorkTest`'s
+  `bindRow` is a private method of that class, so there is nothing to borrow, and an earlier draft of this
+  step called a helper that does not exist outside the file it lives in. The shape is the one
+  `TaskCardClosedPanelTest` uses — submit, wait for the diff, `createViewHolder`, `bindViewHolder` — and the
+  file carries its own three-line `awaitUntil`, the same idling helper the other two card tests use. `aRow()`
+  is that file's own one-row `TasksListItem.TaskRow` builder, constructed the way `TaskCardClosedPanelTest`
+  constructs its row: a `Task(id = 7, uuid = "anim", …)` with `category = null, isSelected = false`.
 
-        val running = CardItemAnimator(context, animatorScale = { 1f })
-        assertTrue("at scale 1 the insert does animate", running.animateAdd(holder))
+```kotlin
+    private fun boundHolder(): RecyclerView.ViewHolder {
+        val adapter = TasksAdapter(
+            onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {},
+            onDeleteRequest = {}, onStart = {}, onPause = {}, onResume = {}, onComplete = {},
+            onWorkToggle = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
+        )
+        adapter.submitList(listOf(aRow()))
+        awaitUntil("the row to be diffed") { adapter.itemCount == 1 }
+        val holder = adapter.createViewHolder(FrameLayout(context), adapter.getItemViewType(0))
+        adapter.bindViewHolder(holder, 0)
+        return holder
+    }
+
+    @Test fun `animator scale zero skips the work instead of starting a no-op animator`() {
+        assertFalse("nothing to animate, and nothing scheduled",
+            CardItemAnimator(context, animatorScale = { 0f }).animateAdd(boundHolder()))
+        assertTrue("at scale 1 the insert does animate",
+            CardItemAnimator(context, animatorScale = { 1f }).animateAdd(boundHolder()))
     }
 ```
 
+  Two holders rather than one shared: the scale-1 branch leaves its `itemView` at alpha 0 with a fade in
+  flight, so a holder reused by the second assertion would be measuring the first call's residue rather
+  than the animator's decision. Fresh holders make each call's result depend only on the scale it was given.
+
+- [ ] **9.2a Declare the one resource 9.3 reads** — `motion_entry_max` (12) in `res/values/anim.xml`, next to
+  `motion_standard`, which 9.0 created. Integers, so `getInteger()`, not `getDimensionPixelSize()`.
+  `motion_entry_rise` and `motion_standard` are **not** declared here: 9.0 declares them before the class that
+  reads them, and an earlier draft of this step both re-declared them and named a `motion_target_min` that
+  nothing reads — Stage 1 already owns that dimension as `touch_target_min`.
 
 - [ ] **9.3 The threshold.** A `submitList` that grows the list past `motion_entry_max` (12) pending
   additions disables the entry animation for that submission. This is a counter on the animator, not a scan
@@ -2468,7 +2594,9 @@ class CardItemAnimator(
 scroll (`RecyclerView` recycles, so the assertion is on the animator's call count across a
 `scrollBy`); a test with 200 rows submitted at once asserts fewer than 12 animated; a test with
 an injected `animatorScale = { 0f }` asserts `animateAdd` returns false; `getChangePayload` returns
-`PAYLOAD_STATUS` for a status-only change and null for a title change, asserted directly; and
+`PAYLOAD_STATUS` for a status-only change, null for a title change, and **null for a change that moved the
+status and the priority together** — the third case is the one the old hand-written field list got wrong, so
+it is asserted rather than argued; and
 `dumpsys gfxinfo framestats` after a 20-fling scroll shows no frame over 32ms — the same bar 10.5 holds the
 whole stage to.
 
@@ -2722,8 +2850,7 @@ Every spec requirement mapped to the step that implements it, so nothing is sile
 | C15 | 11 | `stage 11: the design system written down, and the before/after evidence` |
 | C16 | 12 | review fixes, one commit per finding where a finding spans stages |
 
-Sixteen commits across thirteen stage headings (S0 captures evidence and changes nothing; S1–S12 change
-the app; S8 is four commits). Each one builds, tests and photographs on its own, which is what makes
+Nineteen commits across thirteen stage headings: sixteen layer commits plus the three skeleton commits (1.5a, 3.0, 4.1a) that §3's red-first rule requires. S0 captures evidence and changes nothing; S1–S12 change the app; S8 is four commits. Each one builds, tests and photographs on its own, which is what makes
 `git revert <stage>` a real option rather than a theory.
 
 ---
@@ -2819,7 +2946,7 @@ verify. All five are fixed; each was checked against the toolchain or the device
 | c4 | The font-scale test asserted `measuredText - available == 0`, i.e. that text fills its box, and compared `row.height` against `taskCard.height` — two levels of one hierarchy | rewritten to `needed <= available` for the date and the status word, card height against card height, and the "no clipping" claim made through `ellipsize`/layout text rather than equality | a row with a short date in a wide box is correct and would have failed the old assertion |
 | c5 | The APK check hashed the local file and then read `lastUpdateTime` and `pm path`, which proves nothing about identity | a build → install → `pm path` → on-device `sha256sum` → `pull` → local hash → three-state PASS/FAIL/BLOCKED procedure, with `BLOCKED` named as a legitimate outcome | run on `emulator-5554` at `0abd9cb`: `base.apk` is `-rw-r--r-- system system`, pull succeeded, and all three hashes were `28e898e91ad7a18a505b4555f0026dba138463d497e944ccb10ce9a7ad9600f7` — a measured PASS, not an inferred one |
 | c6 | Motion was specified as "animate in `onBindViewHolder`, but not on scroll", which is not implementable: bind runs on every rebind from the pool | Stage 9 rewritten around `DefaultItemAnimator.animateAddImpl` for inserts and a narrow `getChangePayload` for the pill crossfade; spec §5 amended to match | RecyclerView calls `animateAdd` for inserted holders and no animator method for rebound ones |
-| c7 | The plan asserted "Android applies the animator scale automatically" | verified against the actual artifact: `androidx.recyclerview` 1.1.0 contains no `isAnimatorDisabled` and no `getDurationScale` reference, so the framework animators merely finish instantly while the setup work still runs — the hand-written path must check the scale itself | `unzip` of `recyclerview-1.3.2.aar` from the Gradle cache and a search over its `classes.jar` |
+| c7 | The plan asserted "Android applies the animator scale automatically" | verified against the actual artifact: `androidx.recyclerview` 1.1.0 contains no `isAnimatorDisabled` and no `getDurationScale` reference, so the framework animators merely finish instantly while the setup work still runs — the hand-written path must check the scale itself | `unzip` of `recyclerview-1.3.2.aar` from the Gradle cache and a search over its `classes.jar` **(superseded by §20e-e7: the build resolves 1.1.0; the claim held when re-checked against the right artifact)** |
 | c8 | `TypedValue.px2sp(displayMetrics, px)` — arguments reversed; and four snippets used `resources` / `density` that the enclosing class never declared | superseded by §20d: the argument order was fixed onto a method that is **@hide** and does not exist in the public SDK, so the snippet still did not compile; `scaledDensity` is the real route | `javap android.util.TypedValue` on android-34: `px2sp` absent, `applyDimension` present |
 | c9 | "Twelve stages, sixteen commits" undercounted the stage headings | §18 now states thirteen headings, S0 evidence-only and S8 split four ways | counted against the stage bodies |
 
@@ -2838,7 +2965,7 @@ and one was wrong in a way that would have stopped the build on the first try.
 | d2 | `TypedValue.px2sp` is not public SDK — §20c "corrected the argument order" of a hidden method | BLOCKER | `javap android.util.TypedValue` on android-34: `px2sp` absent, `applyDimension` present | `textSize / resources.displayMetrics.scaledDensity` |
 | d3 | `animateAddImpl` is package-private in the recyclerview this APK actually resolves | BLOCKER | manifest-merger report: `MERGED from [androidx.recyclerview:recyclerview:1.1.0]`; `javap` shows `void animateAddImpl(...)` and `public boolean animateAdd(...)` | §9.0 rewritten over `animateAdd`, using `dispatchAddStarting`/`onAddFinished`, both public in 1.1.0. §20c's proof inspected 1.3.2, a library not in this build |
 | d4 | 4.2's `content.width == card.width − 2·padding` cannot hold while 4.4 puts the padding on `cardContent`, because `getWidth()` includes padding | BLOCKER | Android view geometry | the test subtracts `content.paddingLeft/Right` from `content.width` |
-| d5 | The font-scale test could not fail: `due.top >= pill.top || pill.top >= due.top` is true for any two integers; `layout == null` short-circuited the ellipsis check; `"%1.f"` throws `UnknownFormatConversionException` before any assertion runs | BLOCKER | reproduced on JDK 11 | tautology deleted; overflow asserted against the content's right edge; messages use Kotlin interpolation only |
+| d5 | The font-scale test could not fail: a disjunction of two top-edge comparisons is true for any two integers,; `layout == null` short-circuited the ellipsis check; `"%1.f"` throws `UnknownFormatConversionException` before any assertion runs | BLOCKER | reproduced on JDK 11 | tautology deleted; overflow asserted against the content's right edge; messages use Kotlin interpolation only |
 | d6 | Under Robolectric's default LEGACY graphics `ShadowPaint.measureText` returns `text.length()` scaled and ignores `textSize`, so every fit assertion in 4.2 measured nothing | BLOCKER | `javap -c` of `ShadowPaint` in `shadows-framework-4.11.1.jar` | `@GraphicsMode(NATIVE)` on the class, with the reason in the comment and a stated fallback to device measurement |
 | d7 | `ContextThemeWrapper` does not override `createConfigurationContext`, so the font-scale fixture silently lost `Theme.TaskPlanner` | MAJOR | `javap android.view.ContextThemeWrapper` | `ContextThemeWrapper(app.createConfigurationContext(cfg), theme)` |
 | d8 | 1.4's alias block would have been appended to names aapt already has declared | MAJOR | `colors.xml:4-25` declares all sixteen | rewritten as an in-place edit with the overwritten names listed |
@@ -2897,3 +3024,48 @@ with line remainders 152 / 26 / 56; the pill allowance recomputes to ≈80dp aga
 theme sets exist in material-1.11.0's `R.txt`; `@GraphicsMode(NATIVE)` is a valid target for a class in
 Robolectric 4.11.1; and `animateAdd`, `dispatchAddStarting` and `onAddFinished` are all public in the
 recyclerview 1.1.0 this build resolves.
+
+## 20f — Seventh pass: the snippets were compiled, not read
+
+The six passes before this one checked the Kotlin by reading it, and every one of them missed something
+that a compiler says out loud. So this pass built a harness and ran the plan's own code through it.
+
+**The harness.** `kotlin-compiler-embeddable-1.9.22` (the project's Kotlin) on JDK 17, compiling against
+`C:\Android\platforms\android-34\android.jar`, the `classes.jar` extracted from **recyclerview 1.1.0** (the
+version the manifest-merger report says this APK resolves), the AAR classes Jars already in this machine's
+`~/.gradle/caches/transforms-3` for material 1.11.0, core 1.12.0, appcompat, fragment, room, hilt, the
+Robolectric 4.11.1 and junit 4.13.2 plain Jars, and `app/build/tmp/kotlin-classes/debug` — the app's own
+compiled classes, so `TasksAdapter`, `TasksListItem`, `Task`, `CardWork` and `TrackingPhase` are the real
+signatures rather than a sketch. The classpath is ~200 entries, over the Windows command-line limit, so the
+arguments go through an `@argfile`. Complete-file blocks are grouped by package and compiled together, which
+is what lets `ContrastLightTest` see `Wcag` and `TaskCardWidthBudgetTest` see `CardPresentation`.
+
+**What it does not prove.** `R.id.*`, `R.style.*` and `R.dimen.*` for resources the plan has not written yet
+are generated into a stub `R.java` from each snippet's own references, so the compile says *the reference is
+well-formed*, not *the resource exists* — that is still carried by the skeleton commits in §3 and by the
+stages that create them. `com.google.android.material.R.attr.*` needed a matching stub, and the five names
+were then checked against `material-1.11.0.aar/R.txt`, which contains all of them. Layout XML is not parsed.
+Cross-module smart-casts are reported that the real build would allow, which is why f7 below is a clarity fix
+rather than a bug fix.
+
+**Result: both groups compile clean (exit 0)** — `ui.theme` (Wcag, ContrastLightTest, TypeScaleTest,
+ListGutterTest) and `ui.tasks` (TaskCardClosedPanelTest, CardPresentation, TaskCardWidthBudgetTest,
+CardItemAnimator) — and the two Stage 9 fragments, which have no `package` line and so are wrapped in probe
+files, compile clean too.
+
+| # | what the compiler found | severity | evidence | disposition |
+|---|---|---|---|---|
+| f1 | 4.2's `fun \`at font scale 1.3 …\`` — a dot inside a backtick-quoted name is rejected outright: `error: name contains illegal characters: .` | BLOCKER | the compile above; and 1370 backticked names in `app/src/test` and `app/src/androidTest` use only space, `,`, `'`, `-`, digits, letters, `_`, `ё` — **zero** contain a dot | renamed to `at font scale one point three …`, and the character set is now a rule rather than a habit |
+| f2 | `TaskCardWidthBudgetTest` called `assertFalse` with only `assertEquals` and `assertTrue` imported: `unresolved reference: assertFalse` | BLOCKER | the compile above | the import added; a script now cross-checks every assert used against the imports in every block |
+| f3 | 9.2's test called `boundHolder(recyclerViewWithOneRow())` — neither helper exists. `TaskCardWorkTest.bindRow` is `private` to that class, so there was nothing to borrow | BLOCKER | `grep -n "private fun" TaskCardWorkTest.kt` | the step now names `CardItemAnimatorTest.kt`, which builds its own holder the way `TaskCardClosedPanelTest` does and carries its own `awaitUntil` |
+| f4 | 9.1 declared `PAYLOAD_STATUS` **inside** the anonymous `ItemCallback`, where `TasksAdapter.onBindViewHolder` cannot see it, and its hand-written field list (`title`, `dueDate`, `work.phase`) returned the pill payload for a row whose priority or reminder count had also moved | BLOCKER | `TasksAdapter.kt:342-360` — the companion holds `DIFF`; a `const` in an object expression is not visible outside it | the constant moved to the companion beside `VIEW_TYPE_TASK`, and the payload test is now `n.copy(task = n.task.copy(status = o.task.status)) == o`, which compares every other field without naming them |
+| f5 | 9.0's end action called `onAddFinished(holder)` | MAJOR | `javap -c` on recyclerview 1.1.0: `dispatchAddFinished` = `onAddFinished` **plus** `dispatchAnimationFinished`, and the second half is what reaches `mListener.onAnimationFinished` — RecyclerView's hook for releasing the holder | the end action calls `dispatchAddFinished`; the step states the one thing the design cannot do — `mAddAnimations` is package-private, so `isRunning()` never counts these fades, which is why §9.5 asserts `animateAdd` call counts instead |
+| f6 | 9.2a declared a `motion_target_min` nothing reads (Stage 1 already declares `touch_target_min`), ran *after* the 9.0 step that reads the resources it declares, and §8 still carried a bare `res/anim/` directory no step writes | MAJOR | the plan's own step order and file list | the declaration folded into 9.0 before the class is written, 9.2a reduced to the one resource 9.3 reads, `res/values/anim.xml`, `bg_pill_neutral.xml`, `CardItemAnimator.kt` and `CardItemAnimatorTest.kt` added to §8, `res/anim/` dropped |
+| f7 | `CardPresentation.of` wrote `task.dueDate != null && task.dueDate < now`, which smart-casts only while producer and property share a module | MINOR | the probe compile reports it across the module boundary; inside `app` it is legal | `val due = task.dueDate` read once — the predicate now reads the way the DAO's SQL reads, one value compared once |
+
+Also confirmed by running rather than reading in this pass: `override fun getMoveDuration()` and
+`getChangeDuration()` are legal overrides, because both are `public` non-final on `RecyclerView.ItemAnimator`
+in 1.1.0 (`javap`); `animateAdd` is `public abstract` on `SimpleItemAnimator` and `public` on
+`DefaultItemAnimator`, while `animateAddImpl` stays package-private; `dispatchAddStarting` and
+`dispatchAddFinished` are `public final`; and `Wcag.kt` — the block the audit named for `**` — compiles clean
+on its own against nothing but `kotlin-stdlib`, with `kotlin.math.pow` doing the linearisation.
