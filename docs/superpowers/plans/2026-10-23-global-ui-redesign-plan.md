@@ -1330,7 +1330,7 @@ which is what 2.3's fix consumes; the test itself reads no colour. Precondition:
 This stage changes geometry on the **current** card on purpose: if the fix and the redesign landed in one
 commit, a passing test could not say which of them removed the strip.
 
-- [ ] **2.1 Write the failing test** — `app/src/test/java/com/taskplanner/ui/tasks/TaskCardClosedPanelTest.kt`,
+- [x] **2.1 Write the failing test** — `app/src/test/java/com/taskplanner/ui/tasks/TaskCardClosedPanelTest.kt`,
   following `TaskCardWorkTest`'s inflate-measure-layout pattern:
 
 ```kotlin
@@ -1466,7 +1466,7 @@ class TaskCardClosedPanelTest {
 > `TaskCardWorkTest`, which already drives the real adapter this way — including `ListAdapter`'s async diff,
 > which is why the wait loop idles the main looper instead of asserting straight after `submitList`.
 
-- [ ] **2.2 Run it, watch it fail** — on exactly four assertions, and the list is derived rather than
+- [x] **2.2 Run it, watch it fail.** *Executed: both tests failed, and the numbers were the ones derived above — `panel right 393 must not pass card right 385`, and `expected:<241> but was:<233>`. The method stops at its first failure, so the top and bottom assertions the paragraph predicts were not reached; they are the same class of defect and 2.3's device measurement covers them.* — on exactly four assertions, and the list is derived rather than
   guessed, from the shipped geometry (row 393dp wide, card `[8, 385]`, panel `[241, 393]` at `[0, rowHeight]`):
   `panel.right 393 > card.right 385` fails, `panel.top 0 < card.top 4` fails, `panel.bottom 32 > card.bottom`
   fails, and the reveal test's `card.right - panel.width = 233 != panel.left 241` fails. The `translationX`
@@ -1477,7 +1477,7 @@ class TaskCardClosedPanelTest {
 ./gradlew --no-daemon --console=plain testDebugUnitTest --tests "com.taskplanner.ui.tasks.TaskCardClosedPanelTest"
 ```
 
-- [ ] **2.3 Fix the layout.** In `res/layout/item_task.xml`, `actionPanel` gains
+- [x] **2.3 Fix the layout.** *Executed, and both buttons lost their full-bleed backgrounds; the two drawables that drew them, and the two colours only those drawables read, were deleted with them, because leaving a dead `bg_action_edit` behind is how the next stage paints the strip again.* In `res/layout/item_task.xml`, `actionPanel` gains
   `android:layout_marginEnd="@dimen/card_gap"`, `android:layout_marginTop="@dimen/spacing_xs"` and
   `android:layout_marginBottom="@dimen/spacing_xs"`, matching the card's insets, and its background becomes
   `@drawable/bg_row_backdrop` (surface, radius 14)
@@ -1504,7 +1504,7 @@ class TaskCardClosedPanelTest {
 > `TasksAdapter.handleTouch` measures the reveal from `binding.actionPanel.width`, and margins do not
 > change `width`, so the reveal distance is untouched — which is what 2.1's second test pins.
 
-- [ ] **2.3a The same API-26 defect exists in nine more layouts, and lint will not say so.** 2.3's
+- [x] **2.3a The same API-26 defect exists in nine more layouts, and lint will not say so.** *Executed: 22 `layout_marginHorizontal`/`layout_marginVertical` attributes expanded to their four explicit sides across the nine files the grep named, and the grep now returns empty. Every layout in `app/src/main/res/layout` still parses.* 2.3's
   correction was made because `layout_marginVertical` is API 26 on a minSdk 24 floor, where it is dropped
   silently. That is not a one-file problem: `grep -rl "layout_marginHorizontal\|layout_marginVertical"
   app/src/main/res/layout` at this commit lists exactly ten files — `fragment_goal_detail`, `item_archive`,
@@ -1516,7 +1516,7 @@ class TaskCardClosedPanelTest {
   `marginStart`/`marginEnd` or `marginTop`/`marginBottom` dimens in this stage, and §14's gate gains the grep
   above as a check that returns empty, so the rule is enforced by a command rather than by memory.
 
-- [ ] **2.4 Run the whole Tasks test group**, then the full suite, then build:
+- [x] **2.4 Run the whole Tasks test group**, then the full suite, then build: *Executed. The Tasks group is green on its own, then **99 suites / 1401 JVM tests / 0 failures / 0 skipped**, `assembleDebug` green, `lintDebug` green (187 issues, `UnusedResources` 80 against the 56 the baseline recorded — the same deferred-owners situation as 1.11b, and lower than it was before the dead drawables went). `TaskCardWorkTest` and `TaskCardReminderTest` passed unchanged.*
 
 ```bash
 ./gradlew --no-daemon --console=plain testDebugUnitTest --tests "com.taskplanner.ui.tasks.*"
@@ -1526,7 +1526,10 @@ class TaskCardClosedPanelTest {
 Expected: all green, including `TaskCardWorkTest` and `TaskCardReminderTest` unchanged. If either breaks,
 the layout change reached further than the panel — fix the change, not the test.
 
-- [ ] **2.5 Prove it on the device**, including that swiping still works and that manual reorder still
+- [x] **2.5 Prove it on the device.** *Executed as far as this emulator's input injection allows, and the part that matters was measured rather than photographed: on a laid-out row the card is `[11,499][529,594]` and the panel `[319,499][529,594]` — the panel's right edge lands on the card's, its top on the card's, **0 px exposed**, against the 11 px of column and 6 px of band the same measurement produced at Stage 0. `after/s2-tasks-closed.png` is that row, and the red column is gone from it.*
+>
+> **What was not demonstrated, and is not being claimed.** Three injected horizontal drags of 200/300/450 ms across the fixed row moved `taskCard` by zero pixels, exactly as six did at Stage 0 (audit §4.10), while a vertical drag from the same tool scrolls the list. So `s2-tasks-swiped.png` shows a closed row, not a revealed panel, and edit, delete and the reorder handle — all three of which sit behind the card until the card moves — could not be reached either. The geometry invariant is proven twice (Robolectric and the device's own view bounds); the **gesture** is unproven on real input, and that is an open item, not a pass. The next attempt is an instrumented test that swipes through Espresso's `GeneralSwipeAction`, which drives `UiController` with proper motion history rather than `adb shell input`, and asserts `translationX == -actionPanel.width` — a stronger artifact than a photograph if it works, and a real defect report about the row's `OnTouchListener` if it does not.
+- [ ] **2.5b Close the gesture gap** with the Espresso swipe test described above, in this stage's commit or the one that fixes whatever it finds. §14.7 does not accept a closed-panel photograph as evidence that the panel can be opened., including that swiping still works and that manual reorder still
   works, with photographs of each state (the popup-free way: `adb shell input swipe` and `screencap`):
 
 ```bash
@@ -1541,7 +1544,7 @@ Then tap edit and delete once each, and drag the handle once, and photograph the
 tap did — a snackbar, a navigation, a dialog — in the commit message. `uiautomator dump` cannot see this
 emulator's popup windows, so the photographs are the evidence, the same way PR #21 handled it.
 
-- [ ] **2.6 Commit.** `git commit -m "stage 2: the swipe panel no longer shows on a closed row, and a test pins the geometry"`
+- [x] **2.6 Commit.** `git commit -m "stage 2: the swipe panel no longer shows on a closed row, and a test pins the geometry"`
 
 **Acceptance:** `TaskCardClosedPanelTest` passes and failed before the change; `TaskCardWorkTest`,
 `TaskCardReminderTest`, `TaskDetailLayoutTest` untouched and green; swipe reveal, edit, delete and manual

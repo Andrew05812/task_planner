@@ -54,9 +54,9 @@
     <color name="state_badge_fill">#14000000</color>
     <color name="red">#FFFF0000</color>
 
-    <!-- Swipe action panel -->
-    <color name="action_edit">@color/ink_accent</color>
-    <color name="action_delete">@color/ink_error</color>
+    <!-- Swipe action panel. The two full-bleed colour slabs this used to name — `bg_action_edit`,
+         `bg_action_delete` — went with stage 2, which made the panel a surface with tinted icons; the
+         colours they painted with are gone too, because nothing else ever read them. -->
     <color name="material_grey_600">@color/ink_text_secondary</color>
 
     <!-- Dashboard charts -->

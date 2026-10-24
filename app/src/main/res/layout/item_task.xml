@@ -5,41 +5,51 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
-    <!-- Hidden action panel: the card physically slides left to reveal it -->
+    <!-- The action panel, inset to exactly the card's own gutter so a closed row shows none of it, and
+         painted with the row's backdrop rather than two full-bleed colour slabs. The card slides left over
+         it to reveal it. It used to carry no margins at all while the card above it carried 8dp and 4dp,
+         which is why every closed row in the audit photographs showed a band along the top and a red
+         column down the right. -->
     <LinearLayout
         android:id="@+id/actionPanel"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="end"
+        android:layout_marginEnd="@dimen/card_gap"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:layout_marginBottom="@dimen/spacing_xs"
+        android:background="@drawable/bg_row_backdrop"
         android:orientation="horizontal">
 
         <ImageButton
             android:id="@+id/editTaskButton"
             android:layout_width="76dp"
             android:layout_height="match_parent"
-            android:background="@drawable/bg_action_edit"
+            android:background="@android:color/transparent"
             android:contentDescription="@string/action_edit"
             android:padding="20dp"
             android:src="@drawable/ic_edit"
-            app:tint="@color/white" />
+            app:tint="@color/ink_accent" />
 
         <ImageButton
             android:id="@+id/deleteTaskButton"
             android:layout_width="76dp"
             android:layout_height="match_parent"
-            android:background="@drawable/bg_action_delete"
+            android:background="@android:color/transparent"
             android:contentDescription="@string/action_delete"
             android:padding="20dp"
             android:src="@drawable/ic_delete"
-            app:tint="@color/white" />
+            app:tint="@color/ink_error" />
     </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/taskCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="8dp"
-        android:layout_marginVertical="4dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
         app:cardElevation="2dp">
 
         <androidx.constraintlayout.widget.ConstraintLayout
