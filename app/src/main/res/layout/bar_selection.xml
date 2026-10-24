@@ -1,17 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/selectionBarCard"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     style="@style/Widget.TaskPlanner.Card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="@dimen/spacing_small">
+    android:layout_margin="@dimen/spacing_small"
+    android:visibility="gone"
+    app:cardElevation="4dp"
+    tools:visibility="visible">
 
-    <!-- What is selected, and the three things that can be done to it. The ids are the ones
-         `TasksFragment` binds today (`selectionCount`, `selectAllButton`, `deleteSelectedButton`,
-         `cancelSelectionButton`), so a screen that adopts this include moves its layout without moving
-         its code — and the one destructive action in the bar is the only thing in it drawn in the error
-         role, which is the difference between a bar of tools and a bar of warnings. -->
+    <!-- What is selected, and the three things that can be done to it. The root carries no id of its own:
+         the `<include>` that brings this bar onto a screen gives the card its id (`selectionBar`), and an
+         id declared twice on one view is an ambiguous match. The four children keep the names
+         `TasksFragment` binds — `selectionCount`, `selectAllButton`, `deleteSelectedButton`,
+         `cancelSelectionButton` — reached as `binding.selectionBar.selectionCount` and so on, and the one
+         destructive action in the bar is the only thing in it drawn in the error role, which is the
+         difference between a bar of tools and a bar of warnings. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -34,16 +40,18 @@
             android:layout_width="@dimen/touch_target_min"
             android:layout_height="@dimen/touch_target_min"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_select_all" />
+            android:contentDescription="@string/select_all"
+            android:src="@drawable/ic_select_all"
+            app:tint="@color/ink_accent" />
 
         <ImageButton
             android:id="@+id/deleteSelectedButton"
             android:layout_width="@dimen/touch_target_min"
             android:layout_height="@dimen/touch_target_min"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_delete" />
+            android:contentDescription="@string/delete_selected"
+            android:src="@drawable/ic_delete"
+            app:tint="@color/ink_error" />
 
         <ImageButton
             android:id="@+id/cancelSelectionButton"
@@ -51,7 +59,8 @@
             android:layout_height="@dimen/touch_target_min"
             android:layout_marginEnd="@dimen/spacing_small"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_close" />
+            android:contentDescription="@string/cancel_selection"
+            android:src="@drawable/ic_close"
+            app:tint="@color/ink_text_secondary" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

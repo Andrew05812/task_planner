@@ -1,15 +1,12 @@
 package com.taskplanner.ui.tasks
 
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
-import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -54,64 +51,74 @@ class TasksFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setupMenu()
+        setupHeader()
         setupRecyclerView()
         setupObservers()
         setupListeners()
     }
 
-    private fun setupMenu() {
-        requireActivity().addMenuProvider(
-            object : MenuProvider {
-                override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-                    menuInflater.inflate(R.menu.menu_tasks, menu)
-                    (menu.findItem(R.id.action_search).actionView as? SearchView)?.apply {
-                        setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                            override fun onQueryTextSubmit(query: String?) = false
-                            override fun onQueryTextChange(newText: String?): Boolean {
-                                viewModel.setSearchQuery(newText.orEmpty())
-                                return true
-                            }
-                        })
-                    }
-                }
+    /**
+     * The header is the screen's only chrome, and it is the reason four features work.
+     *
+     * `menu_tasks.xml` declared search, sort, new topic, archive and work history since the stage that
+     * added them, and `addMenuProvider` wired all five — but the app runs a NoActionBar theme with no
+     * Toolbar in any layout, so the menu was never drawn and each of those actions had exactly one caller
+     * behind chrome that did not exist. Archive had no other entry point in the app at all.
+     *
+     * The two popups are built here rather than through a `MenuProvider` so there is one path to each
+     * action. The search field is a field and not a `SearchView` because it lives on the screen, where the
+     * query it holds is visible while the list below it narrows.
+     */
+    private fun setupHeader() {
+        val header = binding.tasksHeader
+        header.headerTitle.setText(R.string.title_tasks)
 
-                override fun onMenuItemSelected(menuItem: MenuItem): Boolean =
-                    when (menuItem.itemId) {
-                        R.id.action_sort_manual -> {
-                            viewModel.setSortOrder(SortOrder.MANUAL); true
-                        }
-                        R.id.action_sort_by_date -> {
-                            viewModel.setSortOrder(SortOrder.DATE_DESC); true
-                        }
-                        R.id.action_sort_by_priority -> {
-                            viewModel.setSortOrder(SortOrder.PRIORITY_DESC); true
-                        }
-                        R.id.action_sort_by_name -> {
-                            viewModel.setSortOrder(SortOrder.NAME_ASC); true
-                        }
-                        R.id.action_new_group -> {
-                            promptCreateGroup(); true
-                        }
-                        R.id.action_archive -> {
-                            findNavController().navigate(
-                                TasksFragmentDirections.actionTasksToArchive()
-                            )
-                            true
-                        }
-                        R.id.action_work_history -> {
-                            findNavController().navigate(
-                                TasksFragmentDirections.actionTasksToWorkHistory()
-                            )
-                            true
-                        }
-                        else -> false
-                    }
-            },
-            viewLifecycleOwner,
-            Lifecycle.State.RESUMED
-        )
+        header.headerSearchButton.setOnClickListener {
+            header.headerSearchLayout.visibility = View.VISIBLE
+            header.headerSearchField.requestFocus()
+        }
+        header.headerSearchField.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                viewModel.setSearchQuery(s?.toString().orEmpty())
+            }
+        })
+        header.headerSortButton.setOnClickListener { anchor -> showSortMenu(anchor) }
+        header.headerMenuButton.setOnClickListener { anchor -> showOverflowMenu(anchor) }
+        // One press for all three: the chip that counts the filters is the control that removes them, so a
+        // reader who has turned two on never has to find each one again to turn them off.
+        binding.filtersChip.setOnClickListener { viewModel.clearFilters() }
     }
+
+    private fun showSortMenu(anchor: View) = PopupMenu(requireContext(), anchor).apply {
+        menuInflater.inflate(R.menu.menu_tasks_sort, menu)
+        setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_sort_manual -> viewModel.setSortOrder(SortOrder.MANUAL)
+                R.id.action_sort_by_date -> viewModel.setSortOrder(SortOrder.DATE_DESC)
+                R.id.action_sort_by_priority -> viewModel.setSortOrder(SortOrder.PRIORITY_DESC)
+                R.id.action_sort_by_name -> viewModel.setSortOrder(SortOrder.NAME_ASC)
+                else -> return@setOnMenuItemClickListener false
+            }
+            true
+        }
+    }.show()
+
+    private fun showOverflowMenu(anchor: View) = PopupMenu(requireContext(), anchor).apply {
+        menuInflater.inflate(R.menu.menu_tasks_overflow, menu)
+        setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_new_group -> promptCreateGroup()
+                R.id.action_archive ->
+                    findNavController().navigate(TasksFragmentDirections.actionTasksToArchive())
+                R.id.action_work_history ->
+                    findNavController().navigate(TasksFragmentDirections.actionTasksToWorkHistory())
+                else -> return@setOnMenuItemClickListener false
+            }
+            true
+        }
+    }.show()
 
     private fun setupRecyclerView() {
         tasksAdapter = TasksAdapter(
@@ -224,6 +231,15 @@ class TasksFragment : Fragment() {
 
     private fun render(state: TasksState) {
         lastState = state
+        // The count is the account's open tasks, not the rows currently on screen: spec §4.1 names
+        // `activeTaskCount` for this slot, and a line that changed under a filter would stop answering the
+        // question the header is asked ("how much is still open") to answer one the list already shows.
+        binding.tasksHeader.headerSubtitle.text =
+            getString(R.string.tasks_open_count_format, state.activeTaskCount)
+        binding.filtersChip.apply {
+            visibility = if (state.activeFilterCount > 0) View.VISIBLE else View.GONE
+            text = getString(R.string.filters_count_format, state.activeFilterCount)
+        }
         binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
         binding.emptyView.visibility =
             if (state.items.isEmpty() && !state.isLoading) View.VISIBLE else View.GONE
@@ -232,9 +248,13 @@ class TasksFragment : Fragment() {
         tasksAdapter.reorderEnabled = state.sortOrder == SortOrder.MANUAL
         tasksAdapter.submitList(state.items)
 
-        binding.selectionBar.visibility = if (state.selectionMode) View.VISIBLE else View.GONE
+        // The bar replaces the header rather than stacking on it: while selecting, the count of what is
+        // selected is the line the reader needs, and the two occupy the same slot.
+        val barVisible = if (state.selectionMode) View.VISIBLE else View.GONE
+        binding.selectionBar.root.visibility = barVisible
+        binding.tasksHeader.root.visibility = if (state.selectionMode) View.GONE else View.VISIBLE
         if (state.selectionMode) {
-            binding.selectionCount.text =
+            binding.selectionBar.selectionCount.text =
                 getString(R.string.selection_count_format, state.selectedIds.size)
         }
 
@@ -318,12 +338,12 @@ class TasksFragment : Fragment() {
             viewModel.setStatusFilter(status)
         }
 
-        binding.selectAllButton.setOnClickListener { viewModel.selectAllVisible() }
-        binding.cancelSelectionButton.setOnClickListener {
+        binding.selectionBar.selectAllButton.setOnClickListener { viewModel.selectAllVisible() }
+        binding.selectionBar.cancelSelectionButton.setOnClickListener {
             tasksAdapter.closeOpenPanel()
             viewModel.exitSelection()
         }
-        binding.deleteSelectedButton.setOnClickListener { confirmDeleteSelected() }
+        binding.selectionBar.deleteSelectedButton.setOnClickListener { confirmDeleteSelected() }
     }
 
     // ---------------------------------------------------------------- dialogs

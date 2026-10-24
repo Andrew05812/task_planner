@@ -1579,9 +1579,9 @@ reorder each photographed working; the red column is gone from `s2-tasks-closed.
 Purpose: give Tasks a header that exists, so search, sort, new group, archive and work history become
 reachable. Depends on: S2. Tools: `frontend-design`, `android-jetpack`.
 
-- [ ] **3.0 Skeleton first, for the same reason as 1.5a.** One commit, no behaviour. It declares `header_screen.xml` with its six ids (`headerTitle`, `headerSubtitle`, `headerSearchField`, `headerSearchButton`, `headerSortButton`, `headerMenuButton`); **the include itself**, in `fragment_tasks.xml`, as `<include android:id="@+id/tasksHeader" layout="@layout/header_screen"/>`; and `menu_tasks_sort.xml` / `menu_tasks_overflow.xml`. The include's id belongs to the *including* layout, so a skeleton that creates only the child file leaves 3.1's test facing `unresolved reference: tasksHeader` — which is the compile error this step exists to remove, and the reason it is listed before 3.1 rather than folded into 3.4.
+- [x] **3.0 Skeleton first, for the same reason as 1.5a.** One commit, no behaviour. It declares `header_screen.xml` with its six ids (`headerTitle`, `headerSubtitle`, `headerSearchField`, `headerSearchButton`, `headerSortButton`, `headerMenuButton`); **the include itself**, in `fragment_tasks.xml`, as `<include android:id="@+id/tasksHeader" layout="@layout/header_screen"/>`; and `menu_tasks_sort.xml` / `menu_tasks_overflow.xml`. The include's id belongs to the *including* layout, so a skeleton that creates only the child file leaves 3.1's test facing `unresolved reference: tasksHeader` — which is the compile error this step exists to remove, and the reason it is listed before 3.1 rather than folded into 3.4.
 
-- [ ] **3.1 Write the failing tests first.** Two of them:
+- [x] **3.1 Write the failing tests first.** Two of them:
 
 `app/src/test/java/com/taskplanner/ui/tasks/TasksHeaderLayoutTest.kt` — inflates `fragment_tasks.xml` under
 the app theme and asserts the header's title, subtitle, search field and three action buttons exist, that
@@ -1666,17 +1666,17 @@ matchers on this device:
   leaves a perfectly displayed `RecyclerView`, which is exactly the false pass the earlier draft of this
   step would have allowed.
 
-- [ ] **3.2 Run them, watch them fail.** They compile — 3.0 declared the ids — and fail because the field
+- [x] **3.2 Run them, watch them fail.** They compile — 3.0 declared the ids — and fail because the field
   is `GONE`, nothing is wired to it, and the row count does not move. If they fail to *compile*, 3.0 missed
   a name, and that is the bug to fix here rather than a reason to touch the test.
 
-- [ ] **3.3 Add the strings** to `res/values/strings.xml` — `values/` is the only locale folder in this
+- [x] **3.3 Add the strings** to `res/values/strings.xml` — `values/` is the only locale folder in this
   repository, so each needs one entry: `tasks_header_title` (reuse the existing `app_name`/`title_tasks`
   if it already reads "Tasks"), `tasks_open_count_format` (`"%1$d open"`), `header_search_hint`,
   `header_sort`, `header_more_actions`, `filters_count_format` (`"Filters · %1$d"`),
   `filters_clear_all`.
 
-- [ ] **3.4 Add the header to `fragment_tasks.xml`**, above the filter rail, using `@layout/header_screen`
+- [x] **3.4 Add the header to `fragment_tasks.xml`**, above the filter rail, using `@layout/header_screen`
   with an `android:id="@+id/tasksHeader"`, and wire it in `TasksFragment`:
 
 ```kotlin
@@ -1735,13 +1735,13 @@ Split `menu_tasks.xml` into `menu_tasks_sort.xml` (the four entries) and `menu_t
 group, archive, work history), delete the `SearchView` item, and **remove `setupMenu()`** — leaving the
 `MenuProvider` in place would keep two paths to the same actions, one of them invisible.
 
-- [ ] **3.5 Bind the title and count** in `setupObservers()`: `binding.tasksHeader.headerTitle
+- [x] **3.5 Bind the title and count** in `setupObservers()`: `binding.tasksHeader.headerTitle
   .setText(R.string.title_tasks)`
   and `binding.tasksHeader.headerSubtitle.text =
   getString(R.string.tasks_open_count_format, state.activeTaskCount)`.
   `activeTaskCount` already exists on `TasksState` and is shown nowhere today.
 
-- [ ] **3.6 Rebuild the filter rail** (spec §4.1). Today the rail is two blocks: a `HorizontalScrollView`
+- [x] **3.6 Rebuild the filter rail** (spec §4.1). Today the rail is two blocks: a `HorizontalScrollView`
   holding `chipGroupCategory`, and a non-scrolling `chipGroupStatus` below it with `Widget.MaterialComponents.Chip.Filter`
   styles — which is why the status row wraps and steals list height at 320dp. The change is to put a 1dp
   `ink_outline` hairline divider between the two rows, keeping them as two stacked bands, and to put a
@@ -1838,7 +1838,7 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
   facts are already published. The chip's click reaches `clearFilters()`, which already exists; the reach is
   what 3.5's wiring test asserts, not this one.
 
-- [ ] **3.7 Selection mode uses the include.** `fragment_tasks.xml` carries a `selectionBar`
+- [x] **3.7 Selection mode uses the include.** `fragment_tasks.xml` carries a `selectionBar`
   `MaterialCardView` with its own four ids inline. Replace the card's body with the include and give the
   **include** the id `selectionBar`, dropping it from the `MaterialCardView` — an id declared twice in one
   tree is ambiguous, and ViewBinding resolves the include's id over the included root's own, so the card
@@ -4011,3 +4011,51 @@ known**, and the claim "green on the reference device" is not being made for it.
 with Stage 8d, which owns the report screen: reproduce on `emulator-5554` in a quiet window, and if it
 reproduces there too, treat it as a Stage 1 regression in the fixed header rows and fix the layout rather
 than the test.
+
+## 20k — Stage 3 executed: the header, the four actions it unblocked, and a regression it caught
+
+`f3216b3` was the skeleton; the rest of the stage is one commit. What the screen looks like now is
+`after/s3-header.png` — `Tasks` / `13 open` with a magnifier, a sort and a kebab beside them, the category
+band scrolling above a 1dp hairline and the three status chips below it. What was not visible before is:
+`after/s3-kebab.png` photographs New topic / Archive / Work history, and `after/s3-archive.png` and
+`after/s3-work-history.png` are those two screens reached by pressing that menu — the first time either has
+been reachable in any build of this app, because both existed only behind an options menu that a NoActionBar
+theme never drew (audit §4.2).
+
+Four things worth recording, all of them measured rather than assumed:
+
+**A `PopupMenu` is visible to Espresso on this hardware.** The stage was planned around the opposite belief,
+carried over from Stage 0's editor test, where the `AutoCompleteTextView`'s dropdown could not be read. That
+generalisation was wrong: `inRoot(isPlatformPopup())` reaches a `PopupMenu`'s items, so
+`TasksHeaderInstrumentedTest` presses the real sort and kebab entries and asserts their effect — the list
+reordered by name, and the navigation landing on `archiveList` / `historyList`. The dropdown limitation stays
+as recorded; it is about a dropdown, not about popups.
+
+**`activeTaskCount` and "the number of visible rows" are different facts**, and the acceptance line named the
+second while spec §4.1 named the first. The screen shows `activeTaskCount` — the account's open tasks — and
+the instrumented test pins that choice by asserting the subtitle still reads `5 open` while a filter holds
+the list to one row. The distinction only shows up while something is filtered, which is why the assertion
+is made in the filtered state and not the clean one.
+
+**Adopting `bar_selection.xml` found a regression Stage 1 had left waiting.** The include was written in
+Stage 1 and never used, and its three icon buttons carried `android:contentDescription="@null"` — so the
+moment `fragment_tasks.xml` switched to it, the selection bar's *Select all*, *Delete* and *Cancel* became
+anonymous to a screen reader, including the destructive one. The old inline card had labels for all three.
+The assertion that caught it is in `IncludeBindingTest`, and it went red first
+(`contentDescription='null'`); the labels and their tints (`ink_accent`, `ink_error`, `ink_text_secondary`)
+went back into the layout. The general lesson is in the gate list: an unused component is an unverified one,
+and adopting it is a change that needs its own assertions, not a move.
+
+**Two deviations from the step list, both small and both deliberate.** `header_sort` was not added, because
+`action_sort` already reads "Sort" and a second string for the same word is a second string to translate;
+and `filters_clear_all` was added, found unused by lint, and deleted rather than left declared — the chip's
+own text carries the count, and a `contentDescription` on it would replace that count for a screen reader
+instead of adding to it. `Filters · n` is a property of `TasksState` (`activeFilterCount`, with
+`hasActiveFilters` now derived from it) so the number and the boolean cannot drift; the earlier draft of the
+test held its own copy of the expression, which could only ever agree with itself.
+
+Gates for the stage: 101 suites / **1416 JVM tests / 0 failures / 0 skipped**, `assembleDebug` and
+`lintDebug` green, and `TasksHeaderInstrumentedTest` 5/5 on `emulator-5556` (`Pixel_4`, 1080x2280@440 —
+`emulator-5554` was busy with another session's work, see §20j). The instrumented class seeds five tasks and
+asserts the row count through `TasksAdapter.currentList`, counting `TaskRow` only, because a topic header is
+not a task.

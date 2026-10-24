@@ -20,64 +20,15 @@
             android:layout_height="wrap_content"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Mass-actions bar (selection mode) -->
-        <com.google.android.material.card.MaterialCardView
+        <!-- Mass-actions bar (selection mode). It occupies the header's slot and replaces it while
+             selecting, which is why the include carries the id: `binding.selectionBar` is the included
+             binding, whose root is the card itself, so the visibility the fragment drives is the card's. -->
+        <include
             android:id="@+id/selectionBar"
+            layout="@layout/bar_selection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_margin="8dp"
-            android:visibility="gone"
-            app:cardElevation="4dp"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:visibility="visible">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="4dp">
-
-                <TextView
-                    android:id="@+id/selectionCount"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:textAppearance="?attr/textAppearanceSubtitle2"
-                    tools:text="3 selected" />
-
-                <ImageButton
-                    android:id="@+id/selectAllButton"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/select_all"
-                    android:padding="10dp"
-                    android:src="@drawable/ic_select_all"
-                    app:tint="?attr/colorPrimary" />
-
-                <ImageButton
-                    android:id="@+id/deleteSelectedButton"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/delete_selected"
-                    android:padding="10dp"
-                    android:src="@drawable/ic_delete"
-                    app:tint="?attr/colorError" />
-
-                <ImageButton
-                    android:id="@+id/cancelSelectionButton"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/cancel_selection"
-                    android:padding="10dp"
-                    android:src="@drawable/ic_close"
-                    app:tint="?android:attr/textColorSecondary" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+            app:layout_constraintTop_toTopOf="parent" />
 
         <!-- The rail sits under whichever of the two occupies the slot. A Barrier takes the lower edge of
              the header and the selection bar, and a GONE widget contributes its own collapsed position, so
@@ -90,6 +41,10 @@
             app:barrierDirection="bottom"
             app:constraint_referenced_ids="tasksHeader,selectionBar" />
 
+        <!-- The category band scrolls, because its length is whatever the reader's categories add up to.
+             The `Filters · n` chip heads the band rather than joining the status row: it belongs to the
+             categories it sits beside, and the three status chips have to stay outside any scroller so all
+             three remain on screen (see the rail test in TasksHeaderLayoutTest). -->
         <HorizontalScrollView
             android:id="@+id/categoryScroll"
             android:layout_width="match_parent"
@@ -98,16 +53,43 @@
             android:scrollbars="none"
             app:layout_constraintTop_toBottomOf="@id/headerBarrier">
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chipGroupCategory"
+            <LinearLayout
+                android:id="@+id/categoryBand"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:orientation="horizontal"
                 android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:selectionRequired="false"
-                app:singleLine="true"
-                app:singleSelection="true" />
+                android:paddingEnd="12dp">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/filtersChip"
+                    style="@style/Widget.TaskPlanner.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="false"
+                    android:visibility="gone"
+                    tools:text="Filters · 2"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupCategory"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="false"
+                    app:singleLine="true"
+                    app:singleSelection="true" />
+            </LinearLayout>
         </HorizontalScrollView>
+
+        <!-- One hairline between the two rows, so the rail reads as two bands rather than a pile of chips. -->
+        <View
+            android:id="@+id/railDivider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="@dimen/screen_margin"
+            android:layout_marginEnd="@dimen/screen_margin"
+            android:background="@drawable/bg_hairline"
+            app:layout_constraintTop_toBottomOf="@id/categoryScroll" />
 
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/chipGroupStatus"
@@ -116,7 +98,7 @@
             android:layout_marginStart="16dp"
             android:layout_marginTop="4dp"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/categoryScroll"
+            app:layout_constraintTop_toBottomOf="@id/railDivider"
             app:selectionRequired="false"
             app:singleSelection="true">
 

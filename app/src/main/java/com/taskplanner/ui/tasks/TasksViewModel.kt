@@ -94,8 +94,18 @@ data class TasksState(
     val sortOrder: SortOrder = SortOrder.MANUAL,
     val collapseVersion: Int = 0
 ) {
+    /**
+     * How many of the three filters are on: category, status, query.
+     *
+     * The header's chip shows this number and clears all three in one press, so the count and the boolean
+     * below are the same fact in two shapes — a chip reading one and the rest of the screen reading the
+     * other is how a filter stays on after the control that would remove it has gone quiet.
+     */
+    val activeFilterCount: Int
+        get() = listOfNotNull(filterCategoryId, filterStatus, searchQuery.ifBlank { null }).size
+
     val hasActiveFilters: Boolean
-        get() = filterCategoryId != null || filterStatus != null || searchQuery.isNotBlank()
+        get() = activeFilterCount > 0
 }
 
 @HiltViewModel

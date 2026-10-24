@@ -231,5 +231,19 @@ class IncludeBindingTest {
                 (button.layoutParams as ViewGroup.LayoutParams).width >= floor.toInt() - 1
             )
         }
+        // And every one of them says what it is. These three buttons were drawn with labels while the bar
+        // was written inline in `fragment_tasks.xml`; an include that reaches for `@null` would hand the
+        // screen reader three anonymous glyphs, and the bar is where the destructive action lives.
+        mapOf(
+            "selectAllButton" to b.selectAllButton,
+            "deleteSelectedButton" to b.deleteSelectedButton,
+            "cancelSelectionButton" to b.cancelSelectionButton
+        ).forEach { (name, button) ->
+            assertTrue(
+                "$name shows a glyph and nothing else, so it has to name itself " +
+                    "(contentDescription='${button.contentDescription}')",
+                !button.contentDescription.isNullOrEmpty()
+            )
+        }
     }
 }

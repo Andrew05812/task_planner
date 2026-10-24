@@ -111,6 +111,16 @@ built, are tested on the JVM, and cannot be reached by a user. That is why the m
 is the finding itself. Stage 3 restores the header and with it search, sort, new group, archive and work
 history.
 
+**Resolved in Stage 3.** The header is on the screen (`after/s3-header.png`) and the five actions are behind
+it: `after/s3-kebab.png` photographs the popup holding New topic / Archive / Work history, and
+`after/s3-archive.png` and `after/s3-work-history.png` are the two screens reached from it by a press — the
+first time either has been reachable in a build. `TasksHeaderInstrumentedTest` drives all of it on a device:
+typing narrows the list through `setSearchQuery`, the sort popup reorders it through `setSortOrder`, the
+kebab navigates, and the subtitle counts what is open. One correction to what this section assumed: a
+`PopupMenu` *is* visible to Espresso on this hardware (`inRoot(isPlatformPopup())` reaches its items) — the
+unreadable popup recorded in Stage 0 is the editor's `AutoCompleteTextView` dropdown specifically, not popups
+in general, and the sort and kebab tests are built on that difference.
+
 ### 4.3 Category names are drawn in the category's own colour, as text, on white — `before/01-tasks.png`
 
 `TasksAdapter.kt:288-291` calls `b.taskCategory.setTextColor(it.color)`, and `item_task.xml:126-132` gives
