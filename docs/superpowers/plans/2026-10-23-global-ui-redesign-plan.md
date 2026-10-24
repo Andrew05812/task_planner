@@ -200,7 +200,7 @@ project is here, not one level up):
 
 ```bash
 ./gradlew --no-daemon --console=plain assembleDebug              # compile gate
-./gradlew --no-daemon --console=plain testDebugUnitTest           # 1373 JVM tests (93 suites, measured at 0.1)
+./gradlew --no-daemon --console=plain testDebugUnitTest           # 1374 JVM tests (93 suites, measured after 0.1a's review)
 ./gradlew --no-daemon --console=plain lintDebug                   # must not add findings
 ./gradlew --no-daemon --console=plain assembleDebugAndroidTest     # instrumented compile gate (CI)
 ./gradlew --no-daemon --console=plain testDebugUnitTest --tests "com.taskplanner.ui.tasks.*"
@@ -458,8 +458,8 @@ Purpose: fix what "before" means, so no later stage can argue about it. Depends 
 Precondition: `git status --short` is empty and HEAD is the plan commit, whose SHA is on this page's
 header — record it in the audit document as the baseline the before-photographs belong to.
 
-- [ ] **0.0 Create the evidence folders.** `docs/images/ui-redesign/` does not exist yet:
-  `mkdir -p docs/images/ui-redesign/before docs/images/ui-redesign/after`
+- [x] **0.0 Create the evidence folders.** *Executed:* `docs/images/ui-redesign/before/` and `after/`
+  exist; the before half holds 25 PNGs and `manifest.md` (§20i).
 
 - [x] **0.1 Re-count the baseline.** *Executed at `42ebfc2`+this commit:* 93 suites / 1373 tests / 0 failures, the extra suite and two tests being `LegacySchemaV7SourceTest`. Instrumented: 17 methods in six classes, confirmed by `grep -c @Test`. Run the commands in §2. Expected `92 1371 0` and 17 instrumented
   methods. Record the numbers in `docs/UI_UX_AUDIT.md`. If they differ, stop: the spec's §8 needs the same
@@ -485,7 +485,9 @@ header — record it in the audit document as the baseline the before-photograph
   correction rather than a redesign change — the rule against weakening a test applies to this one too, and
   the fix is to assert what the test's name promises. §14's third criterion is then measured, not assumed.
 
-- [ ] **0.2 Confirm the device is the one the spec describes.**
+- [x] **0.2 Confirm the device is the one the spec describes.** *Executed and corrected:* the panel is
+  540x1140 at 220 dpi (392.7 dp), the matrix uses density-only overrides, and forcing the size breaks
+  Espresso taps — the measurement is in the step below, and §20i records what the plan used to claim.
 
 ```bash
 adb -s "$S" shell getprop ro.build.version.sdk && adb -s "$S" shell wm size && adb -s "$S" shell wm density
@@ -523,11 +525,17 @@ The dp arithmetic still holds and is what the width matrix uses: `density = px_w
 on this 540px panel 393/360/320dp are 220/240/270. Recompute against whatever `wm size` reports, and never
 carry a pair across devices.
 
-- [ ] **0.3 Build and install the baseline APK**, then prove the installed bytes are the built bytes
-  (§6). The audit found a stale APK; do not repeat that.
+- [x] **0.3 Build and install the baseline APK**, then prove the installed bytes are the built bytes
+  (§6). The audit found a stale APK; do not repeat that. *Executed:* `assembleDebug` at `c1b2c07` →
+  `app-debug.apk` sha256 `28e898e91ad7a18a505b4555f0026dba138463d497e944ccb10ce9a7ad9600f7`; the
+  installed `base.apk` was pulled back off the device and hashed to the same value.
 
-- [ ] **0.4 Capture the before-matrix** with `mobile-use:mobile-use` (screenshots + real view bounds),
-  same account, same data, no clearing:
+- [x] **0.4 Capture the before-matrix** — *executed with `scripts/capture-ui-matrix.py`, not with
+  `mobile-use:mobile-use`: that skill's MCP tools are not connected in this session (`mcp_list` returns no
+  mobile tools), so the script drives `adb` directly and reads real view bounds from `uiautomator`.*
+  25 of the 28 files exist; `11-archive` and `12-work-history` have no path to reach them (finding 2) and
+  `27-swipe-open` could not be produced by any injected drag (finding 10) — see §20i. Every captured file
+  carries the same account and the same 13 visible tasks, recorded per row in `before/manifest.md:
 
 | file | screen | theme | width | font |
 |---|---|---|---|---|
@@ -570,8 +578,9 @@ instead and say so in the audit — do not silently drop the check that the data
 
 Restore `wm density 440`, `font_scale 1.0`, `uimode night no` afterwards, and record that you did.
 
-- [ ] **0.5 Write `docs/UI_UX_AUDIT.md`.** Every finding must point at a file and line or at a numbered
-  screenshot. The confirmed list at this baseline:
+- [x] **0.5 Write `docs/UI_UX_AUDIT.md`.** *Written:* ten findings, the baseline test numbers, the
+  configuration table, and the limits of an emulator in §5. Every finding points at a file and line or at
+  a numbered screenshot. The list the step started from:
 
 1. The swipe action panel is visible on every closed row — the blue/red strip along the top and the red
    column down the right of `before/01-tasks.png`. Root cause in spec §2.1.
@@ -592,12 +601,34 @@ Restore `wm density 440`, `font_scale 1.0`, `uimode night no` afterwards, and re
    and not with the token stage.
 8. Profile is a column of eight full-width buttons with no grouping, no icon on three of them, and no test
    anywhere in the repository.
+9. **Found while capturing, not in the original eight.** The dashboard's three-up figure row has no gutter:
+   `fragment_statistics.xml:93-118` lays `dashboardFinished`, `dashboardAdded` and `dashboardStreak` as
+   three weighted TextViews with nothing between them, and the figures are plural sentences, so
+   `before/03-statistics.png` prints "1 task finished14 tasks added" as one run. 8b owns it.
+10. **The row's own gestures, measured on the device.** One tap on a card entered *selection mode* instead of
+    opening the task (`before/28-selection-mode.png` is that photograph), and six injected horizontal drags
+    of 150–900 ms moved `taskCard` by zero pixels while a vertical drag scrolled the list. `handleTouch`
+    arms a 400 ms long-press on DOWN and does the click on UP (`TasksAdapter.kt:148,185-194`), and nothing
+    in the suite drives that path — so 2's acceptance is not "the panel is invisible", it is "the reveal
+    happens, in a photograph, on a device". Audit §4.10 carries the numbers and §5 the photograph that
+    could not be taken.
 
 - [ ] **0.6 Commit.**
 
 ```bash
 git add docs/UI_UX_AUDIT.md docs/images/ui-redesign/before/
 git commit -m "stage 0: the before-evidence, and eight problems the redesign has to answer"
+```
+
+- [ ] **0.7 Commit the tooling the evidence depends on, before C1.** The fixture, the applier and the
+  capture script are not evidence themselves, but every later stage's "same data, same configuration" claim
+  is only true because they exist — and a stage that has to re-derive them will derive them differently.
+  `superpowers:verification-before-completion` runs between 0.6 and 0.7, so the evidence commit is the one
+  that is checked; if a review pass changes a test, it gets its own commit before this one.
+
+```bash
+git add scripts/evidence-seed.sql scripts/apply-evidence-seed.py scripts/capture-ui-matrix.py
+git commit -m "stage 0: the fixture and the camera — reproducible data and a matrix that refuses bad taps"
 ```
 
 **Acceptance:** 28 PNGs in `docs/images/ui-redesign/before/`, each named for the configuration it was
@@ -615,6 +646,11 @@ Tools: `design-review:design-system-capture`, `ui-ux-pro-max-skill:design-system
   every colour, dimension and style currently referenced by a layout, and diff it against the token table.
   Anything in use but not in the table is either added or explicitly mapped to an alias in 1.3. This is
   what prevents a stage-8 screen discovering it has no token for something.
+  Measured state to fix on the way: `python scripts/contrast_report.py --resources app/src/main/res --check`
+  today dies with `KeyError: 'ink_error'`, because `--resources` reads the shipped colours while the pair
+  list comes from `docs/design/tokens.json`, and the `ink_*` names do not exist until 1.3. The script must
+  say that in words and exit non-zero with the missing names listed — a traceback is not a gate message —
+  and after 1.3 the same command is the one §14.4 runs.
 
 - [ ] **1.2 Write the failing contrast tests.** New file `app/src/test/java/com/taskplanner/ui/theme/Wcag.kt`
   holds the arithmetic; the two theme classes below assert the pairs against the shipped resources:
@@ -2777,7 +2813,10 @@ still measure what they claim and update any literal you find).
 Acceptance: the heatmap's four levels are ordered by measured luminance, not by eyeball — assert
 `L(none) > L(1) > L(2) > L(3) > L(4)` in the test; the health panel's five buckets each carry their word,
 so a reader without colour access gets the same five categories; no chart text is smaller than the `meta`
-role; the printed report colours are unchanged, because a report is paper.
+role; the printed report colours are unchanged, because a report is paper; and the figure row from audit
+finding 9 — `fragment_statistics.xml:93-118`, three weighted TextViews with no gutter, which is why
+`before/03-statistics.png` reads "1 task finished14 tasks added" — has a measured gap between its columns
+and an after-photograph where the two figures are two figures.
 
 Screenshots: `s8b-statistics.png`, `s8b-statistics-dark.png`, `s8b-statistics-320.png`,
 `s8b-statistics-font13.png`.
@@ -3280,7 +3319,11 @@ All of these, with the command output quoted in the PR body. Nothing counts as d
    `docs/UI_REDESIGN_REVIEW.md` explains each pair.
 6. The Tasks header reaches search, sort, new group, archive and work history — each demonstrated, not
    described.
-7. The swipe panel is invisible on a closed row in a photograph and in `TaskCardClosedPanelTest`.
+7. The swipe panel is invisible on a closed row in a photograph and in `TaskCardClosedPanelTest`, **and the
+   reveal itself is demonstrated on the device** — the gesture that opens it, photographed, because Stage 0
+   could not produce that photograph at all (audit §4.10: six injected drags moved the card zero pixels, and
+   a tap entered selection mode instead of opening the task). If the reveal still cannot be demonstrated,
+   that is a defect this branch fixes, not a screenshot it is allowed to skip.
 8. No `data/` file changed: `git diff --name-only master...HEAD | grep '^app/src/main/java/com/taskplanner/data/' || echo "clean"`.
 9. No new dependency: `git diff master...HEAD -- '*build.gradle*'` is empty.
 10. The M2 and platform sweep is empty across **every** resource directory and the Kotlin sources, not just
@@ -3781,3 +3824,73 @@ matrix runs at 11.4 and again before the PR. This is not a workaround for a flak
 on its own, and the interference is reproducible in a two-class run. The open question, recorded rather
 than hidden, is whether the 60 s budgets should be raised or the DB-location class restructured so it never
 touches the live path; neither is a redesign change, and neither is done here.
+
+## 20i — Stage 0 executed: the baseline, the fixture, and four things the plan had wrong
+
+Executed on `emulator-5554` (`befos_avd`, API 35, `Physical size: 540x1140`, `Physical density: 220` =
+392.7 dp) against the APK built at `c1b2c07`, sha256
+`28e898e91ad7a18a505b4555f0026dba138463d497e944ccb10ce9a7ad9600f7`. The installed bytes were proved equal
+to the built bytes by pulling `/data/app/~~B0eRFENfPFmH7nk5-HFRWA==/com.taskplanner-…/base.apk` and hashing
+it: the same value. That is the check §6 asks for, and it is the reason the audit can say which build every
+photograph belongs to.
+
+**0.0, 0.2–0.6 are done; 0.1 and 0.1a were done earlier.** `docs/images/ui-redesign/{before,after}/` exist;
+the before-matrix is 25 PNGs plus `before/manifest.md`, which records the `wm size` / `wm density` /
+`font_scale` / uimode quadruple and the visible-task count for every file; `docs/UI_UX_AUDIT.md` carries the
+ten findings, the baseline numbers and the limits. Three of the plan's 28 files have no photograph, and each
+absence is the finding rather than a gap in the work: `11-archive.png` and `12-work-history.png` because
+`nav_graph.xml:15-21` declares the actions, `menu_tasks.xml` declares the items, and `grep -rn
+"action_tasks_to_archive\|action_tasks_to_work_history" app/src/main` finds the declarations and no caller,
+while the theme is `NoActionBar` with no `Toolbar` in any layout, so the menu is inflated at
+`TasksFragment.kt:67` and never shown. `27-swipe-open.png` is the third absence, and it is a measurement
+rather than a navigation problem — see the last paragraph. Audit finding 2 is the record; Stage 3 makes
+both screens reachable, and their `after/` photographs will be the first ones ever taken of them.
+
+**A re-appliable data fixture replaced "same data, no clearing".** `scripts/evidence-seed.sql` +
+`scripts/apply-evidence-seed.py` plant 5 categories (five deliberately AA-failing hues), 2 topics, 2
+recurrence series, 14 task rows covering every state a card renders — measured time, armed reminders,
+overdue by hours and by days, paused, completed, time-blocked, uncategorised, two titles long enough to
+wrap at 320 dp — plus two rows that must stay invisible, which is how the after-matrix proves the list
+still filters. Every row carries an `ev-` uuid and an id in the 9000 block; the cleanup deletes only
+`uuid LIKE 'ev-%'`; the profile is created only when the device has no current one. It exists because
+`clearPackageData` (§20h) wipes the app on every connected run — the plan asked for "same account, same
+data, no clearing", and on this tooling that is only satisfiable by making the data reproducible.
+
+**Four things this plan said that measuring proved wrong.**
+
+| what the plan said | what was measured | what the plan now says |
+|---|---|---|
+| §0.2: force `wm size 1080x2280`; "the override is not optional" | With the override, `TasksScreenInstrumentedTest` taps `navigation_statistics` and stays on Tasks — the failure hierarchy shows `navigation_tasks` still selected. Reset to the physical panel: 4/4. At `wm density 270` (320 dp) on the physical panel: 4/4. | §0.2 and §6 now forbid the size override on this emulator and use density-only pairs (220/240/270), with the resolution cost stated in the audit instead of hidden |
+| §6: `connectedDebugAndroidTest` needs only `adb -s "$S"` to be safe | The Gradle task fans out to every transport. One unpinned invocation ran on `emulator-5554` **and** `emulator-5556`, and the workspace also carries a physical handset (`WCLJBINVEAT4PVGM`, API 35, 1220x2712@480) with real data. The handset was not instrumented (`com.taskplanner.test` is absent, its app directory is unchanged), but "not this time" is not a safety property | §6 pins every connected run with `ANDROID_SERIAL`, and §14.3 counts it as part of the gate |
+| §0.4: navigate by coordinates / trust one tap | Taps are occasionally swallowed on this emulator — the same coordinate, tapped again, works (reproduced by hand on `navigation_profile`, and again as a missing `GOALS` button that a second pass found). A horizontal drag that ends near the left edge is taken by the system as **Back**: one early capture photographed a completely different app that happened to sit behind Task Planner, and another caught the emulator's splash screen | `scripts/capture-ui-matrix.py` never trusts a tap: it reads the selected tab, the moved card, the vanished Profile, keeps every gesture inside the card, and refuses to write a file it did not navigate to |
+| §0.5: eight findings | The capture found a ninth: `fragment_statistics.xml:93-118` puts three weighted figure TextViews in a row with no gutter, so `before/03-statistics.png` prints "1 task finished14 tasks added" as one run of text | §0.5 lists nine; 8b's acceptance names the gutter and its after-photograph |
+
+**Two defects found that are not the redesign's to fix.** Running the suite unpinned surfaced
+`IllegalStateException: Migration didn't properly handle: users` on `emulator-5556`: the table that comes
+out of the chain has `firebase_uid` and `avatar_url` but no `avatar_color` / `avatar_initial`. No schema
+this repository exported looks like that — `1.json`–`4.json` have no avatar columns at all and
+`MIGRATION_4_5` adds them, so every version from 5 up has both — which means the database belongs to a
+different build of this app. Room refuses to open it rather than rewriting it, which is the right failure
+for user data; a repair migration, if one is ever wanted, is its own task with its own test. Separately,
+one connected invocation reported `Starting 0 tests … Process crashed` immediately after a density change
+while the app itself was alive and rendering correctly at 320 dp; re-running the same class passed 4/4.
+Recorded as an emulator hiccup, not as a pass.
+
+**The fixture's own numbers.** The seed prints what it planted (5/2/2/14/3/3), and the list query the
+manifest uses reports **13** visible rows, not the 12 the seed wrote: the recurrence engine materialised
+the next instance of a series on launch. That is the app behaving as designed, and it is why the manifest
+records the count per photograph rather than asserting a constant. All 25 photographs carry the same 13,
+which is the "same account, same data" check §0.4 asks for.
+
+**What the capture could not do, and what that means for Stage 2.** `27-swipe-open.png` was never taken.
+Six injected horizontal drags (150/200/250/300/400/600/900 ms), started and ended inside the card and away
+from both screen edges, moved `taskCard` by zero pixels — while a vertical drag from the same tool scrolled
+the list, so the events arrive. A single tap on a card, on a freshly launched app, entered **selection
+mode** instead of opening the task. `handleTouch` arms `postDelayed(longPressRunnable, 400)` on DOWN and
+performs the click on UP (`TasksAdapter.kt:148,185-194`); no test in the repository drives that path, so
+1374 green JVM tests are compatible with the main screen's two primary gestures not working. §14.7 now
+requires the reveal to be demonstrated on the device, not merely the closed panel to be invisible, and
+audit §4.10 records the numbers. The panel's exposure while closed is documented from the view bounds
+instead: `actionPanel` `[330,272][540,490]` against `taskCard` `[11,278][529,484]` — 11 px of panel to the
+right and 6 px above, on every row, untouched.
+
