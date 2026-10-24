@@ -23,8 +23,16 @@ import org.junit.runner.RunWith
  * the JVM tests can prove the rescue and the migrations, but only the device runs the same
  * filesystem Android manages, including the cache it is allowed to purge.
  *
- * The permanent location is moved aside for the duration of each test and put back afterwards, so
- * nothing a developer already has on the device is destroyed.
+ * What protects a developer's data here is **not** this class. `app/build.gradle.kts:29` sets the
+ * `clearPackageData` runner argument, so the Android test runner wipes the app's whole data directory
+ * before the first test of every invocation — the profile, its tasks and the permanent database are
+ * already gone by the time [moveTheCurrentDatabaseAside] looks for them. Run this on a device that has
+ * no profile worth keeping, and re-apply `scripts/apply-evidence-seed.sh` after any connected run
+ * before trusting a screenshot.
+ *
+ * The move-aside/restore pair below therefore protects a different thing, and it is the thing that
+ * actually matters inside a run: the files this class creates must not be left behind holding the slot,
+ * and a database that arrives mid-run from an earlier test method has to go back where it was.
  */
 @RunWith(AndroidJUnit4::class)
 class DatabaseLocationInstrumentedTest {
@@ -39,7 +47,14 @@ class DatabaseLocationInstrumentedTest {
         databaseFiles().forEach { file ->
             if (file.exists()) {
                 val backup = File("${file.path}.instrumented-backup")
-                backup.delete()
+                // A backup left by a run that died would be overwritten here, and with it the only copy
+                // of whatever database that run was holding. Refusing is correct: the message is the
+                // restore command, and the alternative is destroying data to prove a test.
+                assertFalse(
+                    "a previous run left ${backup.name} in place. Restore it with " +
+                        "`mv '${backup.path}' '${file.path}'`, then re-run this class.",
+                    backup.exists()
+                )
                 assertTrue("could not move ${file.name} out of the way", file.renameTo(backup))
                 restored += backup to file
             }
@@ -54,8 +69,7 @@ class DatabaseLocationInstrumentedTest {
             assertTrue("could not restore ${original.name}", backup.renameTo(original))
         }
         planted.forEach { file ->
-            file.delete()
-            File("${file.path}-wal").delete()
+            DATABASE_SUFFIXES.forEach { suffix -> File("${file.path}$suffix").delete() }
         }
     }
 
@@ -158,6 +172,12 @@ class DatabaseLocationInstrumentedTest {
      * no `src/main/assets` at all, so asking it would be a `FileNotFoundException` for a file that is
      * plainly there. Comments and blank lines are dropped; statements run in file order, table before its
      * indices, because a `CREATE INDEX` on a table that is not there yet is an error.
+     *
+     * The file order is Room's entity order, which puts `tasks` — whose `category_id` is a foreign key at
+     * `categories.id` — ahead of `categories`. That runs only because the planting connection is a bare
+     * [android.database.sqlite.SQLiteDatabase.openOrCreateDatabase] with `PRAGMA foreign_keys` off, which
+     * is SQLite's default. Plant this through Room, or with foreign keys enabled, and the first statement
+     * fails; the JVM drift test in `LegacySchemaV7SourceTest` keeps the order pinned either way.
      */
     private fun legacyStatements(): List<String> =
         InstrumentationRegistry.getInstrumentation().context.assets
@@ -187,5 +207,15 @@ class DatabaseLocationInstrumentedTest {
     }
 
     private fun databaseFiles(): List<File> =
-        listOf("", "-wal", "-shm").map { suffix -> File(target.path + suffix) }
+        DATABASE_SUFFIXES.map { suffix -> File(target.path + suffix) }
+
+    companion object {
+        /**
+         * Every file SQLite may keep beside a database. A stale `-shm` or `-journal` next to a freshly
+         * planted main file makes the open fail with a malformed image, so both the move-aside and the
+         * cleanup have to see all of them — not just the pair that happened to exist the first time this
+         * class ran.
+         */
+        private val DATABASE_SUFFIXES = listOf("", "-wal", "-shm", "-journal")
+    }
 }

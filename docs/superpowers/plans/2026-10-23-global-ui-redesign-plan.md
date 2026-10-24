@@ -53,9 +53,10 @@ like the supplied screenshots. Colour and corner-radius edits alone do not pass.
 ## 2. Starting point, verified
 
 Each figure below was read or run at `a9f70e3` on 2026-10-23, re-checked at `d1839a8` on 2026-10-24
-by two reviewers working from the source, and re-checked a third time at this commit — the instrumented
-column is the exception, see 0.1a: counted, never executed. The spec baseline this
-plan is written against is revision 9.
+by two reviewers working from the source, and re-checked a third time at this commit. The instrumented
+column is the one that has since changed status: Stage 0.1a **ran** it, and §20h records what came back —
+including that two of the rows below describe the suite as it stood before that run. The spec baseline
+this plan is written against is revision 9.
 
 | claim | evidence |
 |---|---|
@@ -70,7 +71,7 @@ plan is written against is revision 9.
 | `startTask` and `toggleWork` are different operations | `TasksViewModel.kt:418` → `taskRepository.startTask`; `:447` → `workTrackingRepository.start/pause/resume` |
 | Database | `AppDatabase.NAME = "taskplanner.db"`, `version = 16`, `exportSchema = true` |
 | No clock-shaped icon exists to reuse | `ls app/src/main/res/drawable \| grep '^ic_'` lists 42 icons; none is a timer, clock or stopwatch, so the work control's distinct icon is a new vector |
-| `contentGroup` is asserted from another screen's test | `TasksScreenInstrumentedTest:56` checks it is displayed after a round trip through Statistics |
+| `contentGroup` was asserted from another screen's test | As at `a9f70e3`: `TasksScreenInstrumentedTest` checked `R.id.contentGroup` was displayed after a round trip through Statistics, and that id exists only in `fragment_profile.xml:19` and `fragment_category_detail.xml:15`. Superseded by 0.1a, which proved it on the device and replaced the assertion — see §20h. |
 | Two existing tests constrain the design, not just the code | `StatisticsLayoutTest` requires five legacy text attributes to resolve to five **distinct** styles; `TaskCardWorkTest` requires the work line and the title to share a parent |
 | `@dimen/text_caption` has one reader | `fragment_report.xml:244` — the legacy text sizes are not unused |
 | CI | `.github/workflows/android-ci.yml`: `assembleDebug`, `testDebugUnitTest`, `lintDebug`, `assembleDebugAndroidTest` |
@@ -199,12 +200,22 @@ project is here, not one level up):
 
 ```bash
 ./gradlew --no-daemon --console=plain assembleDebug              # compile gate
-./gradlew --no-daemon --console=plain testDebugUnitTest           # 1371 JVM tests
+./gradlew --no-daemon --console=plain testDebugUnitTest           # 1373 JVM tests (93 suites, measured at 0.1)
 ./gradlew --no-daemon --console=plain lintDebug                   # must not add findings
 ./gradlew --no-daemon --console=plain assembleDebugAndroidTest     # instrumented compile gate (CI)
 ./gradlew --no-daemon --console=plain testDebugUnitTest --tests "com.taskplanner.ui.tasks.*"
 python scripts/contrast_report.py --check --format markdown --out docs/design/contrast-report.md
 python scripts/contrast_report.py --resources app/src/main/res --check
+```
+
+**Pin every instrumented run to one device.** `connectedDebugAndroidTest` fans out to *every* transport
+`adb devices` lists, and this workspace has had three at once: two emulators and the physical handset
+(`WCLJBINVEAT4PVGM`), which holds a real profile. The runner also clears the target package's data on each
+device it runs (`clearPackageData`, `app/build.gradle.kts:29`). So the serial is not just an `adb` argument —
+it is the difference between testing on a scratch emulator and wiping a person's phone:
+
+```bash
+export ANDROID_SERIAL="$S"        # Gradle reads this; `adb -s "$S"` alone does not filter the task
 ```
 
 Device: **resolve the serial, never hard-code it.** An earlier draft of this page asserted "emulator-5554 is
@@ -241,9 +252,12 @@ the device was left in. Every `adb` line in this plan means `adb -s "$S"`.
 ```bash
 # width matrix — dp = px_width / (density / 160); substitute this device's px width
 adb -s "$S" shell input keyevent KEYCODE_WAKEUP
-adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 440   # 393dp on a 1080px panel
-adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 480   # 360dp
-adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 540   # 320dp
+# 540px panel (the emulator §20h measured): density alone does the dp work — 220 / 240 / 270.
+adb -s "$S" shell wm density 220    # 393dp
+adb -s "$S" shell wm density 240    # 360dp
+adb -s "$S" shell wm density 270    # 320dp
+# A 1080px panel would use 440 / 480 / 540 for the same three widths. Never carry a pair across devices:
+# recompute from whatever `wm size` reports.
 adb -s "$S" shell settings put system font_scale 1.3     # and 1.0 to restore
 adb -s "$S" shell cmd uimode night yes                   # and `no` for light
 adb -s "$S" shell pidof com.taskplanner                  # alive check, not a claim
@@ -251,12 +265,43 @@ adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/01-tasks.png
 adb -s "$S" shell uiautomator dump /sdcard/ui.xml && adb -s "$S" exec-out cat /sdcard/ui.xml
 ```
 
-Instrumented run (device only; CI only compiles them):
+**`wm size` is not on that list, deliberately.** Overriding the panel size above the emulator's physical
+540x1140 — `wm size 1080x2280`, which an earlier draft of this page and of Stage 0.2 told the executor to
+force — makes Espresso's injected taps land outside the window: with the override in place,
+`TasksScreenInstrumentedTest` clicks `navigation_statistics` and the app stays on Tasks (the failure
+hierarchy shows `navigation_tasks` still selected); reset to the physical panel, the same build on the same
+device passes 4/4. Density-only overrides leave the pixel space alone, so taps keep mapping, and dp widths
+come out the same. The cost is resolution, not correctness: 540x1140 screenshots sample hairlines and 11sp
+text at half the linear density of a real handset, and the audit says so rather than pretending otherwise.
+
+Instrumented run (device only; CI only compiles them). **One Gradle invocation per class** — the six do not
+share a process safely, and §20h records what was measured and what was not:
 
 ```bash
 adb -s "$S" shell input keyevent KEYCODE_WAKEUP
-./gradlew --no-daemon --console=plain connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.taskplanner.ui.tasks.TaskEditorInstrumentedTest
+export ANDROID_SERIAL="$S"          # the task runs on every connected device without this
+# A stage that changed one screen may run only its own class; the full loop is the gate (11.4, and §14.3).
+for C in com.taskplanner.data.local.DatabaseLocationInstrumentedTest \
+         com.taskplanner.data.report.export.PdfReportInstrumentedTest \
+         com.taskplanner.data.report.export.ReportPdfBytesInstrumentedTest \
+         com.taskplanner.ui.TasksScreenInstrumentedTest \
+         com.taskplanner.ui.report.ReportScreenInstrumentedTest \
+         com.taskplanner.ui.tasks.TaskEditorInstrumentedTest; do
+  ./gradlew --no-daemon --console=plain connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class="$C" || exit 1
+done
+# To run one class alone, drop the loop and pass its name:
+#   -Pandroid.testInstrumentationRunnerArguments.class=com.taskplanner.ui.tasks.TaskEditorInstrumentedTest
+```
+
+Every connected invocation clears the app's data first (`clearPackageData`), so the screenshots taken after
+one have to re-apply the fixture:
+
+```bash
+adb -s "$S" install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s "$S" shell monkey -p com.taskplanner -c android.intent.category.LAUNCHER 1   # Room creates v16
+python scripts/apply-evidence-seed.py -s "$S"
+python scripts/capture-ui-matrix.py --out docs/images/ui-redesign/after -s "$S"
 ```
 
 Before trusting any screenshot: prove the installed bytes **are** the built bytes. Hashing the local file
@@ -457,14 +502,26 @@ they are 240 and 270, at 1080px they are 480 and 540, and at the handset §6 now
 542 and 610 — recompute against whatever `wm size` reports, and never carry a pair across devices.
 
 ```bash
-adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 440
-adb -s "$S" shell wm size   # must report both Physical and Override lines
+adb -s "$S" shell wm density 220    # 393dp on this 540px panel — and nothing else is overridden
 ```
 
 Record the reported `Physical`/`Override` pair, the density, the font scale and the uimode in the review
-document **for every screenshot**, and reset with `wm size reset && wm density reset` at the end. An
-earlier session found this emulator sitting at 540x1140 after a reboot, which made every tap miss; the
-override is not optional, it is the thing that makes the matrix comparable to itself.
+document **for every screenshot**, and reset with `wm density reset` at the end.
+
+**Do not override the panel size on this emulator.** An earlier draft of this step told the executor to run
+`wm size 1080x2280` so the evidence would sample like a real handset, and called the override "not
+optional". Measured at `c1b2c07`, that instruction breaks the tests it was meant to protect: with
+`Override size: 1080x2280` in place, `TasksScreenInstrumentedTest.statisticsAndBackKeepsTheTaskListUsable`
+taps `navigation_statistics` and the app stays on Tasks — the failure hierarchy shows the Tasks fragment
+with `navigation_tasks` still selected, i.e. the injected tap never reached the item. Reset to the physical
+540x1140 and the same build on the same device passes 4/4; with `wm density 270` (320dp) layered on the
+physical panel it passes 4/4 again. Density changes do not move the pixel space, so taps keep mapping;
+size changes do. The trade is resolution, not correctness, and it is stated in the audit rather than
+buried: 540x1140 photographs sample hairlines and 11sp text at half the linear density of the handset.
+
+The dp arithmetic still holds and is what the width matrix uses: `density = px_width / dp_width × 160`, so
+on this 540px panel 393/360/320dp are 220/240/270. Recompute against whatever `wm size` reports, and never
+carry a pair across devices.
 
 - [ ] **0.3 Build and install the baseline APK**, then prove the installed bytes are the built bytes
   (§6). The audit found a stale APK; do not repeat that.
@@ -3150,7 +3207,9 @@ control under 48dp; no clipped or truncated text at font 1.3 at 320dp; frame sta
   is still open, on which configuration it was checked, and what an emulator cannot stand in for (a
   manufacturer's Documents UI, a third-party PDF viewer, a real finger).
 - [ ] **11.4** `README.md`: the design-system section, and the fact that instrumented tests need a device and
-  CI only compiles them.
+  CI only compiles them — including the two things a reader has to know before running them: the suite is
+  executed as six invocations, one per class (§6, and §20h for why), and each one clears the app's data, so
+  `python scripts/apply-evidence-seed.py` comes after it and not before.
 - [ ] **11.5** Re-run the contrast script one final time and commit its report.
 - [ ] **11.6** Commit.
 
@@ -3205,12 +3264,16 @@ All of these, with the command output quoted in the PR body. Nothing counts as d
 1. `./gradlew --no-daemon --console=plain testDebugUnitTest` green, with the suite **larger** than the
    baseline recorded in S0 and zero disabled, deleted or weakened tests. The diff of test names is in the PR.
 2. `assembleDebug`, `lintDebug` and `assembleDebugAndroidTest` green; lint adds no new finding.
-3. The instrumented suite run on a device and passing, **one Gradle invocation per class** (the six classes
-   do not share a process safely — §20h: `DatabaseModule.provideDatabase` is a `@Singleton`, and
-   `DatabaseLocationInstrumentedTest` renames the live database file out from under that open connection),
-   with the installed APK's sha256 matching the
-   built one, or an explicit statement of which classes were not run and why. Measured state at the gate:
-   all six classes pass alone, 17 tests, 0 failures.
+3. The instrumented suite run on a device and passing, **one Gradle invocation per class**, each pinned to
+   one serial with `ANDROID_SERIAL` (§6: the task fans out to every transport `adb devices` lists, and this
+   workspace has had a physical handset with a real profile on it), and with the data fixture re-applied
+   afterwards before any screenshot (§20h: `clearPackageData` wipes the app on every invocation). The
+   isolation rule is measured for `ReportScreenInstrumentedTest` — the singleton `AppDatabase` holds a
+   connection to the file `DatabaseLocationInstrumentedTest` renames aside — and is **not** established for
+   `TaskEditorInstrumentedTest`, whose symptom contradicts it; §20h carries both, and the criterion does
+   not depend on the unexplained one. Pass with the installed APK's sha256 matching the built one, or an
+   explicit statement of which classes were not run and why. Measured state at the gate: all six classes
+   pass alone, 17 tests, 0 failures.
 4. `python scripts/contrast_report.py --resources app/src/main/res --check` prints `RESULT: pass` with no
    drift lines, and its report is committed.
 5. Every screen in §13 has a before and an after photograph at the same configuration, and
@@ -3656,7 +3719,7 @@ flake, and one of them was a defect in the plan's own reasoning.
 |---|---|---|---|
 | `DatabaseLocationInstrumentedTest.aLegacyCacheDatabaseIsCopiedIntoPermanentStorageAndLeftInPlace` | FAIL — `SQLiteException: no such column: user_id`, while compiling `CREATE INDEX IF NOT EXISTS index_tasks_user_id_due_date ON tasks (user_id, due_date)` | The fixture planted `CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT)` stamped `user_version = 7`. No release ever had that table. The rescue hands the file to the real chain, and `MIGRATION_9_10` (`AppMigrations.kt:257-273`) builds an index over `user_id`, which the sketch did not have. The test was proving that an invented database cannot be migrated. | The planted schema is now `app/src/androidTest/assets/legacy-v7.sql`, generated verbatim from Room's exported `app/schemas/…/7.json` (four tables, `tasks` with its 19 columns), executed statement by statement; a user and a task are inserted as that schema requires. `LegacySchemaV7SourceTest` (JVM) compares the asset against the JSON so the two cannot drift. |
 | `TasksScreenInstrumentedTest.statisticsAndBackKeepsTheTaskListUsable` | FAIL — `NoMatchingViewException` for `contentGroup` | g23 confirmed on the device: `contentGroup` is a Profile and category-detail container, not a Statistics one (`grep -c contentGroup fragment_statistics.xml` = 0). The assertion could never pass, and nothing noticed for six stages because no job instruments. | Assert Statistics' own always-present chrome — `statisticsPeriodScroll` and `statisticsPeriodChips`, both built in `setupChips()` from `WorkPeriod.entries` regardless of data — then, on the way back, the list **and** the three status chips, so "usable" means the screen came home whole. The dashboard body is deliberately not the subject: `DashboardRenderer.kt:83` sets `dashboardScroll.isVisible = snapshot != null && !snapshot.isEmpty`, which is data-dependent. That fact was learned the hard way — the first version of this fix asserted `dashboardScroll` and failed with `Got: view.getVisibility() was <GONE>`. |
-| `TaskEditorInstrumentedTest.theEditorOpensForAStoredSeriesOfEveryKind` | FAIL — `DAILY: the number the series runs on expected:<[1]> but was:<[]>` | Not an app defect and not the assertion's fault. A two-method probe (`NONE` then `DAILY`) in a fresh process read `'1'` from the field, both through the test's own helper and through `activity.findViewById`, with exactly one `repeat_interval` in the tree. The class then passed on its own. The failure needs another test class to have run first in the same process. | No change to the assertion. It is fixed by the isolation rule below. |
+| `TaskEditorInstrumentedTest.theEditorOpensForAStoredSeriesOfEveryKind` | FAIL — `DAILY: the number the series runs on expected:<[1]> but was:<[]>` | Not an app defect and not the assertion's fault: the class passes on its own and fails when another class ran first in the same process. *Why* it fails that way is **not** established — see the mechanism note below, which is honest about the one class it does explain and the one it does not. | No change to the assertion. It is fixed by the isolation rule below. |
 
 **The isolation finding, which is the part worth keeping.** These classes do not compose in one process:
 
@@ -3668,20 +3731,40 @@ flake, and one of them was a defect in the plan's own reasoning.
 | each of the six classes in its own invocation, after the two fixes above | **all six pass** |
 | JVM suite, same commit | 93 suites, 1373 tests, 0 failures (the baseline 92/1371 plus `LegacySchemaV7SourceTest`'s 1/2) |
 
-The mechanism is structural, not a race to be tuned away: `DatabaseModule.provideDatabase` is
-`@Provides @Singleton` in `SingletonComponent`, so the Application holds **one** `AppDatabase` — one open
-connection to `databases/taskplanner.db` — for the whole instrumentation process, and
+**What is measured, and what is a hypothesis.** `DatabaseModule.provideDatabase` is `@Provides @Singleton`
+in `SingletonComponent`, so the Application holds **one** `AppDatabase` — one open connection to
+`databases/taskplanner.db` — for the whole instrumentation process, and
 `DatabaseLocationInstrumentedTest` renames that exact file aside in `@Before` and deletes-then-restores it
-in `@After`. The connection the app still holds then points at an inode that has been unlinked and replaced,
-so whichever class runs next reads a database that is no longer the file. A class that owns the physical
-database file cannot share a process with classes that navigate the screens built on it.
+in `@After`. For `ReportScreenInstrumentedTest` that mechanism is not a guess: the row above is the
+experiment, the class that owns the file runs first, the class that reads through the app's connection
+runs second, and the symptom is the work finishing late rather than not at all.
+
+For `TaskEditorInstrumentedTest` the same story does **not** fit the evidence, and the plan said it did.
+`renderSeries` (`TaskDetailFragment.kt:473-482`) sets the preset label and the interval text from the same
+`RecurrenceRule` in one synchronous call, so a connection reading a stale or replaced file cannot produce
+"label rendered, interval blank" — with no rule row the label stays `NONE` and the test fails at the
+earlier `waitUntil`, which it did not. The deciding measurement, still open, is the two-class run with the
+tree inspected at the moment of failure: how many `R.id.repeat_interval` views exist, and which instance
+`onView(withId(...))` resolved. Until that is run, the isolation rule stands (it is justified by the Report
+result on its own) and this row stays recorded as an unexplained cross-class failure, not as a solved one.
+
+**The runner clears app data, which changes what "on a device" means.** `app/build.gradle.kts:29` sets
+`testInstrumentationRunnerArguments["clearPackageData"] = "true"`, so the runner wipes the app's data
+directory before **every** connected invocation — one data wipe per class under the rule above — and AGP
+uninstalls the app afterwards. Two consequences the rest of this plan has to honour: the rename-aside in
+`DatabaseLocationInstrumentedTest` protects bytes created inside the run, not a developer's profile (the
+class KDoc now says so, and the class must not be run against a device holding a profile worth keeping);
+and no screenshot matrix can survive an instrumented run, which is why Stage 0 carries
+`scripts/evidence-seed.sql` and `scripts/apply-evidence-seed.py` and every capture step re-applies them.
 
 Therefore, and now as a rule rather than an observation: **the instrumented suite is run per class**, each
-in its own Gradle invocation, and §14's instrumented criterion counts those invocations. The command list in
-§6 and the gate in §11.4 use:
+in its own Gradle invocation, and §14's instrumented criterion counts those invocations. §6 carries the
+command and 11.4 names the matrix it has to run:
 
 ```bash
-# one invocation per class; `notClass` exists in androidx.test:runner 1.5.2, which this build resolves
+# one invocation per class — the loop, not a `notClass` exclusion list: the runner supports `notClass`
+# (androidx.test:runner 1.5.2, `app/build.gradle.kts:154`), but naming the six that exist is the claim that
+# can be read and checked, while "everything except" hides a class that appears later.
 for C in com.taskplanner.data.local.DatabaseLocationInstrumentedTest \
          com.taskplanner.data.report.export.PdfReportInstrumentedTest \
          com.taskplanner.data.report.export.ReportPdfBytesInstrumentedTest \

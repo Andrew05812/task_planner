@@ -72,7 +72,32 @@ class LegacySchemaV7SourceTest {
         )
     }
 
-    /** Every `CREATE …;` line the exported schema declares, with Room's own placeholders resolved. */
+    /**
+     * The comparison above only looks at `CREATE` lines, so on its own it would let an `INSERT`, an
+     * `UPDATE` or a `DROP` slip into the asset unnoticed — and the device test runs *every* line it is
+     * given, so that extra statement would shape the planted database without this file ever objecting.
+     * The fixture is allowed to build a schema and announce its version, and nothing else.
+     */
+    @Test
+    fun `the fixture plants a schema and nothing more`() {
+        val unexpected = read(assetSql).lines()
+            .filterNot { it.isBlank() || it.trimStart().startsWith("--") }
+            .filterNot { it.trimStart().startsWith("CREATE ") || it.trim() == "PRAGMA user_version = 7;" }
+        assertTrue(
+            "only CREATE statements and the version pragma may appear in the planted fixture; found " +
+                unexpected.joinToString("\n"),
+            unexpected.isEmpty()
+        )
+    }
+
+    /**
+     * Every `CREATE …;` line the exported schema declares, with Room's own placeholders resolved.
+     *
+     * The JSON is split on `"tableName"` rather than parsed: v7 has no views, and a future schema that
+     * declares one would have its `createSql` appended to the previous table's chunk, which this test
+     * then reports as a mismatch. Loud, and wrong about the cause — if it ever fires on a schema that
+     * gained views, read this paragraph before believing the diff.
+     */
     private fun exportedCreateStatements(): List<String> {
         val json = read(schemaJson)
         val version = Regex("\"version\"\\s*:\\s*(\\d+)").find(json)?.groupValues?.get(1)

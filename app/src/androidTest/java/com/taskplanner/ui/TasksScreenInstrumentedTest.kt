@@ -4,10 +4,12 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.isChecked
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.taskplanner.R
+import org.hamcrest.CoreMatchers.not
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -65,11 +67,12 @@ class TasksScreenInstrumentedTest {
     @Test
     fun statisticsAndBackKeepsTheTaskListUsable() {
         onView(withId(R.id.navigation_statistics)).perform(click())
-        // The period rail is Statistics' own chrome: it exists only in fragment_statistics.xml and it is
-        // built in `setupChips()` from `WorkPeriod.entries`, so it is on the screen whatever the data
-        // looks like. The dashboard body deliberately is not the subject here — `DashboardRenderer:83`
-        // sets `dashboardScroll.isVisible = snapshot != null && !snapshot.isEmpty`, so asserting it
-        // would tie this navigation test to whether the profile happens to have anything in the window.
+        // The period rail is Statistics' own chrome: `statisticsPeriodScroll` is declared in
+        // fragment_statistics.xml:11 and the chips inside it are added by `StatisticsFragment.setupChips()`
+        // from `WorkPeriod.entries`, so the rail has content whatever the data looks like. The dashboard
+        // body deliberately is not the subject here — `DashboardRenderer:83` sets
+        // `dashboardScroll.isVisible = snapshot != null && !snapshot.isEmpty`, so asserting it would tie
+        // this navigation test to whether the profile happens to have anything in the window.
         onView(withId(R.id.statisticsPeriodScroll)).check(matches(isDisplayed()))
         onView(withId(R.id.statisticsPeriodChips)).check(matches(isDisplayed()))
 
@@ -81,6 +84,18 @@ class TasksScreenInstrumentedTest {
         onView(withId(R.id.chipTodo)).check(matches(isDisplayed()))
         onView(withId(R.id.chipInProgress)).check(matches(isDisplayed()))
         onView(withId(R.id.chipPaused)).check(matches(isDisplayed()))
+
+        // Presence is inflation; a tap is behaviour. `TasksFragment` never toggles the visibility of the
+        // list or the chip group, so the three checks above would still pass on a screen whose filter
+        // listener was never wired. This taps the filter the reader came back to use and reads what the
+        // group did about it: the chip the tap landed on is checked and the two that share its group are
+        // not, which is single selection surviving a navigation round trip. What the checked chip then
+        // *does* — `viewModel.setStatusFilter(TaskStatus.TODO)` — is a JVM concern and is asserted there
+        // (`TasksViewModelTest`); Espresso cannot see the ViewModel from this side of the process.
+        onView(withId(R.id.chipTodo)).perform(click())
+        onView(withId(R.id.chipTodo)).check(matches(isChecked()))
+        onView(withId(R.id.chipInProgress)).check(matches(not(isChecked())))
+        onView(withId(R.id.chipPaused)).check(matches(not(isChecked())))
     }
 
     @Test
