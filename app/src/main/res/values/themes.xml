@@ -1,20 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.TaskPlanner" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorPrimaryVariant">@color/primary_dark</item>
-        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimary">@color/ink_accent</item>
+        <item name="colorOnPrimary">@color/ink_on_accent</item>
+        <item name="colorPrimaryContainer">@color/pill_accent</item>
+        <item name="colorOnPrimaryContainer">@color/ink_accent</item>
+        <item name="colorSecondary">@color/ink_accent</item>
+        <item name="colorOnSecondary">@color/ink_on_accent</item>
+        <item name="colorSecondaryContainer">@color/pill_accent</item>
+        <item name="colorOnSecondaryContainer">@color/ink_accent</item>
+        <!-- The M2 variants are not the M3 roles, and fourteen layouts still carry
+             Widget.MaterialComponents.* styles that ask for them by name. Left alone they would answer
+             with Material's own purple, so a stage-1 palette would ship a purple button on a screen nobody
+             has migrated yet. They point at the same ink the M3 roles do. -->
+        <item name="colorPrimaryVariant">@color/ink_accent</item>
+        <item name="colorSecondaryVariant">@color/ink_accent</item>
 
-        <item name="colorSecondary">@color/secondary</item>
-        <item name="colorSecondaryVariant">@color/secondary_dark</item>
-        <item name="colorOnSecondary">@color/black</item>
+        <item name="android:colorBackground">@color/ink_background</item>
+        <item name="colorOnBackground">@color/ink_text</item>
+        <item name="colorSurface">@color/ink_surface</item>
+        <item name="colorOnSurface">@color/ink_text</item>
+        <item name="colorSurfaceVariant">@color/ink_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/ink_text_secondary</item>
+        <item name="colorSurfaceContainerLowest">@color/ink_surface</item>
+        <item name="colorSurfaceContainerLow">@color/ink_surface_raised</item>
+        <item name="colorSurfaceContainer">@color/ink_surface</item>
+        <item name="colorSurfaceContainerHigh">@color/ink_surface_variant</item>
+        <item name="colorSurfaceContainerHighest">@color/ink_surface_variant</item>
 
-        <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
+        <item name="colorOutline">@color/ink_outline</item>
+        <item name="colorOutlineVariant">@color/ink_outline</item>
+        <item name="colorError">@color/ink_error</item>
+        <item name="colorOnError">@color/ink_on_error</item>
 
-        <item name="colorSurface">@color/surface</item>
-        <item name="colorOnSurface">@color/on_surface</item>
-        <item name="colorError">@color/error</item>
-        <item name="colorOnError">@color/on_error</item>
-        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/ink_background</item>
+        <item name="android:windowBackground">@color/ink_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+
+        <!-- Thirteen vector drawables fill themselves with `?attr/colorControlNormal`, which is the
+             platform's ~40%-black icon grey and is not a token, so neither contrast gate can see it and no
+             stage-8 grep would either. Mapped here, the icons are ink from the first commit. -->
+        <item name="android:colorControlNormal">@color/ink_outline_strong</item>
+        <item name="colorControlNormal">@color/ink_outline_strong</item>
+
+        <!-- Twenty layouts still ask the platform for its secondary text colour, which is a ~3.9:1 grey
+             and is not a token, so neither contrast gate can see it. Mapping it here is what stops stage
+             8's grep from being the only thing between the audit and a failing pair. -->
+        <item name="android:textColorSecondary">@color/ink_text_secondary</item>
+
+        <!-- Not yet migrated layouts read these; overriding them here means the type scale lands once.
+             The five legacy attributes StatisticsLayoutTest asks the theme for — Headline5, Subtitle1,
+             Body1, Body2, Caption — are deliberately mapped to five DIFFERENT styles, because that test
+             asserts the dashboard still has a hierarchy, and two of them sharing a style fails it. -->
+        <item name="textAppearanceDisplaySmall">@style/TextAppearance.TaskPlanner.Display</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.TaskPlanner.Headline</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.TaskPlanner.Headline</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.TaskPlanner.Title</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.TaskPlanner.Body</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.TaskPlanner.Meta</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.TaskPlanner.Label</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.TaskPlanner.Label</item>
+        <item name="textAppearanceHeadline5">@style/TextAppearance.TaskPlanner.Display</item>
+        <item name="textAppearanceHeadline6">@style/TextAppearance.TaskPlanner.Headline</item>
+        <item name="textAppearanceSubtitle1">@style/TextAppearance.TaskPlanner.Title</item>
+        <item name="textAppearanceSubtitle2">@style/TextAppearance.TaskPlanner.Caption</item>
+        <item name="textAppearanceBody1">@style/TextAppearance.TaskPlanner.Body</item>
+        <item name="textAppearanceBody2">@style/TextAppearance.TaskPlanner.Meta</item>
+        <item name="textAppearanceCaption">@style/TextAppearance.TaskPlanner.Caption</item>
+        <item name="textAppearanceButton">@style/TextAppearance.TaskPlanner.Label</item>
+
+        <item name="bottomNavigationStyle">@style/Widget.TaskPlanner.BottomBar</item>
+        <item name="materialCardViewStyle">@style/Widget.TaskPlanner.Card</item>
+        <item name="chipStyle">@style/Widget.TaskPlanner.Chip.Filter</item>
     </style>
 </resources>

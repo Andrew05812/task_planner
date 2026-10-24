@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The nine roles of spec §3.3. System font only: identity here is size, weight and tracking, not a
+         typeface, so nothing is added to the APK and no licence is asked.
+
+         `android:letterSpacing` is a multiple of an em, not a dp or an sp: the spec's tracking column is
+         written twice for that reason, and `0.045` here is the em figure, not the 0.5 sp one. A style that
+         puts the sp number in this slot adds 40 % of the font size between every glyph, and every width
+         §4.1 budgets stops being true — which is what TypeScaleTest asserts against.
+
+         No `android:lineHeight` here, though spec §3.3 lists a line height per role: `TextView` reads a
+         fixed set of attributes out of a TextAppearance — colour, size, style, family, caps, tracking,
+         shadow, locale — and line height is not among them, so setting it on these styles would be an
+         attribute that looks like a decision and does nothing. The line rhythm is realised where the view
+         is declared, and 10.2 measures the line boxes on the device rather than trusting this file. -->
+    <style name="TextAppearance.TaskPlanner.Display" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="android:textSize">@dimen/type_display</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+    <style name="TextAppearance.TaskPlanner.Headline" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:textSize">@dimen/type_headline</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="TextAppearance.TaskPlanner.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">@dimen/type_title</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="TextAppearance.TaskPlanner.Body" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">@dimen/type_body</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+    <style name="TextAppearance.TaskPlanner.Meta" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textSize">@dimen/type_meta</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.019</item>
+    </style>
+    <style name="TextAppearance.TaskPlanner.Caption" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textSize">@dimen/type_caption</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.021</item>
+    </style>
+    <!-- The pill and the label are the same size and differ only in case, and that split is load-bearing:
+         an all-caps "IN PROGRESS" measures about 105dp, half of the narrowest text column §4.1 budgets,
+         while the same words in normal case measure about 82dp and leave the rest of the column to the
+         date. Only `label` sets textAllCaps. -->
+    <style name="TextAppearance.TaskPlanner.Pill" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">@dimen/type_pill</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.045</item>
+    </style>
+    <style name="TextAppearance.TaskPlanner.Label" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">@dimen/type_label</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.045</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+    <style name="TextAppearance.TaskPlanner.Metric" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:textSize">@dimen/type_metric</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+</resources>

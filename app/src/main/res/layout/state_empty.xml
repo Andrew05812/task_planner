@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/stateEmptyRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="@dimen/spacing_large">
+
+    <ImageView
+        android:id="@+id/stateEmptyIcon"
+        android:layout_width="@dimen/avatar_header"
+        android:layout_height="@dimen/avatar_header"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_task" />
+
+    <TextView
+        android:id="@+id/stateEmptyTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_normal"
+        android:gravity="center"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Body" />
+
+    <!-- The way out of an empty screen is named on it. Gone until a screen gives it a verb, because an
+         empty state with a button that does nothing is worse than one that says nothing. -->
+    <Button
+        android:id="@+id/stateEmptyAction"
+        style="@style/Widget.TaskPlanner.Button.Text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:visibility="gone" />
+</LinearLayout>

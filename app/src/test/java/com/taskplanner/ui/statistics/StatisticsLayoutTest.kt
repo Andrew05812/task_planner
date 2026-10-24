@@ -98,6 +98,13 @@ class StatisticsLayoutTest {
             "the theme has to name the card style the dashboard borrows",
             context.theme.resolveAttribute(attr, style, true)
         )
+        return lookOf(context, style.resourceId)
+    }
+
+    /** The same three numbers, read from a style named directly rather than through the theme. */
+    private fun lookOf(styleRes: Int): CardLook = lookOf(themed(), styleRes)
+
+    private fun lookOf(context: Context, styleRes: Int): CardLook {
         val array: TypedArray = context.obtainStyledAttributes(
             null,
             intArrayOf(
@@ -106,7 +113,7 @@ class StatisticsLayoutTest {
                 MaterialR.attr.cardBackgroundColor
             ),
             0,
-            style.resourceId
+            styleRes
         )
         try {
             return CardLook(
@@ -414,16 +421,38 @@ class StatisticsLayoutTest {
     @Test
     fun `every card is a filled material card and every gap inside it is a named spacing`() {
         val binding = screen()
-        val filled = cardStyle(MaterialR.attr.materialCardViewFilledStyle)
+        // Two references, because stage 1 changed the theme and not this layout. `libraryFilled` is the
+        // style `fragment_statistics.xml` names on its six cards today, and the per-card loop below still
+        // measures the screen against it — that is the original guarantee, untouched. `appCard` is the
+        // style the design system introduces and the theme now hands out by default; this dashboard does
+        // not wear it until 8b, and saying so here is what keeps the loop honest about which of the two
+        // cards is on screen.
+        val libraryFilled = cardStyle(MaterialR.attr.materialCardViewFilledStyle)
+        val appCard = lookOf(R.style.Widget_TaskPlanner_Card)
         val themedDefault = cardStyle(MaterialR.attr.materialCardViewStyle)
         val spacingNormal = dimen(R.dimen.spacing_normal)
 
-        assertNotEquals(
-            "the filled look is a choice this layout makes: the card the theme hands out by default is a " +
-                "bordered one, and a dashboard of borders reads as a form rather than as figures",
+        assertEquals(
+            "the theme's default card is the app's filled card: a dashboard of borders reads as a form " +
+                "rather than as figures, and the way that is guaranteed now is the theme, not a style " +
+                "attribute on six views",
             themedDefault,
-            filled
+            appCard
         )
+        // And the design's own numbers, so the two sides cannot drift together and still agree.
+        // Spec §3.4: elevation is used twice at most — cards at 1dp, dialogs at 8dp.
+        assertEquals(
+            "a card carries the one point of elevation spec 3.4 allows it",
+            1f * themed().resources.displayMetrics.density,
+            appCard.elevation,
+            0.5f
+        )
+        assertEquals(
+            "and no border, because a filled card is separated by its surface",
+            0,
+            appCard.strokeWidth
+        )
+        val filled = libraryFilled
 
         val cards = cardViews(binding)
         assertEquals("six cards, one per figure the period produced", 6, cards.size)

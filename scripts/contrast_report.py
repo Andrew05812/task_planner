@@ -159,6 +159,15 @@ def pairs(table: dict, tokens: dict[str, str], theme: str) -> list[dict]:
     for fg in sorted(table["pairs"]["text_on_surfaces"]):
         if fg in ("ink_text", "ink_text_secondary", "ink_text_tertiary", "ink_accent"):
             continue
+        if fg not in tokens or variant not in tokens:
+            # Before stage 1 writes the tokens, and for any name mistyped in colors.xml, the pair cannot
+            # be measured at all. Say which name is missing and let the gate fail on the name rather than
+            # on a traceback a worker has to read backwards.
+            add(TEXT, bar, fg, variant, "excluded from a variant surface", allowed=False)
+            missing = [n for n in (fg, variant) if n not in tokens]
+            out[-1]["note"] = "MISSING %s %s" % (theme, " ".join(missing))
+            out[-1]["ratio"] = None
+            continue
         ratio = contrast(tokens[fg], tokens[variant])
         add(TEXT, bar, fg, variant, "excluded from a variant surface", allowed=True)
         out[-1]["note"] = (

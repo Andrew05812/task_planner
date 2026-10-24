@@ -1,21 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The same attribute map as the light theme, because every value it names is a role and
+         values-night/colors.xml redefines the roles themselves. What differs is only the one thing that is
+         not a colour at all: a light status bar draws dark icons, which would be unreadable on the near-black
+         ink. The three `*_dark` colours this file used to point at are gone — the roles carry both themes. -->
     <style name="Theme.TaskPlanner" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/primary_dark</item>
-        <item name="colorPrimaryVariant">@color/primary</item>
-        <item name="colorOnPrimary">@color/black</item>
+        <item name="colorPrimary">@color/ink_accent</item>
+        <item name="colorOnPrimary">@color/ink_on_accent</item>
+        <item name="colorPrimaryContainer">@color/pill_accent</item>
+        <item name="colorOnPrimaryContainer">@color/ink_accent</item>
+        <item name="colorSecondary">@color/ink_accent</item>
+        <item name="colorOnSecondary">@color/ink_on_accent</item>
+        <item name="colorSecondaryContainer">@color/pill_accent</item>
+        <item name="colorOnSecondaryContainer">@color/ink_accent</item>
+        <item name="colorPrimaryVariant">@color/ink_accent</item>
+        <item name="colorSecondaryVariant">@color/ink_accent</item>
 
-        <item name="colorSecondary">@color/secondary_dark</item>
-        <item name="colorSecondaryVariant">@color/secondary</item>
-        <item name="colorOnSecondary">@color/white</item>
+        <item name="android:colorBackground">@color/ink_background</item>
+        <item name="colorOnBackground">@color/ink_text</item>
+        <item name="colorSurface">@color/ink_surface</item>
+        <item name="colorOnSurface">@color/ink_text</item>
+        <item name="colorSurfaceVariant">@color/ink_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/ink_text_secondary</item>
+        <item name="colorSurfaceContainerLowest">@color/ink_surface</item>
+        <item name="colorSurfaceContainerLow">@color/ink_surface_raised</item>
+        <item name="colorSurfaceContainer">@color/ink_surface</item>
+        <item name="colorSurfaceContainerHigh">@color/ink_surface_variant</item>
+        <item name="colorSurfaceContainerHighest">@color/ink_surface_variant</item>
 
-        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="colorOutline">@color/ink_outline</item>
+        <item name="colorOutlineVariant">@color/ink_outline</item>
+        <item name="colorError">@color/ink_error</item>
+        <item name="colorOnError">@color/ink_on_error</item>
+
+        <item name="android:statusBarColor">@color/ink_background</item>
+        <item name="android:windowBackground">@color/ink_background</item>
         <item name="android:windowLightStatusBar">false</item>
 
-        <item name="colorSurface">@color/surface_dark</item>
-        <item name="colorOnSurface">@color/on_surface_dark</item>
-        <item name="colorError">@color/error</item>
-        <item name="colorOnError">@color/on_error</item>
-        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:colorControlNormal">@color/ink_outline_strong</item>
+        <item name="colorControlNormal">@color/ink_outline_strong</item>
+        <item name="android:textColorSecondary">@color/ink_text_secondary</item>
+
+        <item name="textAppearanceDisplaySmall">@style/TextAppearance.TaskPlanner.Display</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.TaskPlanner.Headline</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.TaskPlanner.Headline</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.TaskPlanner.Title</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.TaskPlanner.Body</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.TaskPlanner.Meta</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.TaskPlanner.Label</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.TaskPlanner.Label</item>
+        <item name="textAppearanceHeadline5">@style/TextAppearance.TaskPlanner.Display</item>
+        <item name="textAppearanceHeadline6">@style/TextAppearance.TaskPlanner.Headline</item>
+        <item name="textAppearanceSubtitle1">@style/TextAppearance.TaskPlanner.Title</item>
+        <item name="textAppearanceSubtitle2">@style/TextAppearance.TaskPlanner.Caption</item>
+        <item name="textAppearanceBody1">@style/TextAppearance.TaskPlanner.Body</item>
+        <item name="textAppearanceBody2">@style/TextAppearance.TaskPlanner.Meta</item>
+        <item name="textAppearanceCaption">@style/TextAppearance.TaskPlanner.Caption</item>
+        <item name="textAppearanceButton">@style/TextAppearance.TaskPlanner.Label</item>
+
+        <item name="bottomNavigationStyle">@style/Widget.TaskPlanner.BottomBar</item>
+        <item name="materialCardViewStyle">@style/Widget.TaskPlanner.Card</item>
+        <item name="chipStyle">@style/Widget.TaskPlanner.Chip.Filter</item>
     </style>
 </resources>

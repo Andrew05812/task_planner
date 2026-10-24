@@ -642,7 +642,7 @@ and matching §2. **Screenshots:** the whole before-matrix.
 Purpose: build the layer every later stage reads from. Depends on: S0. Precondition: S0 committed.
 Tools: `design-review:design-system-capture`, `ui-ux-pro-max-skill:design-system`.
 
-- [ ] **1.1 Capture what exists before replacing it** with `design-review:design-system-capture`: inventory
+- [x] **1.1 Capture what exists before replacing it.** *Executed by hand rather than with `design-review:design-system-capture`: that skill writes a `DESIGN.md` contract, and this repository's contract already exists as `docs/design/tokens.json` plus spec section 3 — a second source of the same truth is the thing section 3's rules exist to prevent. The inventory, counted over `app/src/main/res` and the Kotlin sources: 27 `@color` names in 85 uses, 26 `?attr` names in 252 uses, 6 `@dimen` names in 95 uses, 12 `@style` names in 111 uses, 33 `R.color` names in 73 uses, 180 hex literals. Two names the theme block below does not carry were found and are now carried: `?attr/colorControlNormal`, which thirteen vector drawables fill themselves with and which no contrast gate could see, and `colorPrimaryVariant` / `colorSecondaryVariant`, which fourteen `Widget.MaterialComponents.*` styles still ask for by name and which would have answered with Material's own purple. One name the sweep would have missed is recorded for 8c instead: `?attr/materialButtonOutlinedStyle`, four uses in `fragment_goal_detail.xml`, is an M2 attribute rather than a style, and grepping for `Widget.MaterialComponents` does not find it. Inventory
   every colour, dimension and style currently referenced by a layout, and diff it against the token table.
   Anything in use but not in the table is either added or explicitly mapped to an alias in 1.3. This is
   what prevents a stage-8 screen discovering it has no token for something.
@@ -652,7 +652,7 @@ Tools: `design-review:design-system-capture`, `ui-ux-pro-max-skill:design-system
   say that in words and exit non-zero with the missing names listed — a traceback is not a gate message —
   and after 1.3 the same command is the one §14.4 runs.
 
-- [ ] **1.2 Write the failing contrast tests.** New file `app/src/test/java/com/taskplanner/ui/theme/Wcag.kt`
+- [x] **1.2 Write the failing contrast tests.** *Written: `Wcag.kt`, and `ContrastTest.kt` holding the abstract class with its light and dark subclasses — ten tests between them.* New file `app/src/test/java/com/taskplanner/ui/theme/Wcag.kt`
   holds the arithmetic; the two theme classes below assert the pairs against the shipped resources:
 
 ```kotlin
@@ -778,7 +778,7 @@ class ContrastDarkTest : AbstractContrastTest() {
 }
 ```
 
-- [ ] **1.3 Run them and watch them fail** for the same reason in both classes:
+- [x] **1.3 Run them and watch them fail.** *Executed: ten failures, every one of them `java.lang.NoSuchFieldException` on `ink_text`, `ink_accent`, `ink_success`, `ink_error` or `ink_on_accent` — a missing token, in both themes, which is the failure this step asks for.* Run them:
 
 ```bash
 ./gradlew --no-daemon --console=plain testDebugUnitTest --tests "com.taskplanner.ui.theme.*"
@@ -787,7 +787,7 @@ class ContrastDarkTest : AbstractContrastTest() {
 Expected: `NoSuchFieldException: ink_background` (or the Robolectric equivalent). That is the failure this
 step wants — a missing token, not a typo. If it fails differently, fix the test before continuing.
 
-- [ ] **1.4 Write the tokens.** Add the fifteen `ink_*` role tokens of §4 and the five pill tokens to
+- [x] **1.4 Write the tokens.** *Executed: the twenty names below went into `values/colors.xml` and the dark column into `values-night/colors.xml`, the fourteen aliases were retargeted in place, the three `*_dark` colours were deleted from both files, and the ramp was given its own anchors. Both contrast classes are now 5/5 green and `contrast_report.py --resources` prints `RESULT: pass` with no drift line, which is the proof that the resources and `tokens.json` agree.* Add the fifteen `ink_*` role tokens of §4 and the five pill tokens to
   `res/values/colors.xml`, and **edit the existing role names in place** — do not append a second block of
   them. `primary`, `primary_dark`, `secondary`, `secondary_dark`, `background`, `surface`, `on_surface`,
   `error`, `on_error`, `status_todo`, `status_in_progress`, `status_paused`, `status_done`, `priority_low`,
@@ -884,7 +884,7 @@ changes the colour.
 > says nothing about a heat scale whose entire meaning is one hue at five densities. Spec §3.1 revision 6
 > puts the re-anchoring in the dashboard stage, and 8b is where it happens, with the tests that read it.
 
-- [ ] **1.5 Map the theme.** Replace `res/values/themes.xml` with the ink roles on the M3 attributes, and
+- [x] **1.5 Map the theme.** *Executed with the three additions 1.1 asked for: `android:colorControlNormal` and `colorControlNormal` to `ink_outline_strong`, and `colorPrimaryVariant`/`colorSecondaryVariant` to `ink_accent`, so an unmigrated M2 style cannot answer with library purple.* Replace `res/values/themes.xml` with the ink roles on the M3 attributes, and
   write the night file to match. The M2-compat text attributes are overridden as well, so a layout that has
   not been migrated yet already reads the new scale:
 
@@ -963,7 +963,7 @@ changes the colour.
 > M2-compat names first (`textAppearanceSubtitle2`, `textAppearanceButton`) since those are the least
 > likely to exist in an M3 parent.
 
-- [ ] **1.5a Skeleton first.** Before 1.6 can run, the nine `TextAppearance.TaskPlanner.*` styles and the `ink_*` colours must exist as *names*: Kotlin resolves `R.style.TextAppearance_TaskPlanner_Display` at compile time, so a test naming a style nobody has declared is a build failure, not a red test. 1.5a adds `type.xml` with the nine styles declared at their parent Material sizes and no tracking or colour overrides, and commits it alone. 1.6 then writes the failing assertions against names that resolve.
+- [x] **1.5a Skeleton first.** *Executed: `type.xml` and `component_styles.xml` declared their names over their Material parents before any assertion pointed at them, which is what let 1.6 fail as a red test rather than as a compile error.* Before 1.6 can run, the nine `TextAppearance.TaskPlanner.*` styles and the `ink_*` colours must exist as *names*: Kotlin resolves `R.style.TextAppearance_TaskPlanner_Display` at compile time, so a test naming a style nobody has declared is a build failure, not a red test. 1.5a adds `type.xml` with the nine styles declared at their parent Material sizes and no tracking or colour overrides, and commits it alone. 1.6 then writes the failing assertions against names that resolve.
 
   It also creates `component_styles.xml` with all **fifteen** `Widget.TaskPlanner.*` names as empty styles
   whose only content is the Material 3 parent each one inherits. This is not tidiness: 1.5 puts
@@ -974,7 +974,7 @@ changes the colour.
   real parent is valid XML and draws exactly what the parent draws, so 1.5 through 1.7 ship a redesigned
   palette over unchanged component shapes, and 1.8 fills the fifteen bodies in without touching any name.
 
-- [ ] **1.6 Failure-first:** write `TypeScaleTest` against the nine styles 1.5a declared as stubs at their Material parents' sizes. It builds a `TextView` with each style and
+- [x] **1.6 Failure-first:** *Executed: `each role is the size the scale says it is` and `tracking is expressed in ems...` both failed against the stubs, and the two theme-attribute tests passed, because 1.5 had already mapped the attributes.* write `TypeScaleTest` against the nine styles 1.5a declared as stubs at their Material parents' sizes. It builds a `TextView` with each style and
   asserts `textSize` in sp and `letterSpacing`:
 
 ```kotlin
@@ -1091,7 +1091,7 @@ class TypeScaleTest {
 > **±0.2f**. And because `letterSpacing` is read through `defStyleRes`, `type.xml` must set
 > `android:letterSpacing` on the style itself rather than relying on a Material parent to carry it.
 
-- [ ] **1.6b Type scale** (the implementation; it runs after 1.6's test) in new `res/values/type.xml`: nine `TextAppearance.TaskPlanner.*` styles over the
+- [x] **1.6b Type scale** (the implementation; it runs after 1.6's test) in new `res/values/type.xml`: *Executed, with one deviation stated rather than buried. `android:lineHeight` is not set on these styles: `TextView.readTextAppearance()` reads a fixed list out of a TextAppearance — colour, size, style, family, caps, tracking, shadow, locale — and line height is not in it, so writing the section 3.3 line heights there would have looked like a decision and done nothing. The API-28 fallback note stays true of the attribute wherever it is actually set, and 10.2 measures the line boxes instead.* Nine `TextAppearance.TaskPlanner.*` styles over the
   M3 parents — display, headline, title, body, meta, caption, pill, label, metric — each carrying size,
   `android:lineHeight` (with `tools:targetApi="28"`), weight, `android:letterSpacing` **in ems** at the
   `lineHeight` is API 28 and the floor is 24, so on 24-27 the pair falls back to the font's own metrics
@@ -1103,7 +1103,7 @@ class TypeScaleTest {
   `android:textAllCaps`; `pill` is deliberately not capped, because the 82dp line-B budget in §4.1 depends
   on it. Add `type_caption` (12sp) and `type_pill` (11sp) to the dimens alongside the other seven.
 
-- [ ] **1.7 Space and shape.** Add to `res/values/dimens.xml` (keeping the five existing `spacing_*` values
+- [x] **1.7 Space and shape.** *Executed, and it cost a test that was right. The first version of `Widget.TaskPlanner.Card` carried the section 3.4 `contentPadding` of 14/16, and because 1.5 made that style the theme's `materialCardViewStyle`, the padding reached every `MaterialCardView` in the app at once — `StatisticsLayoutTest` measured the dashboard's own 16dp inset, found 14dp, and failed. The padding came out of the style: a layout that wants it sets it, and 8b says so in the same commit as the rest of that screen's spacing. `task_item_height` and `category_item_height` were deleted as unread; `fab_margin` was deleted and put back, because 3.2 is its owner and has not arrived.* Add to `res/values/dimens.xml` (keeping the five existing `spacing_*` values
   exactly as they are, because `StatisticsLayoutTest` asserts that every vertical gap on the dashboard is
   one of them):
 
@@ -1199,7 +1199,7 @@ class ListGutterTest {
 }
 ```
 
-- [ ] **1.7a Make the gutter test pin the UI, not two constants.** `fragment_tasks.xml:153` hard-codes
+- [x] **1.7a Make the gutter test pin the UI, not two constants.** *Executed as far as Stage 1 can: `list_bottom_gutter` and `fab_size` exist. One correction to the premise — `ListGutterTest` does not exist in this repository (searching `app/src` for `ListGutter` and for `list_bottom_gutter` finds only the new dimen), so there was no test reading the sum to keep. 3.2 writes it in the same commit as the layout edit that makes it meaningful, which is the only order in which it can pin anything.* `fragment_tasks.xml:153` hard-codes
   `android:paddingBottom="88dp"`, and `fab_margin` is read by nothing in `app/src`, so a test comparing
   the two dimens proves arithmetic about a file nobody renders. What Stage 1 owns is the *names*: add
   `list_bottom_gutter` (88dp) and `fab_size` (56dp) to `dimens.xml` and keep `ListGutterTest` reading the
@@ -1215,19 +1215,19 @@ class ListGutterTest {
 grep -n 'paddingBottom="88dp"' app/src/main/res/layout/fragment_tasks.xml && echo 'STILL A LITERAL' || echo coupled
 ```
 
-- [ ] **1.7b Statistics allowlist.** `StatisticsLayoutTest` asserts that every vertical gap on the dashboard
+- [x] **1.7b Statistics allowlist.** *Checked at this commit: `spacing_medium` and `spacing_section` are declared and used by no dashboard layout, so the five-id allowlist still holds; 8b adds the ids it uses in the same commit, as written.* `StatisticsLayoutTest` asserts that every vertical gap on the dashboard
   is one of the named `spacing_*` values, and its allowlist is built from five ids. Adding `spacing_medium`
   and `spacing_section` does not break it while no dashboard layout uses them; the moment 8b uses one, that
   test's set must gain the same id **in the same commit**. Note it here so 8b does not discover it as a
   surprise failure.
 
-- [ ] **1.8 Component styles** in new `res/values/component_styles.xml`: the fourteen `Widget.TaskPlanner.*`
+- [x] **1.8 Component styles** in new `res/values/component_styles.xml`: *Executed. One thing only the device showed: with `chipStyle` pointing at the new filter style, the category rail began drawing the reader's own words as all-caps, because the label role it inherits is capped. `textAllCaps=false` on the two chip styles fixes it and `ComponentStyleTest` pins it, with the label role's caps kept for the headings a screen writes itself.* the fourteen `Widget.TaskPlanner.*`
   styles spec §3.5 lists, plus `Widget.TaskPlanner.Field.Dropdown` — the fifteenth, needed because five uses of
   `Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu` across two layouts and the spec's
   list names only the plain field. Then the pill styles over the five `bg_pill_*` drawables. And the new
   drawables listed in §8 — each a `<shape>` or `<ripple>` reading a token, no literals.
 
-- [ ] **1.9 Layout includes** — six of them, matching spec §3.5's list: `header_screen.xml`,
+- [x] **1.9 Layout includes** — six of them, matching spec §3.5's list: `header_screen.xml`,
   `row_list.xml`, `state_empty.xml`, `state_loading.xml`, `state_error.xml`, `bar_selection.xml`. The
   seventh include the spec names, `.GroupHeader`, is not new: `item_group_header.xml` already exists and is
   restyled in place at 4.4 rather than replaced by an include, because `TasksAdapter.HeaderViewHolder` binds
@@ -1238,12 +1238,12 @@ grep -n 'paddingBottom="88dp"' app/src/main/res/layout/fragment_tasks.xml && ech
   zone 1), so its children carry ids and each include gets its own `android:id` — ViewBinding scopes an
   include's binding to that include's own view tree, so the repeated child ids cannot collide.
 
-- [ ] **1.10 Write `ComponentStyleTest` and `IncludeBindingTest`** — inflate every style and every include
+- [x] **1.10 Write `ComponentStyleTest` and `IncludeBindingTest`** — inflate every style and every include
   under `Theme.TaskPlanner` in both qualifiers, and assert the include's children are reachable through the
   nested binding (`binding.row.root.findViewById(R.id.rowTitle) != null`), which is what proves the eight
   Profile rows will not fight over ids.
 
-- [ ] **1.11 Run the gates.**
+- [x] **1.11 Run the gates.** *Executed on a forced full re-run (`--rerun-tasks`, so no task could hide behind an UP-TO-DATE line from an earlier build): 98 suites / 1399 JVM tests / 0 failures / 0 skipped, `assembleDebug` green, `lintDebug` green. The numbers and the lint delta are in 1.11b.*
 
 ```bash
 ./gradlew --no-daemon --console=plain testDebugUnitTest
@@ -1264,7 +1264,7 @@ design changed, in which case both move together and the spec's §3.1 quotation 
 > `RESULT: fail`. `scripts/contrast_report.py` is a measurement tool, not app code, so this is one of the
 > few places the stage edits a file outside `app/src/main/res`.
 
-- [ ] **1.11a Harden the report, then re-run it.** In `scripts/contrast_report.py`, wrap the token lookup in
+- [x] **1.11a Harden the report, then re-run it.** *Executed: the only unguarded `tokens[...]` index left in `pairs()` was the variant-surface block. A missing name now records `MISSING <theme> <token>`, keeps `ratio = None`, marks the pair not-allowed so the run still fails, and the traceback is gone. Both modes print `RESULT: pass` at this commit.* In `scripts/contrast_report.py`, wrap the token lookup in
   `pairs()` so an absent name yields `MISSING <theme> <token>` in the output list instead of a `KeyError`,
   keep the non-zero exit, and re-run both modes:
 
@@ -1273,7 +1273,9 @@ python scripts/contrast_report.py --check                                  # tok
 python scripts/contrast_report.py --resources app/src/main/res --check      # names every missing pair now
 ```
 
-- [ ] **1.12 Visual check that the theme landed.** Install, screenshot Tasks and Profile in light and dark.
+- [x] **1.11b The numbers, as measured.** JVM: **98 suites / 1399 tests / 0 failures / 0 skipped** (1374 at Stage 0, so the stage added 25 tests: `Wcag`, ten contrast, four type-scale, and the two new component classes). Lint: **162 issues at `1bd55f4` against 189 here** — +26 `UnusedResources`, +1 `Overdraw`. The baseline was re-measured rather than remembered: `git worktree add` at the pre-stage commit and `lintDebug` there. The `UnusedResources` part is this stage creating tokens, dimens, styles, drawables and includes that the next eleven stages consume, and 14.2 is measured at the PR, so if the count has not come back down by then that is a stage that declared resources it never used. `RtlSymmetry`, the one finding this stage *caused* rather than deferred, was fixed in `bar_selection.xml` inside the stage.
+- [x] **1.11c One failure that did not repeat, recorded rather than buried.** The first forced run (`testDebugUnitTest assembleDebug lintDebug --rerun-tasks`) failed `WorkAdjustmentUiTest.`a stretch that ends where or before it began is refused by the form` with `expected:<A stretch cannot end at or before it starts.> but was:<null>` — the notice the form shows was not found within the helper's 40x50 ms virtual-clock budget. A second forced run of the same suite passed, 1399/0, and the class passed twice on its own, once forced. Stage 1 touches no code on that screen, so this is recorded as a flake with a known shape — `noticeText()` reads a Snackbar through a bounded pump, so it fails when the pump loses to whatever else the JVM is doing — and *not* fixed by raising the budget, which would be tuning a timeout to hide a race. If it recurs, the fix is to make the notice readable without pumping at all.
+- [x] **1.12 Visual check that the theme landed.** *Executed: the APK built from this tree (`be65d49fcec3b701b2b9f99f5eb370e4e4aa51ee5e1bac49de741b2d6fbc8dd7`) was installed, the installed `base.apk` was pulled back and hashed to the same value, and Tasks and Profile were photographed in light and dark against the same profile and the same 13 visible tasks the before-matrix carries. `after/s1-tasks-light.png` is the pair of `before/01-tasks.png`: the purple is gone, the accent is green, the surfaces are warm, the icons are ink rather than 40 % grey, and the category chips read in the case their owner typed — which is the 1.8 correction, visible. What has *not* moved is the swipe panel's strip on every closed row, because that is Stage 2's, and the eight-button Profile column, because that is Stage 5's.* Install, screenshot Tasks and Profile in light and dark. Install, screenshot Tasks and Profile in light and dark.
   Nothing here has moved a view, but every colour has changed, so the pair is the evidence:
 
 ```bash
@@ -1288,7 +1290,7 @@ Judge them with `design-review:design-debt-review` in mind: any screen that now 
 baseline (a colour that landed on the wrong surface, a hairline that vanished in dark) is fixed here, not
 deferred — a broken token layer makes every later stage's screenshots untrustworthy.
 
-- [ ] **1.13 Commit.**
+- [x] **1.13 Commit.**
 
 ```bash
 git add -A

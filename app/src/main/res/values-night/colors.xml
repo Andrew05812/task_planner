@@ -1,9 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Material Design 3 dark theme colors -->
-    <color name="background_dark">#FF1C1B1F</color>
-    <color name="surface_dark">#FF1C1B1F</color>
-    <color name="on_surface_dark">#FFE6E1E5</color>
+    <!-- The dark column of docs/design/tokens.json, under the same role names. An alias in
+         values/colors.xml (`primary` and friends) points at one of these, so a screen that has not been
+         migrated yet reads the dark palette through the role without naming a single dark colour itself.
+         The three `*_dark` names that used to live here are gone: their only readers were
+         values-night/themes.xml's own colorSurface/colorOnSurface/windowBackground lines, and this
+         stage's theme maps those to the roles. -->
+    <color name="ink_background">#12100F</color>
+    <color name="ink_surface">#1A1817</color>
+    <color name="ink_surface_raised">#221F1D</color>
+    <color name="ink_surface_variant">#26231F</color>
+    <color name="ink_text">#F2EDE7</color>
+    <color name="ink_text_secondary">#A39B92</color>
+    <color name="ink_text_tertiary">#968D84</color>
+    <color name="ink_outline">#312D29</color>
+    <color name="ink_outline_strong">#7A736A</color>
+    <color name="ink_accent">#6FD3B8</color>
+    <color name="ink_on_accent">#0E201B</color>
+    <color name="ink_success">#7CC98F</color>
+    <color name="ink_warning">#E0A95F</color>
+    <color name="ink_error">#F0836F</color>
+    <color name="ink_on_error">#2B0F0A</color>
+    <color name="pill_accent">#26322E</color>
+    <color name="pill_success">#283128</color>
+    <color name="pill_warning">#362C21</color>
+    <color name="pill_error">#382723</color>
+    <color name="pill_neutral">#26231F</color>
 
     <!-- Dashboard charts, dark. -->
     <!-- The light theme's grey tracks would be invisible on a near-black card and its deepest shade would
@@ -25,4 +47,4 @@
     <color name="health_stale">#FFB39DDB</color>
     <!-- A light-grey wash would vanish on a near-black card; the same quiet panel is anchored on white here. -->
     <color name="state_badge_fill">#1FFFFFFF</color>
-</resources> 
+</resources>

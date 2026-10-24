@@ -1,54 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Material Design 3 colors -->
-    <color name="primary">#FF6750A4</color>
-    <color name="primary_dark">#FF4F378B</color>
-    <color name="secondary">#FFE8DEF8</color>
-    <color name="secondary_dark">#FFD0BCFF</color>
-    <color name="background">#FFFFFFFF</color>
-    <color name="background_dark">#FF1C1B1F</color>
-    <color name="surface">#FFFFFFFF</color>
-    <color name="surface_dark">#FF1C1B1F</color>
-    <color name="error">#FFB3261E</color>
-    <color name="on_error">#FFFFFFFF</color>
-    <color name="on_surface">#FF1C1B1F</color>
-    <color name="on_surface_dark">#FFE6E1E5</color>
+    <!-- Ink & Accent. Roles, not hues: a name says what a colour is for, so a screen can be read without
+         knowing the palette. values-night/colors.xml carries the dark column; the pill backgrounds are
+         solid rather than alpha tints because an alpha over four different surfaces composites to four
+         different ratios, and only two of them were checked. -->
+    <color name="ink_background">#FBF9F6</color>
+    <color name="ink_surface">#FFFFFF</color>
+    <color name="ink_surface_raised">#FFFDFB</color>
+    <color name="ink_surface_variant">#F1EDE7</color>
+    <color name="ink_text">#1A1614</color>
+    <color name="ink_text_secondary">#6B635C</color>
+    <color name="ink_text_tertiary">#6E655D</color>
+    <color name="ink_outline">#E3DDD5</color>
+    <color name="ink_outline_strong">#8C8378</color>
+    <color name="ink_accent">#2F6F5E</color>
+    <color name="ink_on_accent">#FFFFFF</color>
+    <color name="ink_success">#2F7A4B</color>
+    <color name="ink_warning">#8F5B18</color>
+    <color name="ink_error">#C0402F</color>
+    <color name="ink_on_error">#FFFFFF</color>
+    <color name="pill_accent">#EEF3F2</color>
+    <color name="pill_success">#EEF4F1</color>
+    <color name="pill_warning">#F6F2ED</color>
+    <color name="pill_error">#FAF0EE</color>
+    <color name="pill_neutral">#F1EDE7</color>
+
+    <!-- The names the app still carries. Each one points at a role, so the screens not yet migrated move
+         with the system instead of against it, and a test that reads getColor(R.color.on_surface) keeps
+         measuring the colour a user actually sees. Deleted screen by screen in stage 8. -->
+    <color name="primary">@color/ink_accent</color>
+    <color name="primary_dark">@color/ink_accent</color>
+    <color name="secondary">@color/pill_accent</color>
+    <color name="secondary_dark">@color/ink_accent</color>
+    <color name="background">@color/ink_background</color>
+    <color name="surface">@color/ink_surface</color>
+    <color name="on_surface">@color/ink_text</color>
+    <color name="error">@color/ink_error</color>
+    <color name="on_error">@color/ink_on_error</color>
+    <color name="priority_high">@color/ink_error</color>
+    <color name="priority_medium">@color/ink_warning</color>
+    <color name="priority_low">@color/ink_text_tertiary</color>
+    <color name="status_todo">@color/ink_text_secondary</color>
+    <color name="status_in_progress">@color/ink_accent</color>
+    <color name="status_done">@color/ink_success</color>
+    <color name="status_paused">@color/ink_warning</color>
 
     <!-- Basic colors -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="transparent">#00000000</color>
-
-    <!-- Task priority colors -->
-    <color name="priority_low">#43A047</color>
-    <color name="priority_medium">#FB8C00</color>
-    <color name="priority_high">#E53935</color>
-
-    <!-- Task status colors -->
-    <color name="status_todo">#FFBDBDBD</color>
-    <color name="status_in_progress">#FF2196F3</color>
-    <color name="status_done">#FF4CAF50</color>
-    <color name="status_paused">#FFFFA000</color>
     <!-- The panel a state word sits on. Colourless by design: the state's own colour goes on the word, so
          the panel only has to separate it from the card, on the light theme and the dark one. -->
     <color name="state_badge_fill">#14000000</color>
     <color name="red">#FFFF0000</color>
 
     <!-- Swipe action panel -->
-    <color name="action_edit">#FF1976D2</color>
-    <color name="action_delete">#FFD32F2F</color>
-    <color name="material_grey_600">#FF757575</color>
+    <color name="action_edit">@color/ink_accent</color>
+    <color name="action_delete">@color/ink_error</color>
+    <color name="material_grey_600">@color/ink_text_secondary</color>
 
     <!-- Dashboard charts -->
     <!-- The shades are the accent at rising alpha rather than six different hues: a reader has to be able
          to tell a busy week from a quiet one by how full a square looks, and that ordering survives a
          colour-blind eye and a black-and-white print, which hues do not. -->
-    <color name="chart_bar">@color/primary</color>
+    <!-- The ramp is anchored on its own colours, not on the theme's roles, so retargeting `primary` for
+         the UI cannot repaint a chart from inside the token stage. 8b moves these lines, together with the
+         tests that read them, in one commit where the change is attributable. -->
+    <color name="chart_base_accent">#FF6750A4</color>
+    <color name="chart_base_finished">#FF4CAF50</color>
+    <color name="chart_bar">@color/chart_base_accent</color>
     <color name="chart_axis">#33757575</color>
     <color name="chart_track">#1F757575</color>
     <!-- The completions bar sits under the work bar and says something else about the same days, so it
          borrows the green the list already marks a finished task with instead of a second accent. -->
-    <color name="chart_completions">@color/status_done</color>
+    <color name="chart_completions">@color/chart_base_finished</color>
     <!-- Work with no category is not a category, and giving it the accent would let it read as the
          default one. It takes the grey the health panel uses for "nothing to hang this on". -->
     <color name="chart_category_none">#FF9E9E9E</color>
@@ -59,14 +84,14 @@
     <color name="chart_heatmap_4">#FF6750A4</color>
     <!-- The health panel's buckets borrow the colours the rest of the app already uses for the same
          states, so "late" is the red the list marks it with and not a new one to learn. -->
-    <color name="health_overdue">@color/error</color>
+    <color name="health_overdue">#FFB3261E</color>
     <color name="health_due_today">#FFF57C00</color>
     <color name="health_due_week">#FF00897B</color>
     <!-- The bucket SQLite does not count, only the remainder of: open, dated, and far enough off that the
          week's colours have nothing to say about it. Cool, so the bar reads as heating toward today. -->
     <color name="health_due_later">#FF42A5F5</color>
     <color name="health_without_deadline">#FF9E9E9E</color>
-    <color name="health_in_progress">@color/status_in_progress</color>
+    <color name="health_in_progress">#FF2196F3</color>
     <color name="health_stale">#FF7E57C2</color>
 
     <!-- Reports, printed. Paper is never dark, so the five colours a report draws with are written out here

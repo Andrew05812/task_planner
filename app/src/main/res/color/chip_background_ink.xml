@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- An unselected filter chip is an outline and nothing else; a selected one is a solid pill. The old
+         selector put `colorPrimary` at 12 % alpha on the checked state, which composited to a different
+         colour on every surface it was used on, and only two of those were ever looked at. -->
+    <item android:color="@color/pill_accent" android:state_checked="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

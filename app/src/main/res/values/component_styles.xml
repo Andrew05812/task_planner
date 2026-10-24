@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The fifteen component styles spec §3.5 lists: its fourteen, plus `Field.Dropdown`, which the spec's
+         list omits but five uses across two layouts require — those layouts name
+         `Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu` today, and a plain
+         `Field` cannot replace a dropdown without losing it.
+
+         1.5a declared these as names over the Material 3 parent each one replaces, because `aapt2 link`
+         resolves a theme's `@style/…` value at link time and themes.xml names three of them. The bodies
+         below are the shape and spacing decisions of spec §3.4 — radius 14 for a card, 12 for a control,
+         pill fully round; elevation used twice at most; 48dp as the floor for anything a finger hits — and
+         deliberately nothing else. What a component *means* in a given state (a completed card, a
+         destructive row, a category chip) is chosen from the row's data at bind time, which is why §3.5
+         files StatusPill and PriorityRule under "drawables plus bind-time code" rather than here, and why
+         `Card.Completed` below carries no colour: a style cannot know the task is finished.
+
+         Nothing here changes a layout's structure or a screen's behaviour: `labelVisibilityMode`, the
+         header, the swipe panel and the pill colours all belong to the stages that name them (§18). -->
+
+    <style name="Widget.TaskPlanner.Card" parent="Widget.Material3.CardView.Filled">
+        <item name="cardCornerRadius">@dimen/radius_card</item>
+        <item name="cardElevation">1dp</item>
+        <item name="cardBackgroundColor">?attr/colorSurface</item>
+        <item name="strokeWidth">0dp</item>
+        <!-- No `contentPadding` here, on purpose. Spec §3.4's 14/16 is what a redesigned card pads, but
+             this style is also what `materialCardViewStyle` hands every `MaterialCardView` in the app from
+             stage 1 onward — so padding set here moves every screen at once, including the eleven stages
+             that have not been restyled yet. `StatisticsLayoutTest` caught it by measuring the dashboard's
+             own 16dp inset and finding 14: the test was right, and the place the decision belongs is the
+             layout that opts into it. -->
+    </style>
+
+    <!-- The completed card is the same card. What makes it read as finished — the struck-through title and
+         the dimmed meta line — is a fact about the row, so it is applied where the row is bound (4.4), not
+         by a style that cannot see the data. This name exists so the layout can ask for it and the bind
+         code has one place to answer. -->
+    <style name="Widget.TaskPlanner.Card.Completed" parent="Widget.TaskPlanner.Card" />
+
+    <style name="Widget.TaskPlanner.Button.Filled" parent="Widget.Material3.Button">
+        <item name="cornerRadius">@dimen/radius_control</item>
+        <item name="android:minHeight">@dimen/touch_target_min</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.Button.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="cornerRadius">@dimen/radius_control</item>
+        <item name="android:minHeight">@dimen/touch_target_min</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="cornerRadius">@dimen/radius_control</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:minHeight">@dimen/touch_target_min</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="cornerRadius">@dimen/radius_control</item>
+        <item name="android:minHeight">@dimen/touch_target_min</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
+    </style>
+
+    <!-- Destructive is an outlined button in the error role, not a filled red slab: filled red draws the
+         eye to the one action that should be the quietest thing on the screen. -->
+    <style name="Widget.TaskPlanner.Button.Destructive" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="cornerRadius">@dimen/radius_control</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:minHeight">@dimen/touch_target_min</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:textColor">@color/ink_error</item>
+        <item name="iconTint">@color/ink_error</item>
+        <item name="strokeColor">@color/ink_error</item>
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.Chip.Filter" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">@color/chip_background_ink</item>
+        <item name="chipStrokeColor">@color/chip_stroke_ink</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="chipCornerRadius">@dimen/radius_pill</item>
+        <item name="chipMinHeight">@dimen/touch_target_min</item>
+        <item name="checkedIconVisible">false</item>
+        <item name="android:textColor">@color/ink_text</item>
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
+        <!-- Caps off, and that is not a style preference. This style is what `chipStyle` hands every chip
+             in the app that does not name one, and the chips it reaches first carry *user data* — the
+             category rail's "Диссертация" came back as "ДИССЕРТАЦИЯ" the moment the label role was applied.
+             A word the reader typed is not a section heading; §3.3 keeps the caps for labels, which a
+             screen writes itself. -->
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <!-- A category is chosen the same way a filter is, so it gets the same behaviour; what it must not do
+         is wear the category's own colour as its text, which is audit finding 3. The colour belongs to the
+         dot beside the name, drawn at bind time (4.4). -->
+    <style name="Widget.TaskPlanner.Chip.Category" parent="Widget.TaskPlanner.Chip.Filter" />
+
+    <style name="Widget.TaskPlanner.Field" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxCornerRadiusTopStart">@dimen/radius_control</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/radius_control</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/radius_control</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/radius_control</item>
+        <item name="boxStrokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.Field.Dropdown"
+        parent="Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+        <item name="boxCornerRadiusTopStart">@dimen/radius_control</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/radius_control</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/radius_control</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/radius_control</item>
+        <item name="boxStrokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.BottomBar" parent="Widget.Material3.BottomNavigationView">
+        <item name="itemActiveIndicatorStyle">@style/Widget.TaskPlanner.BottomBar.Indicator</item>
+        <item name="elevation">0dp</item>
+        <item name="itemTextColor">@color/ink_text_secondary</item>
+        <item name="itemIconTint">@color/ink_text_secondary</item>
+    </style>
+
+    <!-- The pill the selected tab sits in, at the card radius rather than fully round: the bar's own
+         height is 56dp and a 100dp radius on it would be a circle the label does not fit. -->
+    <style name="Widget.TaskPlanner.BottomBar.Indicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@color/pill_accent</item>
+        <item name="android:width">@dimen/icon_container</item>
+        <item name="android:height">@dimen/spacing_large</item>
+        <item name="marginHorizontal">@dimen/spacing_xs</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.TaskPlanner.BottomBar.Indicator</item>
+    </style>
+
+    <style name="ShapeAppearance.TaskPlanner.BottomBar.Indicator" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
+    <!-- A dialog is a theme overlay, not a widget style: there is no `Widget.Material3.Dialog` to inherit,
+         and pretending otherwise would be a name that silently draws nothing. -->
+    <style name="Widget.TaskPlanner.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.TaskPlanner.Dialog</item>
+    </style>
+
+    <style name="ShapeAppearance.TaskPlanner.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/radius_sheet</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.MetaText" parent="android:Widget.TextView">
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Meta</item>
+    </style>
+
+    <style name="Widget.TaskPlanner.SectionLabel" parent="android:Widget.TextView">
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
+        <item name="android:textColor">@color/ink_text_secondary</item>
+    </style>
+</resources>

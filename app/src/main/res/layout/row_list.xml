@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="@dimen/row_min_height"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/card_padding_horizontal"
+    android:paddingEnd="@dimen/card_padding_horizontal"
+    android:paddingTop="@dimen/card_padding_vertical"
+    android:paddingBottom="@dimen/card_padding_vertical"
+    android:background="?attr/selectableItemBackground">
+
+    <!-- One row of a list: what it is, what it says, and where it goes. Profile includes this eight times
+         (Account 2, Your work 4, Data 1, Danger zone 1), so every child carries an id and each `<include>`
+         gets its own `android:id` — ViewBinding scopes an include's binding to that include's own view
+         tree, which is what keeps the eight copies from colliding on the same ids. -->
+    <FrameLayout
+        android:id="@+id/rowIconContainer"
+        android:layout_width="@dimen/icon_container"
+        android:layout_height="@dimen/icon_container"
+        android:layout_marginEnd="@dimen/spacing_medium"
+        android:background="@drawable/bg_icon_container" />
+
+    <TextView
+        android:id="@+id/rowTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Title" />
+
+    <TextView
+        android:id="@+id/rowValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_small"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/rowChevron"
+        android:layout_width="@dimen/touch_target_min"
+        android:layout_height="@dimen/touch_target_min"
+        android:layout_marginStart="@dimen/spacing_xs"
+        android:contentDescription="@null"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_chevron_right" />
+</LinearLayout>

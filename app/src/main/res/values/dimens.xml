@@ -9,15 +9,50 @@
     <dimen name="spacing_large">24dp</dimen>
     <dimen name="spacing_xl">32dp</dimen>
 
+    <!-- The scale spec 3.4 defines. spacing_xs/small/normal/large/xl already exist at 4/8/16/24/32;
+         these two close the gaps at 12 and 20 so no layout needs a literal again. -->
+    <dimen name="spacing_medium">12dp</dimen>
+    <dimen name="spacing_section">20dp</dimen>
+    <dimen name="screen_margin">20dp</dimen>
+    <dimen name="card_padding_vertical">14dp</dimen>
+    <dimen name="card_padding_horizontal">16dp</dimen>
+    <dimen name="card_gap">8dp</dimen>
+    <dimen name="radius_card">14dp</dimen>
+    <dimen name="radius_control">12dp</dimen>
+    <dimen name="radius_sheet">20dp</dimen>
+    <dimen name="radius_pill">100dp</dimen>
+    <dimen name="row_min_height">56dp</dimen>
+    <dimen name="touch_target_min">48dp</dimen>
+    <dimen name="priority_rule_width">4dp</dimen>
+    <dimen name="icon_container">40dp</dimen>
+    <dimen name="avatar_header">64dp</dimen>
+    <dimen name="fab_size">56dp</dimen>
+    <!-- Nothing reads this yet and it stays anyway: 3.2 points the FAB's 16dp margin at it, which is the
+         stage that owns `fragment_tasks.xml`. Deleting a name whose owner has not arrived would make that
+         stage write the literal back. -->
+    <dimen name="fab_margin">16dp</dimen>
+    <!-- Derived, and pinned by a test, so the list's last row and the FAB cannot drift apart. -->
+    <dimen name="list_bottom_gutter">88dp</dimen>
+
+    <!-- The type scale, named by role. These are the sizes `type.xml` sets and `TypeScaleTest` reads back
+         off the styles, so a role that exists only as a number in this file proves nothing. -->
+    <dimen name="type_display">28sp</dimen>
+    <dimen name="type_headline">22sp</dimen>
+    <dimen name="type_title">16sp</dimen>
+    <dimen name="type_body">15sp</dimen>
+    <dimen name="type_meta">13sp</dimen>
+    <dimen name="type_caption">12sp</dimen>
+    <dimen name="type_pill">11sp</dimen>
+    <dimen name="type_label">11sp</dimen>
+    <dimen name="type_metric">20sp</dimen>
+
+    <!-- The five legacy text sizes stay until 8d.4: four are read by nobody, but `fragment_report.xml:244`
+         reads `text_caption`, and that layout belongs to stage 8d. -->
     <dimen name="text_caption">12sp</dimen>
     <dimen name="text_body">14sp</dimen>
     <dimen name="text_title">16sp</dimen>
     <dimen name="text_headline">20sp</dimen>
     <dimen name="text_display">24sp</dimen>
-
-    <dimen name="task_item_height">72dp</dimen>
-    <dimen name="category_item_height">56dp</dimen>
-    <dimen name="fab_margin">16dp</dimen>
 
     <dimen name="color_chip_size">48dp</dimen>
 
