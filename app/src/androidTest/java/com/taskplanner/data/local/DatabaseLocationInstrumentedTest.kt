@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.taskplanner.di.DatabaseModule
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -97,9 +98,25 @@ class DatabaseLocationInstrumentedTest {
         legacy.delete()
         val handle = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(legacy, null)
         try {
-            handle.execSQL("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT)")
-            handle.execSQL("INSERT INTO tasks (title) VALUES ('old task')")
-            handle.execSQL("PRAGMA user_version = 7")
+            // The planted database has to be the one version 7 actually shipped. It used to be a
+            // two-column sketch — `CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT)` stamped
+            // `user_version = 7` — and no release ever had that: the rescue hands the file to the real
+            // migration chain, 7 runs to 16, and 9→10 builds `index_tasks_user_id_due_date` over a
+            // column the sketch never had, so the test failed with `no such column: user_id` while
+            // proving nothing about any user's upgrade. The statements now come from
+            // assets/legacy-v7.sql, generated from Room's exported schema for version 7, and a JVM
+            // test keeps that file equal to app/schemas/…/7.json so the two cannot drift.
+            legacyStatements().forEach { statement -> handle.execSQL(statement) }
+            handle.execSQL(
+                "INSERT INTO users (id, email, name, avatar_color, avatar_initial, is_current, " +
+                    "last_used, created_at, updated_at) " +
+                    "VALUES (1, 'legacy@example.test', 'Legacy', 0, 'L', 1, 0, 0, 0)"
+            )
+            handle.execSQL(
+                "INSERT INTO tasks (uuid, title, description, priority, status, user_id, `order`, " +
+                    "created_at, updated_at) VALUES ('legacy-1', 'old task', '', 'LOW', 'TODO', " +
+                    "1, 0, 0, 0)"
+            )
         } finally {
             handle.close()
         }
@@ -131,6 +148,23 @@ class DatabaseLocationInstrumentedTest {
             database.close()
         }
     }
+
+    /**
+     * The planted v7 schema, read from the asset rather than typed here, so the file that carries it is
+     * the same artefact the JVM drift test compares against Room's exported JSON.
+     *
+     * The asset is opened through the **instrumentation** context, not `context`: this file ships inside
+     * the test APK, while the application context resolves assets of the app under test — and the app has
+     * no `src/main/assets` at all, so asking it would be a `FileNotFoundException` for a file that is
+     * plainly there. Comments and blank lines are dropped; statements run in file order, table before its
+     * indices, because a `CREATE INDEX` on a table that is not there yet is an error.
+     */
+    private fun legacyStatements(): List<String> =
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("legacy-v7.sql").bufferedReader().use { reader -> reader.readLines() }
+            .filterNot { it.isBlank() || it.trimStart().startsWith("--") }
+            .map { it.trim().removeSuffix(";").trim() }
+            .filter { it.isNotEmpty() }
 
     private fun writeOneTask(title: String): Long {
         val database = runBlocking(Dispatchers.IO) { DatabaseModule.provideDatabase(context) }

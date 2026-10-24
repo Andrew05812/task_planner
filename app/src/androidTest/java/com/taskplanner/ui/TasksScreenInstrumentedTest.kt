@@ -50,13 +50,37 @@ class TasksScreenInstrumentedTest {
         onView(withId(R.id.chipPaused)).check(matches(isDisplayed()))
     }
 
+    /**
+     * The round trip a reader takes when they glance at their numbers and come back.
+     *
+     * The middle assertion used to name `R.id.contentGroup`, a container that exists on Profile
+     * (`fragment_profile.xml:19`) and on the category screen (`fragment_category_detail.xml:15`) but
+     * not on Statistics at all — `grep -c contentGroup app/src/main/res/layout/fragment_statistics.xml`
+     * is `0`. The test therefore could not pass, and could not be seen failing either: CI runs
+     * `assembleDebugAndroidTest` and never instruments, so the suite only ever compiled. It is fixed by
+     * asserting what the name promises on the screen the test actually navigates to, and by naming
+     * more than the list on the way back: "usable" means the screen came home whole, which a bare
+     * `recyclerView` check would not have caught.
+     */
     @Test
     fun statisticsAndBackKeepsTheTaskListUsable() {
         onView(withId(R.id.navigation_statistics)).perform(click())
-        onView(withId(R.id.contentGroup)).check(matches(isDisplayed()))
+        // The period rail is Statistics' own chrome: it exists only in fragment_statistics.xml and it is
+        // built in `setupChips()` from `WorkPeriod.entries`, so it is on the screen whatever the data
+        // looks like. The dashboard body deliberately is not the subject here — `DashboardRenderer:83`
+        // sets `dashboardScroll.isVisible = snapshot != null && !snapshot.isEmpty`, so asserting it
+        // would tie this navigation test to whether the profile happens to have anything in the window.
+        onView(withId(R.id.statisticsPeriodScroll)).check(matches(isDisplayed()))
+        onView(withId(R.id.statisticsPeriodChips)).check(matches(isDisplayed()))
 
         onView(withId(R.id.navigation_tasks)).perform(click())
         onView(withId(R.id.recyclerView)).check(matches(isDisplayed()))
+        // The filter rail is the rest of the Tasks screen. A fragment recreated by the navigation
+        // round trip can restore its list and lose its chrome; only the chips prove the screen is
+        // the one the reader left.
+        onView(withId(R.id.chipTodo)).check(matches(isDisplayed()))
+        onView(withId(R.id.chipInProgress)).check(matches(isDisplayed()))
+        onView(withId(R.id.chipPaused)).check(matches(isDisplayed()))
     }
 
     @Test
