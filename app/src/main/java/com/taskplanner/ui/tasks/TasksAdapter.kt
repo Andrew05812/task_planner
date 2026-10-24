@@ -97,10 +97,12 @@ class TasksAdapter(
         private var downX = 0f
         private var downY = 0f
         private var dragging = false
+        private var longPressFired = false
         private var panelWidth = 0f
 
         private val longPressRunnable = Runnable {
             if (!dragging && current != null) {
+                longPressFired = true
                 current?.task?.let { onLongPressTask(it) }
             }
         }
@@ -145,8 +147,18 @@ class TasksAdapter(
                     downX = event.rawX
                     downY = event.rawY
                     dragging = false
+                    longPressFired = false
                     card.postDelayed(longPressRunnable, LONG_PRESS_TIMEOUT)
-                    return false
+                    // The down has to be taken. Nothing else in this row consumes it — the card is
+                    // deliberately not clickable, because a click on it means "the gesture this handler
+                    // owns", not "a click" — so returning false here left the parent with no touch target
+                    // for the child, and the rest of the stream (MOVE and UP) was never delivered: no drag
+                    // could start, no tap could land, and only the long press armed above would still
+                    // fire. Scrolling is not lost by taking it: RecyclerView still intercepts a vertical
+                    // drag and this row then gets ACTION_CANCEL, which the branch below treats as no
+                    // gesture here, and a press that starts on one of the card's own buttons never
+                    // reaches this line at all, because children are offered the down first.
+                    return true
                 }
 
                 MotionEvent.ACTION_MOVE -> {
@@ -180,6 +192,11 @@ class TasksAdapter(
                             slideTo(0f, animate = true)
                             if (openHolder == this) openHolder = null
                         }
+                        return true
+                    }
+                    if (event.actionMasked == MotionEvent.ACTION_UP && longPressFired) {
+                        // The press was answered when it was held; lifting the finger off is not a second
+                        // request, and without this the row that was just selected would also open.
                         return true
                     }
                     if (event.actionMasked == MotionEvent.ACTION_UP) {

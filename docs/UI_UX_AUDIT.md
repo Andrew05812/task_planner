@@ -216,6 +216,21 @@ acceptance answers: §14.7 requires the reveal to be demonstrated in a photograp
 `TaskCardClosedPanelTest`. If it cannot be demonstrated on this device, that is a defect to fix, not a
 screenshot to skip.
 
+**Resolved in Stage 2, and it was the row.** An instrumented drag driven from inside the process
+(`TaskCardSwipeInstrumentedTest`, Espresso's `GeneralSwipeAction`, which injects real motion history
+rather than the shell's) moved the card zero pixels too, on two different AVDs — so the emulator was
+cleared and the row was measured. A throwaway probe printed what the framework hands the card:
+`clickable=false longClickable=false`, 22 motion events reaching the list with `rawX` running 695→281, and
+`translationX` staying at `0.0` — while a listener that answers `ACTION_DOWN` with `true` moved the *same*
+injected stream to `-345px`. That is the whole mechanism: `handleTouch` declined the down, the card is
+neither clickable nor long-clickable so `View.onTouchEvent` declined it too, `ViewGroup` therefore recorded
+no touch target for the child, and `ACTION_MOVE`/`ACTION_UP` were never delivered to the row. The drag
+could not start, a tap could not land, and the long press — armed on the one event that was delivered and
+cancelled only by the one that never was — fired on what the reader means as a tap. `TaskCardRowGestureTest`
+now dispatches gestures at the row (not at the card, which would bypass the routing being tested) and pins
+all four outcomes: a drag reveals, a tap opens, a tap does not select, a held press selects without opening.
+The reveal photograph this section said could not be taken is `after/s2-row-swiped.png`.
+
 ## 5. What this evidence cannot show
 
 Stated plainly, because a limitation nobody writes down becomes a claim nobody checks.
@@ -228,11 +243,28 @@ injected taps miss their target — the navigation test taps `navigation_statist
 and the failure hierarchy proves it. Density-only overrides (240 for 360 dp, 270 for 320 dp on this panel)
 change the dp without moving the pixel space, so they are what the matrix uses.
 
-**One photograph the plan asked for and this run refused.** `27-swipe-open.png` does not exist, for the
-reason measured in 4.10: no injected horizontal drag moved the card, on any of six timings, while vertical
-drags scrolled fine. The alternatives were to fake it (a programmatic `translationX`, which would photograph
-the app's drawing code rather than the user's gesture) or to leave the slot empty and say so. It is empty.
-`before/manifest.md` lists the 25 files that do exist, each with its configuration and the same 13 visible
+**One photograph the plan asked for, and the two things that were hiding it.** `27-swipe-open.png` was not
+taken, and §4.10 records the row's own defect as the reason it could not be. Two environment facts found
+while measuring that are part of the record now, because both will otherwise be rediscovered as a
+"flaky emulator" at the next stage:
+
+ * **the edge band belongs to the system.** Both AVDs run gesture navigation (`settings get secure
+   navigation_mode` = 2). A drag that begins at 95% of the card's width — which is where a right-to-left
+   swipe naturally starts on a full-width card — left the activity `STARTED` rather than `RESUMED` and
+   moved nothing: the system took it as Back. Every interior start point kept the activity in front. A
+   reveal gesture has to be initiated (and demonstrated) from inside the card, not from its outer edge,
+   and Stage 4's card work should keep that in mind for the ergonomics of the affordance.
+ * **this AVD is shared.** During Stage 2 another session on this machine was driving `emulator-5554` for a
+   different project: it launched its own app into the foreground (`mCurrentFocus` named a package that is
+   not this one) and left a crashed `uiautomator dump` holding the single `UiTestAutomationService` slot.
+   Every instrumented run after that failed with `UiAutomationService already registered` / `Cannot call
+   disconnect() while connecting`, screenshots were refused, and injected input went to whichever window
+   had focus. `adb shell dumpsys accessibility | grep -i "ui automation"` returning a line is the symptom;
+   a reboot of the AVD clears it. Nothing in the other session's data was touched, and nothing of ours was
+   trustworthy until it was checked — which is why the reveal was finally measured on a second, idle AVD
+   (`Pixel_4`, 1080x2280 at 440 dpi) and the photographs in `after/` say so.
+
+`before/manifest.md` lists the 25 files that were taken, each with its configuration and the same 13 visible
 tasks, so every before/after pair later on is taken against the same account and the same data.
 
 **Speed, and the taps that go missing.** Instrumented runs on this emulator take 2–4 minutes per class and

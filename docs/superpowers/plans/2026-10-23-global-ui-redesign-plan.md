@@ -200,7 +200,7 @@ project is here, not one level up):
 
 ```bash
 ./gradlew --no-daemon --console=plain assembleDebug              # compile gate
-./gradlew --no-daemon --console=plain testDebugUnitTest           # 1374 JVM tests (93 suites, measured after 0.1a's review)
+./gradlew --no-daemon --console=plain testDebugUnitTest           # 1406 JVM tests (100 suites, measured after stage 2's gesture fix)
 ./gradlew --no-daemon --console=plain lintDebug                   # must not add findings
 ./gradlew --no-daemon --console=plain assembleDebugAndroidTest     # instrumented compile gate (CI)
 ./gradlew --no-daemon --console=plain testDebugUnitTest --tests "com.taskplanner.ui.tasks.*"
@@ -223,6 +223,23 @@ live; API 35 x86_64" and every `adb` line below carried that serial, which is a 
 procedure — and by the time this pass re-checked it, `adb devices -l` no longer listed `emulator-5554` at
 all, only a physical handset. Both are recorded, because the evidence in §6 was really produced on the
 emulator while it was live.
+
+**Two arbitration checks, added from Stage 2's debug session (§20j).** An instrumented run that fails on a
+shared machine can be failing for reasons that have nothing to do with the code, and the two signatures are
+cheap to rule out before reading the app:
+
+```bash
+adb -s "$S" shell dumpsys accessibility | grep -i "ui automation"   # a line here = someone else holds it
+adb -s "$S" shell dumpsys window | grep mCurrentFocus               # a foreign package = focus is not ours
+```
+
+`UiAutomationService already registered`, `Cannot call disconnect() while connecting`, a refused
+`takeScreenshot()` and input that moves nothing are all one symptom of the same thing: the AVD carries a
+single `UiTestAutomationService` slot, and a concurrent session or a crashed `uiautomator dump` is holding
+it. Reboot the AVD, or move to an idle one and name it in the evidence — do not "fix" the test. And any
+horizontal gesture injected by a test or a script has to start **inside** the target view: on
+`navigation_mode=2` a drag that begins in the screen's edge band is the system's Back gesture, which is how
+a real defect in the task row stayed hidden behind an apparent emulator misbehaviour for two stages.
 
 ```bash
 adb devices -l
@@ -1528,15 +1545,19 @@ the layout change reached further than the panel — fix the change, not the tes
 
 - [x] **2.5 Prove it on the device.** *Executed as far as this emulator's input injection allows, and the part that matters was measured rather than photographed: on a laid-out row the card is `[11,499][529,594]` and the panel `[319,499][529,594]` — the panel's right edge lands on the card's, its top on the card's, **0 px exposed**, against the 11 px of column and 6 px of band the same measurement produced at Stage 0. `after/s2-tasks-closed.png` is that row, and the red column is gone from it.*
 >
-> **What was not demonstrated, and is not being claimed.** Three injected horizontal drags of 200/300/450 ms across the fixed row moved `taskCard` by zero pixels, exactly as six did at Stage 0 (audit §4.10), while a vertical drag from the same tool scrolls the list. So `s2-tasks-swiped.png` shows a closed row, not a revealed panel, and edit, delete and the reorder handle — all three of which sit behind the card until the card moves — could not be reached either. The geometry invariant is proven twice (Robolectric and the device's own view bounds); the **gesture** is unproven on real input, and that is an open item, not a pass. The next attempt is an instrumented test that swipes through Espresso's `GeneralSwipeAction`, which drives `UiController` with proper motion history rather than `adb shell input`, and asserts `translationX == -actionPanel.width` — a stronger artifact than a photograph if it works, and a real defect report about the row's `OnTouchListener` if it does not.
-- [ ] **2.5b Close the gesture gap** with the Espresso swipe test described above, in this stage's commit or the one that fixes whatever it finds. §14.7 does not accept a closed-panel photograph as evidence that the panel can be opened., including that swiping still works and that manual reorder still
-  works, with photographs of each state (the popup-free way: `adb shell input swipe` and `screencap`):
+> **What was not demonstrated by `adb shell input`, and why the command below is wrong.** Three injected horizontal drags across the fixed row moved `taskCard` by zero pixels, exactly as six did at Stage 0 (audit §4.10). The `input swipe 700 1200 200 1200` in the listing starts at x=700 on a 540 px screen — clamped to the right edge, which is the system's Back-gesture band on `navigation_mode=2`, so the drag was never the row's to take. 2.5b settled the question from inside the process, and the answer was the row's own touch handling: see §20j.
+
+- [x] **2.5b Close the gesture gap.** *Executed, and it found a real defect: the reveal had never worked by touch. `TaskCardSwipeInstrumentedTest` (Espresso `GeneralSwipeAction`, from the card's centre to its left, because the edge band belongs to the system Back gesture) is green on the device — `translationX` lands on exactly `-actionPanel.width`, the edit button's centre clears the card, pressing it opens that task's editor, and the row comes home closed — and `TaskCardRowGestureTest` pins the same four outcomes in a JVM, where CI can see them. Photographs: `after/s2-row-closed.png`, `after/s2-row-swiped.png`, `after/s2-edit-from-panel.png`, `after/s2-row-closed-again.png`. `after/s2-tasks-swiped.png` was deleted: it is byte-identical to `s2-tasks-closed.png` (sha256 `6199671…` for both), so it documented a swipe that had not happened.*
+
+The remaining device proof from this step is the reachability of each control once the panel is open — edit and delete by tap, and the reorder handle by drag — with a photograph of each state (the popup-free way):
 
 ```bash
 adb -s "$S" install -r app/build/outputs/apk/debug/app-debug.apk
 adb -s "$S" shell am start -n com.taskplanner/.ui.MainActivity
 adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/s2-tasks-closed.png
-adb -s "$S" shell input swipe 700 1200 200 1200 220
+# start inside the card, away from both screen edges: on a 540 px panel the card runs [11,529],
+# so 450 -> 150 is a drag the row can keep. 700 -> 200 is not; the system takes it as Back.
+adb -s "$S" shell input swipe 450 545 150 545 220
 adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/s2-tasks-swiped.png
 ```
 
@@ -3899,3 +3920,94 @@ audit §4.10 records the numbers. The panel's exposure while closed is documente
 instead: `actionPanel` `[330,272][540,490]` against `taskCard` `[11,278][529,484]` — 11 px of panel to the
 right and 6 px above, on every row, untouched.
 
+
+## 20j — Stage 2's second commit: the reveal never worked, and the two things that hid it
+
+2.5b asked whether the zero-pixel drag was the emulator or the row. It was the row, and the answer came
+from measurement rather than from argument, in four steps worth repeating because each one removed a
+plausible-sounding alternative:
+
+1. **Espresso from inside the process**, with `GeneralSwipeAction` — real motion history through
+   `UiController` instead of the shell's `input`. Still `translationX = 0.0`, on `emulator-5554`.
+2. **A second AVD** (`Pixel_4`, 1080x2280 @ 440 dpi), idle, no other automation attached. Still 0.0. That
+   cleared the emulator: two different systems, same nothing.
+3. **The edge band.** Both AVDs report `navigation_mode=2`. A drag started at 95% of the card's width left
+   the activity `STARTED` rather than `RESUMED` — the system had taken it as Back — while starts at 0.40 to
+   0.80 kept it in front and still moved nothing. So the shell's `input swipe 700 1200 200 1200` (x=700 on a
+   540 px screen, clamped to the edge) had been swallowed for a reason that had nothing to do with the row,
+   and that fact alone explained Stage 0's six failures without explaining the seventh.
+4. **A probe on the row itself.** Attached to the real adapter, on the device, printing what the framework
+   hands the card: `clickable=false longClickable=false enabled=true slop=22 panelWidth=418`, 22 motion
+   events reaching the list with `rawX` running 695→281, `translationAfterAdapterHandler=0.0`, and
+   `translationAfterConsumingDown=-345.3`. The last number is the finding: the same injected stream moves
+   the card as far as the handler lets it, provided the handler answers `ACTION_DOWN` with `true`.
+
+`ViewGroup` designates a touch target on the down and only on the down. `handleTouch` returned `false`
+there, the card is neither clickable nor long-clickable so `View.onTouchEvent` returned `false` too, and
+the row was never told about `ACTION_MOVE` or `ACTION_UP` again. Every symptom in audit §4.10 is that one
+line: no drag can start; a tap cannot land, so `onTaskClick` never runs and the row's own editor is
+unreachable from the row; and the long press still fires, because it was armed on the only event delivered
+and only the missing `UP` would have cancelled it — which is what made a light press open the selection
+bar. The drag handle kept working because its listener does return `true` on the down, which is why the
+feature looked alive for five stages.
+
+**The fix is two lines and a flag**, in `TasksAdapter.TaskViewHolder`: take `ACTION_DOWN` (`return true`,
+with the reasoning in a comment, because "return true from a touch listener" reads like a mistake), and
+track `longPressFired` so the `UP` that follows a held press is not also a click. Scrolling is unaffected —
+RecyclerView still intercepts a vertical drag and the row then receives `ACTION_CANCEL`, which the existing
+branch already treats as "no gesture here" — and a press that starts on one of the card's own buttons never
+reaches this handler at all, because children are offered the down first.
+
+**`TaskCardRowGestureTest`** is the CI-visible half and the first test in the repository that dispatches a
+gesture the way a screen does: at `holder.itemView`, letting `ViewGroup` route it. Dispatching at the card
+would prove nothing, since `View.dispatchTouchEvent` accepts whatever it is handed whether or not a real
+parent would have routed the rest of the stream there. Five tests, four of them red before the fix for
+exactly the reasons above (drag `expected:<-152.0> but was:<0.0>`; tap `expected:<1> but was:<0>`; tap
+selecting rather than opening) and a fifth that was already green and guards the regression a naive fix
+would cause — a held press must select *and not* open. The row is attached to a real activity window in
+that fixture, because `View.postDelayed` on an unattached view queues into `HandlerActionQueue` and never
+runs, which made the first draft of the test pass for the wrong reason.
+
+**`TaskCardSwipeInstrumentedTest`** is the device half: swipe, assert `translationX == -actionPanel.width`
+exactly, assert the edit button's centre clears the card's right edge, press it, and assert the editor
+opens *for that task* — the assertion that discriminates, because a press that lands on the card calls
+`closeSelf()` and goes nowhere. Then back, and the row is closed again. Green on both AVDs, and four
+photographs in `after/`. `s2-tasks-swiped.png` was deleted, not overwritten: both it and
+`s2-tasks-closed.png` hash to `6199671…`, so it had been filed under a name that claimed a gesture it never
+showed.
+
+**Two rules for every later stage, both from this debug session.** Before blaming a device for an
+instrumented failure, check that it is the only one driving that device:
+`adb -s "$S" shell dumpsys accessibility | grep -i "ui automation"` returning a line means a stale or
+concurrent automation client holds the single `UiTestAutomationService` slot, and every run after it fails
+as `UiAutomationService already registered` / `Cannot call disconnect() while connecting`, with screenshots
+refused and input going to whichever window has focus. `emulator-5554` was, for part of this stage, being
+driven by another session of this user's for a different project — its own app appeared in `mCurrentFocus`,
+and a crashed `uiautomator dump` was in the crash buffer. Nothing of that session's was touched; the runs
+moved to an idle AVD and say which one. And any horizontal gesture a test or a script injects must start
+inside the target view, away from both screen edges, or it is the system's Back gesture and not the app's.
+
+**And one more thing the full-suite run measured, in the same sitting.** The first *single* connected
+invocation across the whole instrumented suite reported 19 tests and 3 failures — two of them in classes
+that had been green per class. The reason is now named rather than assumed: one invocation is one app
+process, `SessionRepository` is a Hilt singleton, and a class that seeds a profile through the database
+writes `users.is_current` without being able to reach that singleton. So the class that ran after the report
+screen was shown the report profile — `AmbiguousViewMatcherException: taskCard matches 8 views`, and
+`ReportScreenInstrumentedTest` seeds exactly 5 + 3 = 8 tasks — and the editor class read an empty interval
+for a series belonging to a profile it had just created. `clearPackageData` wipes once per invocation, not
+once per class, so it does not help here. Two consequences: the per-class rule at §14.3 is kept and now
+carries its mechanism, and `TaskCardSwipeInstrumentedTest` fails in its own `@Before` with the sentence
+"this class seeds exactly one task, so the list belongs to it" instead of letting Espresso describe eight
+strangers. The third failure is a different kind of finding and it is still open:
+`ReportScreenInstrumentedTest.aReaderOpensTheReportFromTheirAccountAndCanHandItOver` cannot click
+`reportZoneButton` on the second AVD, because Espresso requires a click target to be 90% visible and the
+button is not, while `scrollTo()` refuses with "is descendant of a view matching (ScrollView … RecyclerView)"
+— the report header is deliberately fixed (`fragment_report.xml:5-9` says why), so there is nothing to scroll
+it into view. `fragment_report.xml` has not been touched since `c1b2c07`, and the two buttons are
+`0dp`-with-weight inside a card, so the row cannot overflow its parent by design. That leaves the honest
+statement: this class has not been run on the reference AVD since Stage 1's theme landed, so whether the
+clipping is the second AVD's chrome or a Stage 1 text/chip height effect on the report header is **not yet
+known**, and the claim "green on the reference device" is not being made for it. It goes on the open list
+with Stage 8d, which owns the report screen: reproduce on `emulator-5554` in a quiet window, and if it
+reproduces there too, treat it as a Stage 1 regression in the fixed header rows and fix the layout rather
+than the test.
