@@ -18,7 +18,7 @@ draws and this plan enforces: **display code may change, data and domain code ma
 Material 1.11.0, Robolectric 4.11.1 over real in-memory SQLite, JUnit 4, Espresso 3.5.1,
 `ActivityScenario`. Python 3 for the contrast script.
 
-**Spec:** `docs/superpowers/specs/2026-10-23-global-ui-redesign-design.md`, revision 8. Its SHA is
+**Spec:** `docs/superpowers/specs/2026-10-23-global-ui-redesign-design.md`, revision 9. Its SHA is
 whatever `git log -1 --format=%H -- <that path>` answers at the moment a stage is started — the
 previous line in this header named a commit that had already been superseded twice, which is how
 the audit found the drift, and a document cannot cite its own successor. This plan argues from that document; read both. The
@@ -52,9 +52,10 @@ like the supplied screenshots. Colour and corner-radius edits alone do not pass.
 
 ## 2. Starting point, verified
 
-Each figure below was read or run at `a9f70e3` on 2026-10-23 and re-checked at `d1839a8` on 2026-10-24
-by two reviewers working from the source, not inherited from the previous report. The spec baseline this
-plan is written against is revision 8.
+Each figure below was read or run at `a9f70e3` on 2026-10-23, re-checked at `d1839a8` on 2026-10-24
+by two reviewers working from the source, and re-checked a third time at this commit — the instrumented
+column is the exception, see 0.1a: counted, never executed. The spec baseline this
+plan is written against is revision 9.
 
 | claim | evidence |
 |---|---|
@@ -115,11 +116,15 @@ Every task below implicitly includes this section. Values are copied from the sp
   red, and the change that turns it green. Where a test can read resources reflectively — as 1.2's
   contrast test does through `R.color::class.java.getField` — it should, because then the red is genuine
   and the missing token is the message.
-- Every Kotlin block in this plan has been **compiled**, not read: 1.9.22 against `android-34`, the
-  recyclerview 1.1.0 the APK resolves and the app's own classes. §20f records the harness, what it proves
-  (syntax, imports, API signatures, override validity) and what it cannot prove (resource names are stubbed
-  from each snippet's own references, so existence is still this plan's own responsibility, and no layout
-  XML is parsed). Re-run it after editing a snippet.
+- Every **complete-file** Kotlin block in this plan has been **compiled**, not read: 1.9.22 against
+  `android-34`, the recyclerview 1.1.0 the APK resolves and the app's own classes. §20f records the harness,
+  what it proves (syntax, imports, API signatures, override validity, cross-file references inside one
+  package) and what it cannot prove (resource names are stubbed from each snippet's own references, so their
+  existence is still this plan's ordering responsibility, and no layout XML is parsed). Re-run it after
+  editing a snippet. Blocks that print a **method body** rather than a whole file — 3.1's readers, 3.6's rail
+  test — cannot be compiled as printed, so those steps name the file and state its import list instead, and
+  §20g records the two times that distinction was got wrong: a `/* comment */` in an expression position and
+  a `dp(40)` written against a file whose helper is `Int.dp()`.
 - No existing test is disabled, deleted or weakened. When an assertion must move, it is rewritten to the new
   truth in the same commit as the layout it covers, and the commit message names it.
 - Never force-push, never rewrite published history, never clear user data or uninstall the app, never
@@ -202,27 +207,54 @@ python scripts/contrast_report.py --check --format markdown --out docs/design/co
 python scripts/contrast_report.py --resources app/src/main/res --check
 ```
 
-Device (emulator-5554 is live; API 35 x86_64):
+Device: **resolve the serial, never hard-code it.** An earlier draft of this page asserted "emulator-5554 is
+live; API 35 x86_64" and every `adb` line below carried that serial, which is a claim about a moment, not a
+procedure — and by the time this pass re-checked it, `adb devices -l` no longer listed `emulator-5554` at
+all, only a physical handset. Both are recorded, because the evidence in §6 was really produced on the
+emulator while it was live.
 
 ```bash
 adb devices -l
-adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
-# width matrix — dp = 1080 / (density / 160)
-adb -s emulator-5554 shell wm size 1080x2280 && adb -s emulator-5554 shell wm density 440   # 393dp
-adb -s emulator-5554 shell wm size 1080x2280 && adb -s emulator-5554 shell wm density 480   # 360dp
-adb -s emulator-5554 shell wm size 1080x2280 && adb -s emulator-5554 shell wm density 540   # 320dp
-adb -s emulator-5554 shell settings put system font_scale 1.3     # and 1.0 to restore
-adb -s emulator-5554 shell cmd uimode night yes                   # and `no` for light
-adb -s emulator-5554 shell pidof com.taskplanner                  # alive check, not a claim
-adb -s emulator-5554 exec-out screencap -p > docs/images/ui-redesign/after/01-tasks.png
-adb -s emulator-5554 shell uiautomator dump /sdcard/ui.xml && adb -s emulator-5554 exec-out cat /sdcard/ui.xml
+S=$(adb devices -l | awk 'NR>1 && $2=="device" {print $1; exit}')   # the one serial this session can use
+echo "$S"; adb -s "$S" shell getprop ro.build.version.sdk; adb -s "$S" shell getprop ro.product.cpu.abi
+adb -s "$S" shell wm size; adb -s "$S" shell wm density
+adb -s "$S" shell settings get system font_scale
+adb -s "$S" shell settings get global animator_duration_scale
+```
+
+| as measured at this pass | the emulator the §6 proof ran on | the device attached now |
+|---|---|---|
+| serial | `emulator-5554` | `adb-WCLJBINVEAT4PVGM-8QzfSF…` (adb-over-TLS) |
+| API / abi | 35 / x86_64 | 35 / `arm64-v8a,armeabi-v7a,armeabi` |
+| size, density | 1080x2280 at 440dpi | 1220x2712 at 480dpi |
+| width in dp | 393dp | ≈407dp |
+| font scale | 1.0 | **0.81** |
+| animation scales | 1.0 | **0.5 window / 0.5 transition / 0.5 animator** |
+
+Two consequences the stages have to respect, and neither is cosmetic: the width matrix below must be
+recomputed per device from `density = px_width / dp_width * 160` (1080px panel → 440/480/540dpi for
+393/360/320dp; a 1220px panel → **496/542/610**), and a handset sitting at font scale 0.81 with animation
+scales at 0.5 is not the configuration the adaptivity and motion stages claim to test — so 9.5 and 10.x set
+`font_scale` and the three animation scales explicitly and read them back, rather than inheriting whatever
+the device was left in. Every `adb` line in this plan means `adb -s "$S"`.
+
+```bash
+# width matrix — dp = px_width / (density / 160); substitute this device's px width
+adb -s "$S" shell input keyevent KEYCODE_WAKEUP
+adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 440   # 393dp on a 1080px panel
+adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 480   # 360dp
+adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 540   # 320dp
+adb -s "$S" shell settings put system font_scale 1.3     # and 1.0 to restore
+adb -s "$S" shell cmd uimode night yes                   # and `no` for light
+adb -s "$S" shell pidof com.taskplanner                  # alive check, not a claim
+adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/01-tasks.png
+adb -s "$S" shell uiautomator dump /sdcard/ui.xml && adb -s "$S" exec-out cat /sdcard/ui.xml
 ```
 
 Instrumented run (device only; CI only compiles them):
 
 ```bash
-adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
+adb -s "$S" shell input keyevent KEYCODE_WAKEUP
 ./gradlew --no-daemon --console=plain connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=com.taskplanner.ui.tasks.TaskEditorInstrumentedTest
 ```
@@ -235,30 +267,32 @@ the audit, where a stale APK sat on the device. The procedure below was run on t
 ```bash
 # 1. build, then install exactly that file
 ./gradlew --no-daemon --console=plain assembleDebug
-adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s "$S" install -r app/build/outputs/apk/debug/app-debug.apk
 
 # 2. the path the package manager actually loaded
-P=$(adb -s emulator-5554 shell pm path com.taskplanner | tr -d '\r' | sed -n 's/^package://p' | head -1)
+P=$(adb -s "$S" shell pm path com.taskplanner | tr -d '\r' | sed -n 's/^package://p' | head -1)
 echo "$P"
 
 # 3. hash it on the device (the shell user can read it: base.apk is -rw-r--r-- system system)
-DEV=$(adb -s emulator-5554 exec-out sha256sum "$P" | tr -d '\r' | cut -d' ' -f1)
+DEV=$(adb -s "$S" exec-out sha256sum "$P" | tr -d '\r' | cut -d' ' -f1)
 
 # 4. and again after pulling it, in case the on-device hash command is unavailable
 LOCAL=$(sha256sum app/build/outputs/apk/debug/app-debug.apk | cut -d' ' -f1)
-adb -s emulator-5554 pull "$P" /tmp/installed-base.apk >/dev/null
+adb -s "$S" pull "$P" /tmp/installed-base.apk >/dev/null
 PULLED=$(sha256sum /tmp/installed-base.apk | cut -d' ' -f1)
 
 # 5. three states, never a fourth
 if [ "$LOCAL" = "$DEV" ] && [ "$LOCAL" = "$PULLED" ]; then echo "PASS $LOCAL"
 elif [ -z "$DEV" ] || [ -z "$PULLED" ]; then echo "BLOCKED: cannot read the installed APK"
-else echo "FAIL local=$DEV pulled=$PULLED"; fi
+else echo "FAIL local=$LOCAL device=$DEV pulled=$PULLED"; fi
 ```
 
-Measured at `0abd9cb`, for reference: `base.apk` is world-readable, `pm path` returns
+Measured on `emulator-5554` while that emulator was live, for reference: `base.apk` is world-readable,
+`pm path` returns
 `/data/app/~~esTsuNRQ…/com.taskplanner-eBW6J5SvcLEGLbxlF4qlAQ==/base.apk`, and local, on-device and pulled
 hashes were all `28e898e91ad7a18a505b4555f0026dba138463d497e944ccb10ce9a7ad9600f7` — a real `PASS`, not an
-inference from a timestamp.
+inference from a timestamp. It is reported as what happened on that device at that commit; the procedure is
+what a later stage re-runs, against whatever serial `$S` resolves to.
 
 `BLOCKED` is a legitimate outcome and must be reported as one: a release build on a stock handset, or a
 manufacturer ROM that tightens `/data/app` permissions, can make the installed APK unreadable to `adb`. In
@@ -323,6 +357,11 @@ res/drawable/bg_pill_neutral.xml (the TODO pill; see 4.4)                     S1
 res/values/anim.xml (motion_standard, motion_entry_max)                       S9
 main/.../ui/tasks/CardItemAnimator.kt (new class; 9.0)                                    S9
 test/.../ui/tasks/CardItemAnimatorTest.kt (holds 9.2's scale test and 9.1's three payload cases)  S9
+res/menu/menu_tasks_sort.xml              res/menu/menu_tasks_overflow.xml                S3
+test/.../ui/theme/VariantSurfaceTest.kt (10.1a: inflates each redesigned layout and walks its
+  TextViews for the spec §3.2 ban on semantic text over ink_surface_variant)               S10
+test/.../ui/tasks/TasksFragmentRenderTest.kt (spec §8's fragment-level Tasks coverage:
+  groups drawn, three statuses, overdue treatment, empty state, closed panel)             S4
 res/layout/header_screen.xml            res/layout/row_list.xml             S1
 res/layout/state_empty.xml              res/layout/state_loading.xml        S1
 res/layout/state_error.xml              res/layout/bar_selection.xml        S1
@@ -354,17 +393,16 @@ Modified files, by stage:
 | stage | files |
 |---|---|
 | S1 | `res/values/colors.xml`, `res/values-night/colors.xml`, `res/values/themes.xml`, `res/values-night/themes.xml`, `res/values/dimens.xml`, `res/values/type.xml` (created), `res/values/component_styles.xml` (created). `res/values/styles.xml` is **not** touched here — its two chart text appearances stay where they are until a stage has a reason to move them. The two chip colour state lists, `res/color/chip_background_color.xml` and `chip_stroke_color.xml`, are dropped by stage 8 when the last layout referencing them is migrated, not by stage 1 |
-| S2 | `res/layout/item_task.xml`, `main/.../ui/tasks/TasksAdapter.kt` |
-| S3 | `res/layout/fragment_tasks.xml`, `res/menu/menu_tasks.xml`, `main/.../ui/tasks/TasksFragment.kt`, `res/values/strings.xml` |
+| S2 | `res/layout/item_task.xml`, `main/.../ui/tasks/TasksAdapter.kt`, and the nine other layouts that use `layout_marginHorizontal`/`layout_marginVertical` — see 2.3a |
+| S3 | `res/layout/fragment_tasks.xml`, `res/menu/menu_tasks.xml` (split by 3.4 into the two new menu files, then deleted along with its last inflating caller), `main/.../ui/tasks/TasksFragment.kt`, `res/values/strings.xml` |
 | S4 | `res/layout/item_task.xml`, `res/layout/item_group_header.xml`, `main/.../ui/tasks/TasksAdapter.kt`, `main/.../ui/tasks/TasksViewModel.kt` (constructor param only), `main/.../ui/tasks/TasksFragment.kt`, `res/values/dimens.xml`, `res/values/strings.xml`; tests `TaskCardWorkTest`, `TaskCardReminderTest`, `TasksScreenInstrumentedTest` |
 | S5 | `res/layout/fragment_profile.xml`, `main/.../ui/profile/ProfileFragment.kt`, `res/values/strings.xml` |
 | S6 | `res/layout/fragment_task_detail.xml`, `main/.../ui/tasks/TaskDetailFragment.kt`; tests `TaskDetailLayoutTest`, `util/WorkAdjustmentUiTest`, `TaskEditorInstrumentedTest` |
-| S7 | `res/layout/activity_main.xml`, `res/menu/bottom_nav_menu.xml` — not `res/values/themes.xml`, which 1.5 already owns, and not
-     **not** `MainActivity.kt`, which an earlier draft listed with no step that touched it: the bar's
+| S7 | `res/layout/activity_main.xml`, `res/menu/bottom_nav_menu.xml` — not `res/values/themes.xml`, which 1.5 already owns, and **not** `MainActivity.kt`, which an earlier draft listed with no step that touched it: the bar's
      label mode, surface and indicator are all XML and theme, and the nav controller already drives it |
 | S8 | the layouts and adapters listed per sub-stage in §Stage 8 |
 | S9 | `main/.../ui/tasks/TasksAdapter.kt`, `res/values/anim.xml` (new, in the list above), `res/values/dimens.xml` |
-| S10 | no source; screenshots and `docs/UI_REDESIGN_REVIEW.md` |
+| S10 | screenshots, `docs/UI_REDESIGN_REVIEW.md`, and `test/.../ui/theme/VariantSurfaceTest.kt` (10.1a), which is source and was missing from this row |
 | S11 | `README.md`, `docs/DESIGN_SYSTEM.md`, `docs/UI_UX_AUDIT.md`, `docs/UI_REDESIGN_REVIEW.md`, `docs/design/contrast-report.md` |
 
 ---
@@ -382,10 +420,30 @@ header — record it in the audit document as the baseline the before-photograph
   methods. Record the numbers in `docs/UI_UX_AUDIT.md`. If they differ, stop: the spec's §8 needs the same
   correction this plan's §16 would otherwise inherit.
 
+- [ ] **0.1a Run the instrumented suite for real, and expect at least one red.** Counting 17 `@Test`
+  annotations proves they exist; CI has only ever compiled them
+  (`assembleDebugAndroidTest` in `.github/workflows/android-ci.yml` — there is no instrumentation job), so
+  their pass rate is an unmeasured premise this plan relied on. One known defect is already visible in the
+  source: `TasksScreenInstrumentedTest.statisticsAndBackKeepsTheTaskListUsable` clicks
+  `R.id.navigation_statistics` and then asserts `R.id.contentGroup` is displayed, while `contentGroup`
+  exists only in `fragment_profile.xml:19` and `fragment_category_detail.xml:15` —
+  `grep -c contentGroup app/src/main/res/layout/fragment_statistics.xml` is `0`, and that screen's own ids
+  are `dashboardScroll`, `dashboardHeadline`, `statisticsPeriodScroll`. So that method cannot pass on the
+  device today.
+
+  ```bash
+  ./gradlew --no-daemon --console=plain connectedDebugAndroidTest
+  ```
+
+  Record the real pass/fail list in `docs/UI_UX_AUDIT.md`. A pre-existing instrumented failure is fixed in
+  its **own commit before C1**, asserted against a statistics id, and named in the commit message as a test
+  correction rather than a redesign change — the rule against weakening a test applies to this one too, and
+  the fix is to assert what the test's name promises. §14's third criterion is then measured, not assumed.
+
 - [ ] **0.2 Confirm the device is the one the spec describes.**
 
 ```bash
-adb -s emulator-5554 shell getprop ro.build.version.sdk && adb -s emulator-5554 shell wm size && adb -s emulator-5554 shell wm density
+adb -s "$S" shell getprop ro.build.version.sdk && adb -s "$S" shell wm size && adb -s "$S" shell wm density
 ```
 
 Measured at `d1839a8`: `ro.build.version.sdk` = `35`, and the panel reports **`Physical size: 540x1140`
@@ -393,11 +451,14 @@ with `Physical density: 220`** — which is already 393dp, and is not the 1080x2
 this plan assumed. Two consequences, both of which have to be honoured rather than noted: the density
 pairs for the other two widths are **240 for 360dp and 270 for 320dp** at this panel, not 480 and 540; and
 a 540x1140 screenshot is half the linear resolution of a real handset, so hairlines and 11sp text are
-under-sampled in the evidence. Prefer forcing the full panel and letting `wm density` do the dp work:
+under-sampled in the evidence. Prefer forcing the full panel and letting `wm density` do the dp work.
+These pairs belong to *this* panel: the rule is always `density = px_width / dp_width × 160`, so at 540px
+they are 240 and 270, at 1080px they are 480 and 540, and at the handset §6 now records (1220px) they are
+542 and 610 — recompute against whatever `wm size` reports, and never carry a pair across devices.
 
 ```bash
-adb -s emulator-5554 shell wm size 1080x2280 && adb -s emulator-5554 shell wm density 440
-adb -s emulator-5554 shell wm size   # must report both Physical and Override lines
+adb -s "$S" shell wm size 1080x2280 && adb -s "$S" shell wm density 440
+adb -s "$S" shell wm size   # must report both Physical and Override lines
 ```
 
 Record the reported `Physical`/`Override` pair, the density, the font scale and the uimode in the review
@@ -444,7 +505,7 @@ Record the exact `wm size` + `wm density` + `font_scale` + `uimode` quadruple fo
 the top of `docs/UI_UX_AUDIT.md`, and prove the same account and the same row count in every pair:
 
 ```bash
-adb -s emulator-5554 exec-out "run-as com.taskplanner sqlite3 databases/taskplanner.db 'select count(*) from tasks'"
+adb -s "$S" exec-out "run-as com.taskplanner sqlite3 databases/taskplanner.db 'select count(*) from tasks'"
 ```
 
 If `run-as`/`sqlite3` is unavailable on this image, record the visible row count from the screenshot
@@ -637,7 +698,9 @@ step wants — a missing token, not a typo. If it fails differently, fix the tes
   `res/values/colors.xml`, and **edit the existing role names in place** — do not append a second block of
   them. `primary`, `primary_dark`, `secondary`, `secondary_dark`, `background`, `surface`, `on_surface`,
   `error`, `on_error`, `status_todo`, `status_in_progress`, `status_paused`, `status_done`, `priority_low`,
-  `priority_medium` and `priority_high` are already declared at `colors.xml:4-25`, and aapt rejects a
+  `priority_medium` and `priority_high` are already declared — the ten legacy roles at `colors.xml:4-25`, and
+  `status_todo:28`, `status_in_progress:29`, `status_done:30`, `status_paused:31`, so the range to edit is
+  `4-31`, and aapt rejects a
   duplicate `<color>` before any test runs. Each line below therefore *replaces* the line of the same name,
   and that diff is the review surface.
 
@@ -693,7 +756,10 @@ step wants — a missing token, not a typo. If it fails differently, fix the tes
 
 Then `res/values-night/colors.xml`: the dark column of §4 under the same names. Delete `background_dark`,
 `surface_dark` and `on_surface_dark` — the old night theme was their only reader, and 1.5 replaces that
-file. Keep `state_badge_fill` (three drawables read it).
+file. Delete them from **both** files: `grep -rn` finds each name declared twice, at
+`values-night/colors.xml:4,5,6` *and* `values/colors.xml:9,11,15`, and removing only the night copies leaves
+three dead colours in the default configuration. `values-night/themes.xml:15,16,19` are the only readers, and
+1.5 rewrites all three lines. Keep `state_badge_fill` (three drawables read it).
 
 **The ramp does not move here, and one alias makes that a constraint rather than an intention.**
 `colors.xml` defines `chart_bar` as `@color/primary`, `chart_completions` as `@color/status_done`,
@@ -804,16 +870,18 @@ changes the colour.
 > M2-compat names first (`textAppearanceSubtitle2`, `textAppearanceButton`) since those are the least
 > likely to exist in an M3 parent.
 
-- [ ] **1.5a Skeleton first.** Before 1.6a can run, the nine `TextAppearance.TaskPlanner.*` styles and the `ink_*` colours must exist as *names*: Kotlin resolves `R.style.TextAppearance_TaskPlanner_Display` at compile time, so a test naming a style nobody has declared is a build failure, not a red test. 1.5a adds `type.xml` with the nine styles declared at their parent Material sizes and no tracking or colour overrides, and commits it alone. 1.6a then writes the failing assertions against names that resolve.
+- [ ] **1.5a Skeleton first.** Before 1.6 can run, the nine `TextAppearance.TaskPlanner.*` styles and the `ink_*` colours must exist as *names*: Kotlin resolves `R.style.TextAppearance_TaskPlanner_Display` at compile time, so a test naming a style nobody has declared is a build failure, not a red test. 1.5a adds `type.xml` with the nine styles declared at their parent Material sizes and no tracking or colour overrides, and commits it alone. 1.6 then writes the failing assertions against names that resolve.
 
-- [ ] **1.6 Type scale** in new `res/values/type.xml`: nine `TextAppearance.TaskPlanner.*` styles over the
-  M3 parents — display, headline, title, body, meta, caption, pill, label, metric — each carrying size,
-  `android:lineHeight` (with `tools:targetApi="28"`), weight, `android:letterSpacing` **in ems** at the
-  values §3.3 of the spec now states, and colour through a role rather than a hex. Only `label` sets
-  `android:textAllCaps`; `pill` is deliberately not capped, because the 82dp line-B budget in §4.1 depends
-  on it. Add `type_caption` (12sp) and `type_pill` (11sp) to the dimens alongside the other seven.
+  It also creates `component_styles.xml` with all **fifteen** `Widget.TaskPlanner.*` names as empty styles
+  whose only content is the Material 3 parent each one inherits. This is not tidiness: 1.5 puts
+  `bottomNavigationStyle`, `materialCardViewStyle` and `chipStyle` into `themes.xml`, and `aapt2 link`
+  resolves a theme's `@style/…` value at **link** time, so a theme naming `Widget.TaskPlanner.BottomBar`
+  before 1.8 writes it fails the build with `resource style/Widget.TaskPlanner.BottomBar not found` —
+  the same class of mistake §3's skeleton rule exists to prevent, one file earlier. An empty style with a
+  real parent is valid XML and draws exactly what the parent draws, so 1.5 through 1.7 ship a redesigned
+  palette over unchanged component shapes, and 1.8 fills the fifteen bodies in without touching any name.
 
-- [ ] **1.6a Failure-first:** write `TypeScaleTest` against the nine styles 1.5a declared as stubs at their Material parents' sizes. It builds a `TextView` with each style and
+- [ ] **1.6 Failure-first:** write `TypeScaleTest` against the nine styles 1.5a declared as stubs at their Material parents' sizes. It builds a `TextView` with each style and
   asserts `textSize` in sp and `letterSpacing`:
 
 ```kotlin
@@ -822,6 +890,8 @@ package com.taskplanner.ui.theme
 import android.content.Context
 import android.util.TypedValue
 import android.view.ContextThemeWrapper
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
@@ -893,13 +963,27 @@ class TypeScaleTest {
                 "the theme answers ?attr/${themed.resources.getResourceName(attr)}",
                 themed.theme.resolveAttribute(attr, value, true)
             )
+            // The non-zero check is not decoration: `StatisticsLayoutTest:655` asserts it because a
+            // resolveAttribute can succeed by falling through to the M3 parent, returning 0 or the
+            // parent's style, while the map below still sees five distinct ids. Without this line an
+            // attribute this stage forgot to map is invisible to the test that claims to catch it.
+            assertNotEquals("the theme names a resource for ${themed.resources.getResourceName(attr)}",
+                0, value.resourceId)
             value.resourceId
         }
         assertEquals("five roles, five styles, or the dashboard has no hierarchy", 5, styles.toSet().size)
+        // And the sizes really are the roles: a resolved id that points at the wrong TextAppearance would
+        // satisfy the distinctness check above while drawing 12sp where 13sp is promised.
+        assertEquals("Headline5 maps to display", sizeSp(R.style.TextAppearance_TaskPlanner_Display),
+            sizeSpOf(TextView(themed, null, asked[0])), 0.2f)
     }
 
     @Test fun `a layout asking for the old body2 attribute gets the meta role`() {
-        val tv = TextView(themed, null, 0, com.google.android.material.R.attr.textAppearanceBody2)
+        // Three arguments, not four: `TextView(context, attrs, defStyleAttr)` takes the THEME ATTRIBUTE and
+        // resolves it through the theme, while the fourth slot is `defStyleRes`, a style resource id. The
+        // earlier draft put `R.attr.textAppearanceBody2` in the defStyleRes slot, where no default style is
+        // ever found, so the view came back at the platform default size and this test could not pass.
+        val tv = TextView(themed, null, com.google.android.material.R.attr.textAppearanceBody2)
         assertEquals(sizeSp(R.style.TextAppearance_TaskPlanner_Meta), sizeSpOf(tv), 0.2f)
     }
 
@@ -913,6 +997,13 @@ class TypeScaleTest {
 > window lets one role satisfy another and the test passes on a screen with no hierarchy at all. Use
 > **±0.2f**. And because `letterSpacing` is read through `defStyleRes`, `type.xml` must set
 > `android:letterSpacing` on the style itself rather than relying on a Material parent to carry it.
+
+- [ ] **1.6b Type scale** (the implementation; it runs after 1.6's test) in new `res/values/type.xml`: nine `TextAppearance.TaskPlanner.*` styles over the
+  M3 parents — display, headline, title, body, meta, caption, pill, label, metric — each carrying size,
+  `android:lineHeight` (with `tools:targetApi="28"`), weight, `android:letterSpacing` **in ems** at the
+  values §3.3 of the spec now states, and colour through a role rather than a hex. Only `label` sets
+  `android:textAllCaps`; `pill` is deliberately not capped, because the 82dp line-B budget in §4.1 depends
+  on it. Add `type_caption` (12sp) and `type_pill` (11sp) to the dimens alongside the other seven.
 
 - [ ] **1.7 Space and shape.** Add to `res/values/dimens.xml` (keeping the five existing `spacing_*` values
   exactly as they are, because `StatisticsLayoutTest` asserts that every vertical gap on the dashboard is
@@ -999,21 +1090,30 @@ class ListGutterTest {
         )
     }
 
-    @Test fun `the touch-target scale is at least forty-eight dp`() {
+    @Test fun `the touch-target and row floors are their own numbers, not each other`() {
         assertTrue("touch_target_min is ${dimen(R.dimen.touch_target_min)}px",
             dimen(R.dimen.touch_target_min) >= pxOf(48))
-        assertTrue("row_min_height is ${dimen(R.dimen.row_min_height)}px",
-            dimen(R.dimen.row_min_height) >= pxOf(48))
+        // Spec §3.4 sets two floors, and a test that reads the lower one for both would pass with the
+        // row height collapsed to 48dp — the assertion has to name the rule it protects.
+        assertTrue("row_min_height is ${dimen(R.dimen.row_min_height)}px, floor 56",
+            dimen(R.dimen.row_min_height) >= pxOf(56))
     }
 }
 ```
 
 - [ ] **1.7a Make the gutter test pin the UI, not two constants.** `fragment_tasks.xml:153` hard-codes
   `android:paddingBottom="88dp"`, and `fab_margin` is read by nothing in `app/src`, so a test comparing
-  the two dimens proves arithmetic about a file nobody renders. Point the list and the FAB at the dimens,
-  then let the grep be the gate:
+  the two dimens proves arithmetic about a file nobody renders. What Stage 1 owns is the *names*: add
+  `list_bottom_gutter` (88dp) and `fab_size` (56dp) to `dimens.xml` and keep `ListGutterTest` reading the
+  sum. The layout edit is **not** here — `fragment_tasks.xml` belongs to Stage 3 (§7's one-file-one-owner
+  rule, and §8's S3 row), so 3.2 replaces the literal with `@dimen/list_bottom_gutter` and points the FAB's
+  16dp margin at `fab_margin`, and the grep below becomes a §14 gate at the end of Stage 3 rather than a
+  claim Stage 1 can honour. An earlier draft had Stage 1 editing that layout, which would have given one
+  change two owners and made Stage 1's own acceptance ("no layout changed except the six new includes")
+  false the moment it ran.
 
 ```bash
+# expected: no match (the literal is gone) — checked after 3.2, not after this step
 grep -n 'paddingBottom="88dp"' app/src/main/res/layout/fragment_tasks.xml && echo 'STILL A LITERAL' || echo coupled
 ```
 
@@ -1057,15 +1157,33 @@ Expected: 1371 + the new tests, 0 failures; build succeeds; the script prints `R
 lines. A drift line means a resource and the table disagree — fix the resource, never the table, unless the
 design changed, in which case both move together and the spec's §3.1 quotation is regenerated.
 
+> Known limitation of this mode today, measured rather than assumed: before Stage 1 writes the tokens, and
+> for any name mistyped in `colors.xml`, `--resources` does not print a named failure — it dies inside
+> `pairs()` with `KeyError: 'ink_error'` (reproduced at this commit: `python scripts/contrast_report.py
+> --resources app/src/main/res --check`). Exit status is still non-zero, so a build gate catches it, but a
+> worker gets a traceback instead of "which pair is missing". 1.11a therefore hardens the script: a token
+> absent from the resources prints `MISSING <theme> <token>` and the run still ends with a non-zero
+> `RESULT: fail`. `scripts/contrast_report.py` is a measurement tool, not app code, so this is one of the
+> few places the stage edits a file outside `app/src/main/res`.
+
+- [ ] **1.11a Harden the report, then re-run it.** In `scripts/contrast_report.py`, wrap the token lookup in
+  `pairs()` so an absent name yields `MISSING <theme> <token>` in the output list instead of a `KeyError`,
+  keep the non-zero exit, and re-run both modes:
+
+```bash
+python scripts/contrast_report.py --check                                  # tokens only: must pass
+python scripts/contrast_report.py --resources app/src/main/res --check      # names every missing pair now
+```
+
 - [ ] **1.12 Visual check that the theme landed.** Install, screenshot Tasks and Profile in light and dark.
   Nothing here has moved a view, but every colour has changed, so the pair is the evidence:
 
 ```bash
-adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5554 exec-out screencap -p > docs/images/ui-redesign/after/s1-tasks-light.png
-adb -s emulator-5554 shell cmd uimode night yes
-adb -s emulator-5554 exec-out screencap -p > docs/images/ui-redesign/after/s1-tasks-dark.png
-adb -s emulator-5554 shell cmd uimode night no
+adb -s "$S" install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/s1-tasks-light.png
+adb -s "$S" shell cmd uimode night yes
+adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/s1-tasks-dark.png
+adb -s "$S" shell cmd uimode night no
 ```
 
 Judge them with `design-review:design-debt-review` in mind: any screen that now looks *worse* than the
@@ -1181,12 +1299,17 @@ class TaskCardClosedPanelTest {
         awaitUntil("the row to be diffed") { adapter.itemCount == 1 }
         val holder = adapter.createViewHolder(parent, adapter.getItemViewType(0))
         adapter.bindViewHolder(holder, 0)
-        return holder.itemView.also {
-            it.measure(
-                View.MeasureSpec.makeMeasureSpec(393.dp(), View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            )
-            it.layout(0, 0, 393.dp(), it.measuredHeight)
+        return holder.itemView.also { view ->
+            // Two passes, because one cannot tell a match_parent child anything: ViewGroup's
+            // getChildMeasureSpec maps MATCH_PARENT under an UNSPECIFIED parent to size 0, so with a single
+            // UNSPECIFIED measure the action panel is laid out ZERO high and every vertical assertion
+            // below passes on an empty rectangle. The first pass learns the row's own height; the second
+            // gives it EXACTLY, which is what RecyclerView does when it measures an item.
+            val widthSpec = View.MeasureSpec.makeMeasureSpec(393.dp(), View.MeasureSpec.EXACTLY)
+            view.measure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            val rowHeight = view.measuredHeight
+            view.measure(widthSpec, View.MeasureSpec.makeMeasureSpec(rowHeight, View.MeasureSpec.EXACTLY))
+            view.layout(0, 0, 393.dp(), rowHeight)
         }
     }
 
@@ -1205,6 +1328,8 @@ class TaskCardClosedPanelTest {
         val panel = row.findViewById<View>(R.id.actionPanel)
 
         assertEquals("the card does not move while nothing is swiping", 0f, card.translationX, 0f)
+        assertTrue("the panel is a real rectangle in this fixture: ${panel.height}px tall",
+            panel.height >= 40.dp())
         assertTrue(
             "panel right ${panel.right} must not pass card right ${card.right}",
             panel.right <= card.right
@@ -1217,16 +1342,21 @@ class TaskCardClosedPanelTest {
         )
     }
 
-    @Test fun `the reveal distance is still the panel's own width`() {
+    @Test fun `the reveal distance is exactly the panel's own width`() {
         val row = row()
         val card = row.findViewById<View>(R.id.taskCard)
         val panel = row.findViewById<View>(R.id.actionPanel)
+        assertEquals("two 76dp buttons, which is what the drag measures", 152.dp(), panel.width)
+        assertTrue("and the panel has height to reveal: ${panel.height}px", panel.height >= 40.dp())
         card.translationX = -panel.width.toFloat()
-        assertTrue(
-            "sliding by panel.width brings the panel's left edge to where the card's was",
-            panel.left <= card.right - panel.width
-        )
-        assertTrue("and the panel still does not reach past the row", panel.right <= row.width)
+        // Equality, not <=. The earlier draft asserted `panel.left <= card.right - panel.width`, which is
+        // the same statement as the closed-row test's `panel.right <= card.right` — panel.left IS
+        // panel.right minus panel.width — so it proved nothing new, and it was satisfied pre-fix, when a
+        // card sliding by 152dp still left 8dp of panel exposed down the right edge. Landing exactly on
+        // the panel's left edge is the invariant the drag depends on.
+        assertEquals("sliding by panel.width reveals the panel exactly, no early strip, no shortfall",
+            panel.left, (card.right + card.translationX).toInt())
+        assertTrue("and nothing of the panel sticks past the row", panel.right <= row.width)
     }
 }
 ```
@@ -1235,8 +1365,12 @@ class TaskCardClosedPanelTest {
 > `TaskCardWorkTest`, which already drives the real adapter this way — including `ListAdapter`'s async diff,
 > which is why the wait loop idles the main looper instead of asserting straight after `submitList`.
 
-- [ ] **2.2 Run it, watch it fail** on the first three assertions with the actual numbers from the current
-  layout (the panel's right edge will be 8dp past the card's, its top 4dp above):
+- [ ] **2.2 Run it, watch it fail** — on exactly four assertions, and the list is derived rather than
+  guessed, from the shipped geometry (row 393dp wide, card `[8, 385]`, panel `[241, 393]` at `[0, rowHeight]`):
+  `panel.right 393 > card.right 385` fails, `panel.top 0 < card.top 4` fails, `panel.bottom 32 > card.bottom`
+  fails, and the reveal test's `card.right - panel.width = 233 != panel.left 241` fails. The `translationX`
+  and `panel.left >= card.left` assertions PASS before the fix, which is why they are stated as guards rather
+  than as the red: an earlier draft claimed "the first three assertions" fail, and one of those three cannot.
 
 ```bash
 ./gradlew --no-daemon --console=plain testDebugUnitTest --tests "com.taskplanner.ui.tasks.TaskCardClosedPanelTest"
@@ -1261,6 +1395,18 @@ class TaskCardClosedPanelTest {
 > `TasksAdapter.handleTouch` measures the reveal from `binding.actionPanel.width`, and margins do not
 > change `width`, so the reveal distance is untouched — which is what 2.1's second test pins.
 
+- [ ] **2.3a The same API-26 defect exists in nine more layouts, and lint will not say so.** 2.3's
+  correction was made because `layout_marginVertical` is API 26 on a minSdk 24 floor, where it is dropped
+  silently. That is not a one-file problem: `grep -rl "layout_marginHorizontal\|layout_marginVertical"
+  app/src/main/res/layout` at this commit lists exactly ten files — `fragment_goal_detail`, `item_archive`,
+  `item_category`, `item_goal`, `item_group_header`, `item_habit`, `item_insight`, `item_profile`,
+  `item_task`, `item_workload_panel` — including `item_group_header.xml`, which draws the header above every
+  group on the screen this redesign is judged by. And the usual safety net does not catch it: `lint` reports
+  zero `UnusedAttribute` findings on this project and its baseline has no such entry, because the attributes
+  ARE used — they are just not applied on 24 and 25. So 2.3a converts all ten to explicit
+  `marginStart`/`marginEnd` or `marginTop`/`marginBottom` dimens in this stage, and §14's gate gains the grep
+  above as a check that returns empty, so the rule is enforced by a command rather than by memory.
+
 - [ ] **2.4 Run the whole Tasks test group**, then the full suite, then build:
 
 ```bash
@@ -1275,11 +1421,11 @@ the layout change reached further than the panel — fix the change, not the tes
   works, with photographs of each state (the popup-free way: `adb shell input swipe` and `screencap`):
 
 ```bash
-adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5554 shell am start -n com.taskplanner/.ui.MainActivity
-adb -s emulator-5554 exec-out screencap -p > docs/images/ui-redesign/after/s2-tasks-closed.png
-adb -s emulator-5554 shell input swipe 700 1200 200 1200 220
-adb -s emulator-5554 exec-out screencap -p > docs/images/ui-redesign/after/s2-tasks-swiped.png
+adb -s "$S" install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s "$S" shell am start -n com.taskplanner/.ui.MainActivity
+adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/s2-tasks-closed.png
+adb -s "$S" shell input swipe 700 1200 200 1200 220
+adb -s "$S" exec-out screencap -p > docs/images/ui-redesign/after/s2-tasks-swiped.png
 ```
 
 Then tap edit and delete once each, and drag the handle once, and photograph the results. Record what the
@@ -1340,11 +1486,19 @@ matchers on this device:
     // The assertion is the row count, not the list being on screen: a search that filters nothing
     // still leaves a displayed RecyclerView, which is exactly the false pass to avoid. Two tasks are
     // seeded, one of which contains the query.
-    awaitUntil("the filtered list to settle") { rowCount() == 1 }
+    waitUntil("the filtered list to settle") { rowCount() == 1 }
     onView(withText("Написать обзор литературы")).check(matches(isDisplayed()))
     onView(withText("Сформировать цель ВКР")).check(matches(not(isDisplayed())))
 }
 ```
+
+  `waitUntil` is this project's own instrumented convention, copied from `TaskEditorInstrumentedTest:330`
+  and `ReportScreenInstrumentedTest:583` — a 50 ms poll against `TIMEOUT_MILLIS = 60_000L` that throws an
+  `AssertionError` naming what it waited for. It is declared in the new file, not borrowed: the two existing
+  copies are `private` to their classes, and there is no shared instrumented test utility in this repo. An
+  earlier draft of this step called an `awaitUntil` that exists in no `androidTest` source at all — the same
+  mistake §20f‑f3 caught in Stage 9, reintroduced one stage over, and the reason this pass searched every
+  block for helpers it could not find in the file that calls them.
 
   `rowCount()` reads the adapter through the same walk that finds the field, and returns an `Int`:
 
@@ -1352,12 +1506,27 @@ matchers on this device:
     private fun tasksRoot(): View = scenario.withActivity {
         (it.supportFragmentManager.fragments.first { f -> f is NavHostFragment } as NavHostFragment)
             .childFragmentManager.fragments.filterIsInstance<TasksFragment>().single().requireView()
-    }!!
+    }
 
     private fun headerField(): EditText = tasksRoot().findViewById(R.id.headerSearchField)
 
     private fun rowCount(): Int =
-        tasksRoot().findViewById<RecyclerView>(R.id.recyclerView).adapter?.itemCount ?: -1
+        (tasksRoot().findViewById<RecyclerView>(R.id.recyclerView).adapter as? TasksAdapter)
+            // TaskRow instances only. `TasksViewModel.render` also emits a GroupHeader per group
+            // (`:255-277`), so a raw `itemCount` would count topic headings as tasks and the equality
+            // below would depend on whether the account on the device happens to use groups.
+            ?.currentList?.count { it is TasksListItem.TaskRow } ?: -1
+
+    private fun waitUntil(description: String, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + TIMEOUT_MILLIS
+        while (System.currentTimeMillis() < deadline) {
+            if (runCatching(condition).getOrDefault(false)) return true
+            Thread.sleep(50)
+        }
+        throw AssertionError("$description did not happen within $TIMEOUT_MILLIS ms")
+    }
+
+    private companion object { const val TIMEOUT_MILLIS = 60_000L }
 ```
 
   One walk, three readers, and the count assertion is the point of the test: a search that filters nothing
@@ -1442,10 +1611,16 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
 - [ ] **3.6 Rebuild the filter rail** (spec §4.1). Today the rail is two blocks: a `HorizontalScrollView`
   holding `chipGroupCategory`, and a non-scrolling `chipGroupStatus` below it with `Widget.MaterialComponents.Chip.Filter`
   styles — which is why the status row wraps and steals list height at 320dp. The change is to put a 1dp
-  `ink_outline` hairline divider between the two rows and let both share one horizontal band instead of
-  stacking, and to append the `Filters · n` chip to the status row. The three status chips keep their ids
-  and their behaviour; no fourth chip is added, because `completeAndArchive` means a Completed filter could
-  never match a row.
+  `ink_outline` hairline divider between the two rows, keeping them as two stacked bands, and to put a
+  `Filters · n` chip at the head of the **category band**, inside a new `LinearLayout id=categoryBand` that
+  the `HorizontalScrollView` now wraps (`categoryScroll` → `categoryBand` → [`filtersChip`,
+  `chipGroupCategory`]) — which is the wrapper 3.6's containment test reads through `.parent.parent`. The
+  three status chips keep their ids and their behaviour; no fourth chip is added to `chipGroupStatus`,
+  because `completeAndArchive` means a Completed filter could never match a row, and because the test below
+  pins that group's children to exactly the three it names. An earlier draft of this step said both rows
+  should "share one horizontal band instead of stacking" and append the chip to the status row — the first
+  contradicts the hairline-between-two-rows design spec §4.1 settles, and the second would make this step's
+  own `childCount` assertion fail on the row it just added a chip to.
 
   **The two rows scroll differently, and that is a decision with a test behind it, not an oversight.** The
   category row stays inside its `HorizontalScrollView`, because its length is whatever the user's
@@ -1456,7 +1631,10 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
   correction says the same thing; an earlier draft of this step said the opposite, and its own test below
   contradicted it.
 
-  Write its test first:
+  Write its test first (in `TasksHeaderLayoutTest`, whose imports must include
+  `org.junit.Assert.assertFalse` and `android.widget.LinearLayout` alongside the `ChipGroup` /
+  `HorizontalScrollView` / `View` it already needs — this step shows test bodies rather than a whole file,
+  so the import list is part of the instruction, the same way 4.2 and 9.2 state theirs):
 
 ```kotlin
     @Test fun `the categories scroll, the statuses do not, and there is no fourth chip`() {
@@ -1464,10 +1642,24 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
         assertNotNull("the category row still scrolls", rail)
         // Containment is the assertion. A two-block non-scrolling rail would pass a test that only
         // checks an id exists; this one fails, because the category group must sit inside the scroll.
-        assertSame("chipGroupCategory is the scroller's child",
+        // The double `.parent` is the new band 3.6 adds: scroller → LinearLayout(categoryBand) → ChipGroup.
+        // Today the ChipGroup is the scroller's DIRECT child, so this is a genuine red, and the step that
+        // makes it green is the one that wraps the band — which is why the wrapper is named in the prose
+        // above rather than left for the implementer to invent.
+        assertSame("the category group is inside the scroller's band",
             rail, view.findViewById<ChipGroup>(R.id.chipGroupCategory).parent.parent)
-        assertSame("the status chips are NOT inside it, so all three stay on screen",
-            view, view.findViewById<ChipGroup>(R.id.chipGroupStatus).parent)
+        // NOT `assertSame(view, chipGroupStatus.parent)`: the inflated root here is the CoordinatorLayout,
+        // while the status group's parent is the inner ConstraintLayout, so that comparison is false today
+        // and false after the change. What the design promises is that the status chips are not inside the
+        // scroller, and that is what this walks for.
+        var ancestor: View? = view.findViewById<ChipGroup>(R.id.chipGroupStatus).parent as? View
+        var insideScroller = false
+        while (ancestor != null) {
+            if (ancestor === rail) insideScroller = true
+            ancestor = ancestor.parent as? View
+        }
+        assertFalse("the status chips are not inside the scroller, so all three stay on screen",
+            insideScroller)
         assertEquals(
             "the app has four statuses and the active list can hold three of them",
             listOf(R.id.chipTodo, R.id.chipInProgress, R.id.chipPaused),
@@ -1477,17 +1669,41 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
         )
     }
 
-    @Test fun `an active filter offers one control that clears all of them`() {
-        val viewModel = /* the fragment's view model, driven directly as TasksScreenInstrumentedTest does */
-        viewModel.setSearchQuery("x")
+    /**
+     * The chip's number is a function of `TasksState`, so the test is about that function and builds no
+     * view model: `TasksViewModel` takes four repositories through Hilt, and constructing it here would
+     * mean either mocking them or wiring a test component this project does not have. An earlier draft of
+     * this block wrote `val viewModel = /* the fragment's view model */`, which is a comment in an
+     * expression position — a syntax error, not a test.
+     */
+    private fun activeFilterCount(state: TasksState): Int = listOfNotNull(
+        state.filterCategoryId, state.filterStatus, state.searchQuery.ifBlank { null }
+    ).size
+
+    @Test fun `an active filter counts one, three, or nothing, and never the empty query`() {
         assertEquals(1, activeFilterCount(TasksState(filterStatus = null, searchQuery = "x")))
-        // and the chip's click reaches clearFilters(), which already exists
+        assertEquals(1, activeFilterCount(TasksState(searchQuery = "   ")))
+        assertEquals(3, activeFilterCount(TasksState(
+            filterCategoryId = 4L, filterStatus = TaskStatus.TODO, searchQuery = "x")))
+        assertEquals(0, activeFilterCount(TasksState()))
+    }
+
+    @Test fun `the count and the boolean the header already reads never disagree`() {
+        listOf(
+            TasksState(), TasksState(searchQuery = "x"), TasksState(filterCategoryId = 2L),
+            TasksState(filterStatus = TaskStatus.PAUSED), TasksState(filterCategoryId = 2L, searchQuery = "x")
+        ).forEach { state ->
+            assertEquals("hasActiveFilters and the chip's number must agree",
+                if (state.hasActiveFilters) 1 else 0, activeFilterCount(state).coerceAtMost(1))
+        }
     }
 ```
 
   `Filters · n` counts what `TasksState` already knows: `hasActiveFilters` is the boolean, and the number is
-  `listOfNotNull(filterCategoryId, filterStatus, searchQuery.ifBlank { null }).size`. It is computed in the
-  fragment from the state it is given — no new view-model field, because the three facts are already there.
+  `listOfNotNull(filterCategoryId, filterStatus, searchQuery.ifBlank { null }).size` — the helper above is
+  that line, and 3.6 puts the same expression in the fragment. No new view-model field, because the three
+  facts are already published. The chip's click reaches `clearFilters()`, which already exists; the reach is
+  what 3.5's wiring test asserts, not this one.
 
 - [ ] **3.7 Selection mode uses the include.** `fragment_tasks.xml` carries a `selectionBar`
   `MaterialCardView` with its own four ids inline. Replace the card's body with the include and give the
@@ -1495,15 +1711,35 @@ group, archive, work history), delete the `SearchView` item, and **remove `setup
   tree is ambiguous, and ViewBinding resolves the include's id over the included root's own, so the card
   keeps no reachable id at all. `selectionCount`, `selectAllButton`, `deleteSelectedButton` and
   `cancelSelectionButton` are then reached as `binding.selectionBar.selectionCount` and so on, which is a
-  real change to every call site in the fragment and must be listed as such. Spec §4.1 says selection mode replaces the header; implement that as the header
+  real change to every call site in the fragment and must be listed as such. **`bar_selection.xml`'s root is
+  the `MaterialCardView` itself**, not a layout wrapped around it: `TasksFragment:235` sets
+  `binding.selectionBar.visibility`, and for an include with an id, `binding.selectionBar` is the included
+  binding whose `root` is the included root view — so if the root were an inner container, the card would
+  keep no id, no reachable visibility, and could never be hidden. Spec §4.1 says selection mode replaces the header; implement that as the header
   going `GONE` and the bar going `VISIBLE` in the same `when (state.selectionMode)` branch that exists now,
   and assert both in `TasksHeaderLayoutTest`:
 
 ```kotlin
     @Test fun `selection mode hides the header and shows the bar, not both`() {
-        // given selectionMode true, the header is not visible and the bar is, and the reverse
+        // Inflated through the same fixture as the header tests above, then driven from the state the
+        // fragment already has — no comment-as-body here: an empty @Test passes whether or not the
+        // branch exists, which is the false pass this document has been written to remove.
+        val header = view.findViewById<View>(R.id.tasksHeader)
+        val bar = view.findViewById<View>(R.id.selectionBar)
+
+        showSelectionMode(true)
+        assertEquals("the bar is the header's replacement, not its neighbour", View.VISIBLE, bar.visibility)
+        assertEquals("and the header is gone, not merely overlapped", View.GONE, header.visibility)
+
+        showSelectionMode(false)
+        assertEquals(View.GONE, bar.visibility)
+        assertEquals(View.VISIBLE, header.visibility)
     }
 ```
+
+  `showSelectionMode(Boolean)` is the fixture's two-line helper that submits a `TasksState` with
+  `selectionMode` set and idles the main looper, the way `TaskCardWorkTest` already drives the real
+  fragment; it belongs to this file and is declared there.
 
 - [ ] **3.8 Run the gates**, then install and photograph: default, search open with a query typed, sort
   menu pressed, kebab pressed, archive reached, work history reached, the rail at 320dp, selection mode.
@@ -1659,7 +1895,57 @@ data class CardPresentation(
 `CardPresentationTest` — the clock is held still, which is the whole reason `now` is a parameter:
 
 ```kotlin
-    private val midnight = /* 2026-10-23 00:00 local, computed in the test */
+package com.taskplanner.ui.tasks
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.R
+import com.taskplanner.data.model.Priority
+import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskStatus
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import java.util.Calendar
+
+/**
+ * The presentation arithmetic of spec §4.1, with the clock held still.
+ *
+ * `now` is a parameter precisely so that the boundary — 23:59 against 00:01 — can be named in a test. A
+ * computation that read `System.currentTimeMillis()` inline cannot be tested at the one moment where it is
+ * wrong, which is the failure mode this repository already met once (WorkTrackingRepositoryTest, stage G).
+ */
+@RunWith(RobolectricTestRunner::class)
+class CardPresentationTest {
+
+    private val context: Context = ApplicationProvider.getApplicationContext()
+
+    /** 2026-10-23 00:00:00.000 local, so every case below is decided against one fixed instant. */
+    private val midnight = Calendar.getInstance().apply {
+        set(2026, Calendar.OCTOBER, 23, 0, 0, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    /** One row, four knobs. The defaults are the ordinary TODO task with no deadline. */
+    private fun present(
+        due: Long? = null,
+        now: Long = midnight,
+        priority: Priority = Priority.MEDIUM,
+        status: TaskStatus = TaskStatus.TODO
+    ) = CardPresentation.of(
+        context,
+        TasksListItem.TaskRow(
+            task = Task(id = 1, uuid = "presentation", title = "Present", description = "",
+                userId = 1, status = status, dueDate = due, priority = priority),
+            category = null, isSelected = false
+        ),
+        now
+    )
+
     @Test fun `a task one minute past its deadline is late, and one before it is not`() {
         assertFalse(present(due = midnight + 60_000, now = midnight).isOverdue)
         assertTrue(present(due = midnight - 60_000, now = midnight).isOverdue)
@@ -1686,12 +1972,34 @@ data class CardPresentation(
     }
 
     @Test fun `the due line never says a date the row does not carry`() {
-        assertEquals("No due date", present(due = null).dueLine)
+        assertEquals("No due date", present(due = null).dueLine.toString())
         assertTrue(present(due = midnight - 3 * DAY, now = midnight).dueLine.contains("3"))
     }
+
+    private companion object {
+        /** Named here rather than imported: the fixture states its own arithmetic. */
+        const val DAY = 86_400_000L
+    }
+}
 ```
 
-- [ ] **4.1a Skeleton for the card.** Declare `cardContent`, `categoryDot` and `repeatIcon` in `item_task.xml` inside the existing structure, and `CardPresentation` as a data class with the fields and no logic, in one commit. 4.1's and 4.2's tests then compile and fail on behaviour. Without this step the predicted RED in 4.3 is a compile error, which is the mistake §3's rule exists to prevent.
+  `no_due_date` is `"No due date"` in `values/strings.xml:139` today, which is why the first assertion can
+  name the text: the string is reused, not invented. `R.color.ink_error` and `ink_warning` are the names 1.4
+  writes, so this class is written after 1.4 and before 4.1's implementation — its RED is the four
+  behaviours above, none of which today's adapter performs.
+
+- [ ] **4.1a Skeleton for the card.** Declare `cardContent`, `categoryDot`, `repeatIcon` and `lineBFlow` in
+  `item_task.xml` inside the existing structure, and `CardPresentation` as a data class with the fields and no logic, in one commit. 4.1's and 4.2's tests then compile and fail on behaviour. Without this step the predicted RED in 4.3 is a compile error, which is the mistake §3's rule exists to prevent.
+
+  The same commit adds the copy `CardPresentation` names, because it is production source under
+  `app/src/main` and `R.plurals.task_late_days`, `R.string.task_due_today_format` and
+  `R.string.task_due_tomorrow_format` must exist the moment the file that references them is committed:
+  `values/strings.xml` is the only locale folder in this repository, so each needs exactly one entry —
+  `task_due_today_format` (`"Today %1$s"`), `task_due_tomorrow_format` (`"Tomorrow %1$s"`), a
+  `<plurals name="task_late_days">` (`"%d day late"` / `"%d days late"`); `no_due_date`, `status_todo`,
+  `status_in_progress`, `status_paused` and `status_done` already exist (verified by grep) and are reused
+  rather than duplicated. An earlier draft put this in a step after 4.3, which meant 4.1's own commit could
+  not build — the strings landed two commits after the code that names them.
 
 - [ ] **4.2 Write the width-budget test** — `TaskCardWidthBudgetTest`, the 320dp contract. It measures, not
   eyeballs:
@@ -1717,6 +2025,7 @@ import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.tracking.TrackingPhase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -1775,8 +2084,15 @@ class TaskCardWidthBudgetTest {
      * 64dp column. `sortOrder = MANUAL` because anything else hides the drag handle and the column
      * collapses to 12dp — which is its own case, asserted separately below.
      */
+    private val categoryColor = 0xFF2F6F5E.toInt()   // ink_accent, a real ARGB, not the default 0
+
     private fun bindWorstCase(
-        widthDp: Int = 320, fontScale: Float = 1.0f, sortOrder: SortOrder = SortOrder.MANUAL
+        widthDp: Int = 320, fontScale: Float = 1.0f, sortOrder: SortOrder = SortOrder.MANUAL,
+        // Thirty days ahead: an overdue row prints "3 days late", which is SHORTER than the full date the
+        // 84dp allowance is defined against, so a fixture that was itself overdue never measured the
+        // widest legal date. Ahead rather than behind also keeps the wording out of the today/tomorrow
+        // branches, whose strings the 4.1 tests already cover.
+        due: Long = System.currentTimeMillis() + 30L * DAY
     ): View {
         val app = ApplicationProvider.getApplicationContext<Context>()
         val config = Configuration(app.resources.configuration).apply { this.fontScale = fontScale }
@@ -1795,10 +2111,12 @@ class TaskCardWidthBudgetTest {
                 TasksListItem.TaskRow(
                     task = Task(
                         id = 1, uuid = "budget", title = "Т".repeat(120), description = "",
-                        userId = 1, status = TaskStatus.IN_PROGRESS,
-                        dueDate = System.currentTimeMillis() - 3L * DAY
+                        userId = 1, status = TaskStatus.IN_PROGRESS, dueDate = due
                     ),
-                    category = Category(id = 1, uuid = "c", name = "Диссертация", color = 0, icon = "", userId = 1),
+                    // A real colour: `color = 0` is transparent, and a dot tinted from it "carries the
+                    // colour" while painting nothing, which is the exact defect spec §4.1 exists to fix.
+                    category = Category(id = 1, uuid = "c", name = "Диссертация", color = categoryColor,
+                        icon = "", userId = 1),
                     isSelected = false, series = aWeeklyRule(), pendingReminders = 2,
                     work = CardWork(closedSeconds = 6_300, liveSeconds = 60, phase = TrackingPhase.RUNNING)
                 )
@@ -1814,6 +2132,11 @@ class TaskCardWidthBudgetTest {
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
             )
             it.layout(0, 0, dp(widthDp), it.measuredHeight)
+            // Layout is synchronous, but the category name's 48dp rule runs in a `doOnLayout` post, so a
+            // reader that returns here sees the visibility from BEFORE the decision. One idle makes the
+            // posted work happen inside the fixture — without it the `name.visibility` assertions below
+            // would read a stale GONE/VISIBLE and pass on a card that had decided differently.
+            shadowOf(Looper.getMainLooper()).idle()
         }
     }
 
@@ -1855,11 +2178,22 @@ class TaskCardWidthBudgetTest {
     @Test fun `a collapsed left column gives the title the 52dp the bind path promises`() {
         val row = bindWorstCase(widthDp = 320, sortOrder = SortOrder.DATE_DESC)
         val content = row.findViewById<View>(R.id.cardContent)
-        val left = row.findViewById<View>(R.id.dragHandle).width + dp(4) +
-            row.findViewById<View>(R.id.priorityIndicator).width + dp(8)
+        val handle = row.findViewById<View>(R.id.dragHandle)
+        val rule = row.findViewById<View>(R.id.priorityIndicator)
+        assertEquals("a non-MANUAL sort hides the handle", View.GONE, handle.visibility)
+        // A GONE view contributes no width, and the 4dp that separated it from the rule goes with it,
+        // so the term has to be conditioned rather than added unconditionally: 0 + 4 + 4 + 8 is 16, not 12.
+        val left = (if (handle.visibility == View.GONE) 0 else handle.width + dp(4)) + rule.width + dp(8)
         assertEquals("handle gone, so the column is the rule plus its gap", dp(12), left)
-        assertEquals("and the title's column grows to 260dp", dp(260),
-            content.width - content.paddingLeft - content.paddingRight - left)
+        // And the claim the bind path makes, measured as a difference rather than as a magic number:
+        // the same row re-bound with a MANUAL sort keeps the handle, and the title is 52dp narrower.
+        val manual = bindWorstCase(widthDp = 320, sortOrder = SortOrder.MANUAL)
+        val collapsedTitle = row.findViewById<TextView>(R.id.taskTitle).width
+        val manualTitle = manual.findViewById<TextView>(R.id.taskTitle).width
+        assertEquals("the handle is visible and costs what the budget says", View.VISIBLE,
+            manual.findViewById<View>(R.id.dragHandle).visibility)
+        assertTrue("title ${collapsedTitle.asDp()}dp vs ${manualTitle.asDp()}dp",
+            collapsedTitle >= manualTitle + dp(52))
     }
 
     /**
@@ -1878,13 +2212,12 @@ class TaskCardWidthBudgetTest {
 
         listOf(R.id.taskDueDate to "the date", R.id.taskStatus to "the status word").forEach { (id, what) ->
             val tv = row.findViewById<TextView>(id)
-            val available = (tv.width - tv.paddingLeft - tv.paddingRight).toFloat()
-            val needed = tv.paint.measureText(tv.text.toString())
-            assertTrue("$what needs ${needed.asDp()}dp and has ${available.asDp()}dp", needed <= available)
-            assertTrue(
-                "$what must not be ellipsised: text ends '${tv.text.takeLast(2)}'",
-                !tv.text.endsWith("…")
-            )
+            // Needed-vs-own-width is dropped on purpose: these two views are wrap_content, so their width
+            // IS their measured text and the comparison can never fail. What can fail is the layout
+            // clipping them, and that is visible only in the Layout — see the same correction in the
+            // 1.0-scale test above.
+            val clipped = (0 until tv.layout.lineCount).sumOf { line -> tv.layout.getEllipsisCount(line) }
+            assertEquals("$what is clipped in ${tv.layout.lineCount} line(s)", 0, clipped)
             // The overflow that actually happens at 1.3: the line runs past the card, not the text past
             // its own box. This is the assertion the earlier draft was missing.
             assertTrue("$what runs past the content's right edge",
@@ -1892,9 +2225,16 @@ class TaskCardWidthBudgetTest {
         }
 
         val due = row.findViewById<TextView>(R.id.taskDueDate)
+        val pill = row.findViewById<TextView>(R.id.taskStatus)
         val dueAtOne = baseline.findViewById<TextView>(R.id.taskDueDate)
         assertEquals("line B is one line at the default scale", 1, dueAtOne.lineCount)
         assertTrue("the type grew rather than being scaled down", due.textSize > dueAtOne.textSize)
+        // The reflow itself, measured rather than asserted: at 1.0 the status pill and the date share a
+        // top edge; at 1.3 the Flow wrapped the date onto a second row, so its top is below the pill's.
+        // A plain chain cannot do this and would have squeezed the date instead, which is why 4.4 names
+        // the helper rather than leaving "line B reflows" as prose.
+        assertTrue("line B wrapped: pill.top ${pill.top}, date.top ${due.top}", due.top > pill.top)
+        assertEquals("and nothing vanished when it wrapped", View.VISIBLE, pill.visibility)
 
         // Card against card: the same level of the same hierarchy on both sides.
         val card = row.findViewById<View>(R.id.taskCard)
@@ -1914,14 +2254,23 @@ class TaskCardWidthBudgetTest {
 
     @Test fun `the due date and the status word are drawn in full`() {
         val row = bindWorstCase()
+        val content = row.findViewById<View>(R.id.cardContent)
         listOf(R.id.taskDueDate, R.id.taskStatus).forEach { id ->
             val tv = row.findViewById<TextView>(id)
-            val wanted = tv.paint.measureText(tv.text.toString())
-            assertTrue(
-                "${row.resources.getResourceEntryName(id)} needs ${wanted}px and has ${tv.width - tv.paddingLeft - tv.paddingRight}",
-                tv.width - tv.paddingLeft - tv.paddingRight >= wanted
-            )
-            assertFalse("neither may be ellipsised", tv.text.endsWith("…"))
+            val name = row.resources.getResourceEntryName(id)
+            val layout = tv.layout
+            assertNotNull("$name has no layout to inspect", layout)
+            // The only assertion that can actually see truncation. A TextView's own text is never the
+            // ellipsised string — the ellipsis lives in the Layout, not in mText — so the earlier draft's
+            // `assertFalse(tv.text.endsWith("…"))` passed on a card that had clipped the date away.
+            val clipped = (0 until layout.lineCount).sumOf { line -> layout.getEllipsisCount(line) }
+            assertEquals("$name is clipped in ${layout.lineCount} line(s)", 0, clipped)
+            // And it fits the box the budget reserves, which is a real constraint, unlike its own width:
+            // a wrap_content view always satisfies width >= measureText(its own text), so that
+            // comparison proved nothing about the card, only about the view measuring itself.
+            assertTrue("$name ends at ${tv.right}, past the content edge ${content.right - content.paddingRight}",
+                tv.right <= content.right - content.paddingRight)
+            assertTrue("$name starts before the content edge", tv.left >= content.paddingLeft)
         }
     }
 
@@ -1930,8 +2279,14 @@ class TaskCardWidthBudgetTest {
         val name = row.findViewById<TextView>(R.id.taskCategory)
         val dot = row.findViewById<View>(R.id.categoryDot)
         val title = row.findViewById<View>(R.id.taskTitle)
-        assertEquals("the dot heads line A, so it is left of the title", true, dot.left < title.left)
-        assertTrue("and the dot always carries the colour", dot.visibility == View.VISIBLE)
+        assertTrue("the dot heads line A, so it is left of the title", dot.left < title.left)
+        assertEquals("and the dot always carries the colour", View.VISIBLE, dot.visibility)
+        // "Carries the colour" has to mean something measurable. The fixture's category used to be built
+        // with `color = 0`, which is transparent, so a dot that painted nothing satisfied the assertion —
+        // the very defect spec §4.1 exists to fix. Tint is how this adapter already colours a dot
+        // (`TasksAdapter:237`), so that is what the test reads.
+        assertEquals("the dot is tinted with the row's own category colour", categoryColor,
+            dot.backgroundTintList?.defaultColor)
         assertTrue(
             "the name is shown only with room to say something: ${name.width.asDp()}dp",
             name.visibility == View.GONE || name.width >= dp(CardPresentation.CATEGORY_NAME_MIN_DP)
@@ -1981,13 +2336,13 @@ class TaskCardWidthBudgetTest {
 }
 ```
 
-- [ ] **4.3 Run 4.1 and 4.2 and watch them fail.** They compile — 4.1a declared the ids and the data class — and they fail on behaviour: the pill is still the old uncapped caption so its allowance is exceeded, the category name is still drawn at 320dp, and `priorityIndicator` is still painted from `R.color.priority_*` rather than from `CardPresentation`, so a LOW row still shows a rule. If either class fails to *compile* here, 4.1a missed a name — fix that, and do not touch the assertions.
+- [ ] **4.3 Run 4.1 and 4.2 and watch them fail.** They compile — 4.1a declared the ids, the data class and
+  the strings — and they fail on behaviour: the pill is still the old uncapped caption so its allowance is exceeded, the category name is still drawn at 320dp, and `priorityIndicator` is still painted from `R.color.priority_*` rather than from `CardPresentation`, so a LOW row still shows a rule. If either class fails to *compile* here, 4.1a missed a name — fix that, and do not touch the assertions.
 
-- [ ] **4.3b Add the strings the card says.** `values/strings.xml` is the only locale folder in this
-  repository, so each needs exactly one entry: `task_due_today_format` (`"Today %1$s"`),
-  `task_due_tomorrow_format` (`"Tomorrow %1$s"`), a `<plurals name="task_late_days">` (`"%d day late"` /
-  `"%d days late"`), and `no_due_date`, `status_todo`, `status_in_progress`, `status_paused`, `status_done`
-  already exist and are reused rather than duplicated.
+- [ ] **4.3b Nothing here.** This step used to add the strings `CardPresentation` says, in the position of a
+  step that came after the code that names them — which meant 4.1's commit could not build. They moved into
+  4.1a. The number is kept so the references to "4.3b" elsewhere in this document and in the review log do
+  not silently point at a different step; a worker who reaches this line should go straight to 4.4.
 
 - [ ] **4.4 Rewrite `item_task.xml`** to the three-line structure of spec §4.1, flattening the current
   266-line nesting: root `FrameLayout` → `actionPanel` (2 buttons, surface backdrop) + `taskCard` →
@@ -2005,6 +2360,18 @@ class TaskCardWidthBudgetTest {
   **and `buttonGroup`**, which is the `LinearLayout` the four status buttons sit in today
   (`item_task.xml:215`) and becomes the action cluster: it is renamed nowhere. New ids: `cardContent`,
   `categoryDot`, `repeatIcon`.
+
+  **Line B needs a wrapping mechanism, and the plan has to name it.** A horizontal chain in a
+  `ConstraintLayout` does not wrap: at font scale 1.3 the pill (≈102dp) plus the widest date (≈109dp) plus
+  their gaps is 227dp against a 208dp column, and a chain would simply squeeze all three into one row,
+  clipping the date — the exact outcome spec §4.1 forbids, arrived at by a layout that "followed the spec"
+  and had no way to reflow. The mechanism is a `Flow` helper
+  (`androidx.constraintlayout.helper.widget.Flow`, `app:flow_wrapMode="chain"`, constraintlayout 2.1.4 is
+  already the resolved artifact) over `taskStatus`, `taskDueDate` and `taskCategory`, and it is
+  deliberately a *helper*: it positions children that stay direct children of `cardContent`, so
+  `TaskCardWorkTest:189-193`'s locked assertion that `taskTitle.parent == workRow.parent` keeps holding,
+  which a per-line wrapper container would break. Its id, `lineBFlow`, is declared in the 4.1a skeleton
+  along with the three view ids, because 4.2's reflow test names it.
 
   Three view **types** are locked by tests and may not change while the ids survive: `workRow` is fetched
   as a `LinearLayout` (`TaskCardWorkTest:110`), `workControlButton` as an `ImageButton` (`:131`) and
@@ -2070,6 +2437,18 @@ class TaskCardWidthBudgetTest {
   than 82 — **stop**. Do not shrink a button, a target or a font to make a test pass. Report the measured
   numbers and propose the spec amendment (a different line assignment, or a shorter status word), and wait.
   This is the one step in the plan whose correct failure mode is a conversation.
+
+- [ ] **4.9a Fragment-level render coverage** — `TasksFragmentRenderTest`, the file spec §8 asks for and
+  which §17 previously mapped only at the header, so the row-level tests were standing in for it. Robolectric
+  with `ActivityScenario`-free fragment construction, the way `ui/util/WorkAdjustmentUiTest` already attaches
+  a real fragment under Robolectric — it is this project's only fragment-level test, added by PR #21, and it
+  is the pattern to copy rather than invent. Five assertions, each over a seeded
+  `TasksState` rather than a mock: topic `GroupHeader`s are drawn above their rows and the row count matches
+  the state; the three status chips are present and a fourth is not; an overdue row carries the overdue
+  treatment while the dashboard's own count for the same data calls it late (spec §0's no-second-rule test,
+  run through the screen); a long title wraps to two lines rather than clipping; and the empty state appears
+  for an empty list. No Hilt test component is needed — the fragment is constructed and its state driven
+  through the view model's public seam, exactly as `TaskCardWorkTest` drives the adapter.
 
 - [ ] **4.10 Commit**, listing in the message every test that moved and why its old assertion was the
   baseline's truth rather than the new one.
@@ -2213,14 +2592,24 @@ Tools: `design-review:responsive-design`.
   hairline above the bar.
 - [ ] **7.2** `Widget.TaskPlanner.BottomBar` in `component_styles.xml`: `itemIconTint` and `itemTextColor`
   as colour-state-lists over `ink_text` / `ink_text_secondary`.
-- [ ] **7.3** A JVM test asserting all five labels are visible at once — the baseline shows only "Tasks".
+- [ ] **7.3** A JVM test asserting all five labels are visible at once — the baseline shows only "Tasks" —
+  and that the bar's top edge carries the hairline view 7.1 adds (`bg_hairline`, 1dp, `ink_outline_strong`),
+  which is the separation the acceptance above actually measures.
 - [ ] **7.4** Gates; screenshots of all five tabs at 393dp and 320dp, light and dark; commit.
 
 **Acceptance, each one checkable:** `uiautomator dump` after the change lists five `text` nodes under
 `bottom_navigation` where today it lists one; the active item's `contentDescription`-adjacent state carries
-the indicator drawable and a different text style from the other four, which the same dump shows; the bar's
-resolved background colour differs from the resolved `android:colorBackground` by at least 1.3:1 measured
-with the script's own luminance function, so the bar reads as a surface rather than as the page. **Screenshots:** `s7-nav-<tab>.png` ×5, `s7-nav-320.png`,
+the indicator drawable and a different text style from the other four, which the same dump shows; and the bar
+is separated from the page by a **drawn hairline**, not by a colour difference: `7.4` reads the resolved
+bar background and asserts a 1dp `ink_outline_strong` rule is present above it. The figure is stated rather
+than promised, because the promise was false — measured with the script's own luminance function,
+`ink_surface` against `ink_background` is **1.05:1** light and **1.07:1** dark, and no surface token in
+§4's table reaches 1.3:1 against the page (`ink_surface_variant` in dark is the best case at 1.21:1). An
+earlier draft of this acceptance set the bar at 1.3:1, which no token in this design system can satisfy, so
+the stage could only have closed by editing a measured token or deleting the criterion — both forbidden.
+Spec §4.4 asks for "background from a surface role", which 7.1 delivers; the visible separation is the
+hairline's job, and `ink_outline_strong` measures 3.73 / 3.78 against a surface, so the line is legible as
+a boundary. **Screenshots:** `s7-nav-<tab>.png` ×5, `s7-nav-320.png`,
 `s7-nav-dark.png`.
 
 > The spec's revision-1 claim that the FAB covered a row was withdrawn (§2.2) and no FAB or inset work is
@@ -2369,11 +2758,19 @@ grep -rn "@dimen/text_\|R\.dimen\.text_" app/src || echo "retired"
 Screenshots: `s8d-calendar.png`, `s8d-calendar-day.png`, `s8d-report.png`, `s8d-report-dark.png`,
 `s8d-calendar-320.png`.
 
-- [ ] **8.4b The three state includes get their consumers.** `state_empty.xml` is used by Insights (8c, it
-  replaces the inline empty row `item_insights_empty.xml` inflates) and by Tasks (4.4's `emptyView`);
-  `state_loading.xml` replaces the bare `ProgressBar` on Tasks (4.4), Statistics (8b) and Profile (5.4), so
-  a wait is the same shape on all three; `state_error.xml` replaces the `Snackbar`-only path on Statistics
-  (8b) and Reports (8d), where a failed read currently leaves the screen showing nothing. Each is a layout
+- [ ] **8.4b The three state includes get their consumers — and this step is the consumer's editor.** The
+  parentheticals below name the layouts, not other stages: 4.4 and 5.4 never touch an empty or loading view,
+  so every replacement in this step is performed here, in this commit, against
+  `fragment_tasks.xml`, `fragment_profile.xml`, `fragment_statistics.xml` and `fragment_reports.xml` (all
+  four are listed as S8-owned edits in §7's overlap note, and §8's S8 row now carries them).
+  `state_empty.xml` is used by Insights (8c replaces the inline empty row `item_insights_empty.xml`
+  inflates) and by Tasks, where `emptyView` is a `LinearLayout` with one `TextView` today
+  `fragment_tasks.xml:164`, whose `emptyView` id is on the block's own `TextView` at `:165`). `state_loading.xml` replaces the bare `ProgressBar` at
+  `fragment_tasks.xml:156`, the one on Statistics and the one on Profile, so a wait is the same shape on all
+  three. `state_error.xml` adds an in-place error block to Statistics and Reports; today both report a failed
+  read through a `Snackbar` (`StatisticsFragment:100-101`, `ReportFragment:516`) and leave the body empty,
+  which is a real statement about the body but not, as an earlier draft had it, that "nothing is shown" —
+  a snackbar does appear, it just disappears. This step keeps the snackbar and adds the block. Each is a layout
   substitution plus one `when (state)` branch in the fragment that already has that branch — no new state,
   no new error handling, and the existing `showError` calls keep working. If a sub-stage reaches its
   screenshot pass and one of the three includes is still used nowhere, that is a gap in this plan: say so
@@ -2448,6 +2845,9 @@ class CardItemAnimator(
     }
 ) : DefaultItemAnimator() {
 
+    /** Holders with a fade in flight — the set 9.3's ceiling counts, and the reason it is a set. */
+    private val fading = mutableSetOf<RecyclerView.ViewHolder>()
+
     override fun animateAdd(holder: RecyclerView.ViewHolder): Boolean {
         val view = holder.itemView
         if (animatorScale() <= 0f) {
@@ -2457,7 +2857,19 @@ class CardItemAnimator(
             dispatchAddFinished(holder)
             return false
         }
+        val ceiling = context.resources.getInteger(R.integer.motion_entry_max)
+        if (fading.size >= ceiling) {
+            // 9.3's threshold, implemented rather than described: a submitList that brings in two hundred
+            // rows would otherwise start two hundred ViewPropertyAnimators inside one frame. Past the
+            // ceiling a card simply appears, which is a decision a test can observe.
+            view.alpha = 1f
+            view.translationY = 0f
+            dispatchAddStarting(holder)
+            dispatchAddFinished(holder)
+            return false
+        }
         endAnimation(holder)
+        fading += holder
         view.alpha = 0f
         view.translationY = context.resources
             .getDimensionPixelSize(R.dimen.motion_entry_rise).toFloat()
@@ -2467,14 +2879,34 @@ class CardItemAnimator(
             .translationY(0f)
             .setDuration(context.resources.getInteger(R.integer.motion_standard).toLong())
             .setInterpolator(DecelerateInterpolator())
-            .withEndAction { dispatchAddFinished(holder) }
+            .withEndAction {
+                fading -= holder
+                dispatchAddFinished(holder)
+            }
             .start()
         return true
     }
 
-    /** A reorder is not news; the pill crossfade is done in bind, so only the add animates. */
+    // A cancelled ViewPropertyAnimator never runs its end action, so the count has to leave through the
+    // doors the framework actually calls: recycling a holder goes through endAnimation, and a layout that
+    // abandons everything goes through endAnimations. Without these two, a fast scroll would strand
+    // entries in `fading` and the ceiling would silently disable every later entrance.
+    override fun endAnimation(holder: RecyclerView.ViewHolder) {
+        fading -= holder
+        super.endAnimation(holder)
+    }
+
+    override fun endAnimations() {
+        fading.clear()
+        super.endAnimations()
+    }
+
+    /** A reorder is not news, and a status change cross-fades in bind: only the add animates. */
     override fun getMoveDuration(): Long = 0L
     override fun getChangeDuration(): Long = 0L
+
+    /** Readable from a test, which is how 9.5 asserts the ceiling without instrumenting the framework. */
+    fun runningAddCount(): Int = fading.size
 }
 ```
 
@@ -2530,6 +2962,17 @@ class CardItemAnimator(
   repaint the pill and leave the priority rule drawing the old colour. A stale half-bind is worse than an
   extra full bind, so the check is the identity above rather than a list of fields.
 
+  **What the payload branch may and may not skip.** `TasksAdapter:320-323` derives four button visibilities
+  from `task.status`, and spec §4.1 makes exactly one lifecycle control visible per status — so a status-only
+  change is precisely the case the payload exists for, and a branch that repainted only the pill would leave
+  `startTaskButton` showing on a task that just went to `IN_PROGRESS`, wired to `viewModel.startTask`. The
+  payload branch therefore re-runs the whole status-dependent block: the pill text, colour and background,
+  the four `show*` visibilities, and the holder's stored row that every click listener reads. What it skips
+  is the work-line re-measure and the category text, which no status change can alter. If a later stage adds
+  another status-derived control and forgets this list, the `only the lifecycle button the status calls for
+  is shown` test in 4.1 catches the full-bind path; the payload path is caught by 9.5's test that a paused
+  row shows Resume and not Start after a status-only `submitList`.
+
 - [ ] **9.2 The animator scale, tested rather than asserted.** RecyclerView 1.1.0 — the version this APK
   resolves — does **not** consult
   `ValueAnimator.getDurationScale()` itself — verified against recyclerview **1.1.0**, the artifact this
@@ -2573,18 +3016,24 @@ class CardItemAnimator(
   flight, so a holder reused by the second assertion would be measuring the first call's residue rather
   than the animator's decision. Fresh holders make each call's result depend only on the scale it was given.
 
-- [ ] **9.2a Declare the one resource 9.3 reads** — `motion_entry_max` (12) in `res/values/anim.xml`, next to
-  `motion_standard`, which 9.0 created. Integers, so `getInteger()`, not `getDimensionPixelSize()`.
-  `motion_entry_rise` and `motion_standard` are **not** declared here: 9.0 declares them before the class that
-  reads them, and an earlier draft of this step both re-declared them and named a `motion_target_min` that
-  nothing reads — Stage 1 already owns that dimension as `touch_target_min`.
+- [ ] **9.2a Nothing to declare.** `motion_entry_rise` and `motion_standard` came up into 9.0 with the class
+  that reads them, and `motion_entry_max` is read by the same class now that 9.3's ceiling is code rather
+  than prose, so this step is empty. It is kept as a numbered line because other steps and the review log
+  refer to it. An earlier draft declared all three here, one step too late for 9.0, and named a
+  `motion_target_min` that nothing reads — Stage 1 already owns that dimension as `touch_target_min`.
 
-- [ ] **9.3 The threshold.** A `submitList` that grows the list past `motion_entry_max` (12) pending
-  additions disables the entry animation for that submission. This is a counter on the animator, not a scan
-  of the adapter, and a test with 200 rows asserts fewer than 12 holders ever animate.
+- [ ] **9.3 The threshold, in the class.** Once `fading.size` reaches `motion_entry_max` (12), further adds
+  in that batch appear at full opacity and `animateAdd` returns false. It is a set on the animator, not a
+  scan of the adapter, and `runningAddCount()` makes it observable to a test: 9.5 submits 200 rows and
+  asserts the count never exceeds 12 and that at least one holder got no animation at all.
 
-- [ ] **9.4 Group collapse** animates height through the same animator; pressed states stay the standard
-  ripple; durations live in `res/values/anim.xml` and nowhere else.
+- [ ] **9.4 Group collapse, stated correctly.** A collapse is not a height that tweens: `render()` drops the
+  hidden rows from the list, so the rows leaving go through `animateRemove` and the rows coming back through
+  `animateAdd`, on this same animator — which is why the header's own `groupName`/`groupCount` update is
+  instant (`getChangeDuration() = 0L`) rather than cross-faded. No RecyclerView item animator tweens a
+  container's height, and an earlier draft of this step claimed collapse "animates height through the same
+  animator", which is not implementable as written. Pressed states stay the standard ripple; durations live
+  in `res/values/anim.xml` and nowhere else.
 
 - [ ] **9.5 Gates and evidence.** Full suite, `assembleDebug`, `lintDebug`; then a device check that a
   scroll produces no animation and a new task produces one, photographed mid-flight (`s9-scroll-static.png`,
@@ -2646,14 +3095,21 @@ The third and fourth are candidates to inspect, not verdicts: an icon-only contr
 - [ ] **10.5 Performance check** (spec §7): same seeded account, before and after.
 
 ```bash
-adb -s emulator-5554 shell am force-stop com.taskplanner
-adb -s emulator-5554 shell am start -W -n com.taskplanner/.ui.MainActivity   # TotalTime
-adb -s emulator-5554 shell dumpsys gfxinfo com.taskplanner framestats        # after a 20-fling scroll
+adb -s "$S" shell am force-stop com.taskplanner
+adb -s "$S" shell am start -W -n com.taskplanner/.ui.MainActivity   # TotalTime
+adb -s "$S" shell dumpsys gfxinfo com.taskplanner framestats        # after a 20-fling scroll
 ```
 
-The card's view count per row is the mechanism to check: the flattened `item_task.xml` must measure fewer
-views than the baseline's 266-line nesting. Record the numbers; a regression here is a reason to flatten
-further, not to accept.
+The card's cost per row is the mechanism to check, and the number to check it by is **not the view count**:
+`item_task.xml` today holds 26 views, and 4.4 keeps all 23 named ids because tests read them while adding
+`cardContent`, `categoryDot`, `repeatIcon` and `lineBFlow` — about 30 after the change. A "fewer views" bar
+would therefore be unmeetable except by deleting a test's subject, which §3 forbids; and nesting depth does
+not change either (FrameLayout → card → content before and after). What actually governs scroll cost is
+measure work, so 10.5 records the two figures that move — the row's measured height and a 20-fling
+`dumpsys gfxinfo framestats` p95 — against the baseline captured in 0.4, and the spec's "flattened so each
+row measures less" is read as a statement about the *structure being flatter to lay out*, which the frame
+stats either support or refute. If the p95 regresses, the response is to flatten further within the ids the
+tests keep, not to accept.
 
 - [ ] **10.6 Commit** the photographs and `docs/UI_REDESIGN_REVIEW.md`'s configuration section.
 
@@ -2729,7 +3185,9 @@ All of these, with the command output quoted in the PR body. Nothing counts as d
 1. `./gradlew --no-daemon --console=plain testDebugUnitTest` green, with the suite **larger** than the
    baseline recorded in S0 and zero disabled, deleted or weakened tests. The diff of test names is in the PR.
 2. `assembleDebug`, `lintDebug` and `assembleDebugAndroidTest` green; lint adds no new finding.
-3. The instrumented suite run on the emulator and passing, with the installed APK's sha256 matching the
+3. The instrumented suite run on a device and passing — with its **starting** state measured by 0.1a rather
+   than assumed, since CI has only ever compiled these tests and one method is known from the source to be
+   red today, with the installed APK's sha256 matching the
    built one, or an explicit statement of which classes were not run and why.
 4. `python scripts/contrast_report.py --resources app/src/main/res --check` prints `RESULT: pass` with no
    drift lines, and its report is committed.
@@ -2745,6 +3203,10 @@ All of these, with the command output quoted in the PR body. Nothing counts as d
     is the same debt in a place the first grep could not see:
     `grep -rn "Widget.MaterialComponents\|?android:attr/textColor\|@dimen/text_" app/src/main/res app/src/main/java`
     is empty, or every survivor is named and justified.
+10b. No API-26 layout attribute survives on a 24 floor, where it is dropped silently and lint never says so:
+    `grep -rl "layout_marginHorizontal\|layout_marginVertical" app/src/main/res/layout` returns nothing. Ten
+    files match at the baseline (2.3a), and the two that matter most are `item_group_header.xml`, which draws
+    the band above every group on the redesigned screen, and `item_task.xml`, which 2.3 fixes.
 11. Independent code review and independent visual review both ran, and each of their findings is either
     fixed in a named commit or argued in the review document.
 12. CI green on the final head, merged, `master` verified to contain the branch's commits.
@@ -2824,8 +3286,8 @@ Every spec requirement mapped to the step that implements it, so nothing is sile
 | §5 | motion rules | 9.1–9.5 |
 | §6 | a11y and the matrix | 10.1–10.3 |
 | §7 | performance, no new dependency | 10.5, PR criterion 9 |
-| §8 | baseline preserved, tests moved honestly | 0.1, §14 items 1–2 |
-| §8 | new fragment-level coverage incl. Profile | 5.1, 5.2, 3.1 |
+| §8 | baseline preserved, tests moved honestly | 0.1, 0.1a, §14 items 1–2 |
+| §8 | new fragment-level coverage incl. Profile | 4.9a, 5.1, 5.2, 3.1 |
 | §9 | one commit per layer, in order | every stage's final step |
 | §10 | out of scope respected | §3, the Stage 8 rule, §14 criteria 8 and 9 |
 
@@ -2852,6 +3314,12 @@ Every spec requirement mapped to the step that implements it, so nothing is sile
 
 Nineteen commits across thirteen stage headings: sixteen layer commits plus the three skeleton commits (1.5a, 3.0, 4.1a) that §3's red-first rule requires. S0 captures evidence and changes nothing; S1–S12 change the app; S8 is four commits. Each one builds, tests and photographs on its own, which is what makes
 `git revert <stage>` a real option rather than a theory.
+
+The count is still nineteen after the eighth pass, because the four steps that pass added ride inside
+commits that already exist rather than opening new ones: 0.1a's `connectedDebugAndroidTest` result goes into
+S0's evidence commit, 1.11a's script hardening into C1, 2.3a's ten-layout margin sweep into C2, and 4.9a's
+`TasksFragmentRenderTest` into C4 — where it belongs, since it is the test that 4.4 and 4.5's layout and
+bind changes must keep green. A step is not a commit; a commit is a point where the whole suite passes.
 
 ---
 
@@ -3069,3 +3537,80 @@ in 1.1.0 (`javap`); `animateAdd` is `public abstract` on `SimpleItemAnimator` an
 `DefaultItemAnimator`, while `animateAddImpl` stays package-private; `dispatchAddStarting` and
 `dispatchAddFinished` are `public final`; and `Wcag.kt` — the block the audit named for `**` — compiles clean
 on its own against nothing but `kotlin-stdlib`, with `kotlin.math.pow` doing the linearisation.
+## 20g — Eighth pass: two fresh reviewers, different mandates, and what each one found
+
+Two agents audited this document from opposite ends, neither asked to approve it. **Reviewer A** worked the
+plan and test quality: compilability, whether each test proves its invariant, contradictions between stages,
+command correctness, spec coverage, arithmetic. **Reviewer B** worked Android feasibility against this
+repository as it is: every source claim re-read at the file and line, `javap` on the artifacts the APK
+resolves, ViewBinding and RecyclerView semantics, realistic sizes, integration risk. Their reports were
+independent, and the overlap between them — the strings ordering, the reflow mechanism, the collapsed-column
+arithmetic, the rail hierarchy, the empty test body — was reached twice from different directions, which is
+why this pass trusts those findings more than the singleton ones.
+
+Between them they produced 47 findings. Nothing below claims a check that was not run: each row's evidence
+column says what was executed or read.
+
+### Confirmed and fixed in this pass
+
+| # | finding | severity | evidence observed | what changed here |
+|---|---|---|---|---|
+| g1 | 1.5 puts `bottomNavigationStyle`, `materialCardViewStyle` and `chipStyle` into `themes.xml`, but those styles are authored in 1.8 — `aapt2 link` fails on a theme reference to a style that does not exist, so the 1.5 commit cannot build | BLOCKER | plan 792-794 against 1026; an independent compile reproduced the same class of link failure | 1.5a now creates `component_styles.xml` with all fifteen `Widget.TaskPlanner.*` names as parent-only stubs, and 1.8 fills the bodies |
+| g2 | `CardPresentation` is production source and names `R.plurals.task_late_days`, `task_due_today_format` and `task_due_tomorrow_format`, which step 4.3b created **after** it | BLOCKER | `grep -c` in `strings.xml` returns 0 for all three; both reviewers, independently | the three entries moved into 4.1a's skeleton commit; 4.3b is a tombstone that says so |
+| g3 | 4.2's collapsed-column test computed `handle.width + dp(4) + rule.width + dp(8)` and asserted `dp(12)` — with the handle `GONE` its width is 0, so the expression is 16dp and the test can never pass | BLOCKER | the arithmetic, plus `TasksAdapter:332`, which hides the handle off `MANUAL` | the handle term is conditioned on visibility, and the 52dp promise is asserted as a measured difference between two bound rows |
+| g4 | Stage 7's acceptance demanded the bar's background differ from `android:colorBackground` by at least 1.3:1 | BLOCKER | recomputed with the plan's own formula: `ink_surface` against `ink_background` is 1.05 light and 1.07 dark, and the best surface token is the variant at 1.21 — nothing in the system reaches 1.3 | the criterion is now the drawn hairline (`ink_outline_strong`, 3.73 / 3.78), with the real figures stated as figures |
+| g5 | Two assertions that cannot fail: `width − padding >= measureText(text)` on `wrap_content` views (the width *is* the text), and `assertFalse(text.endsWith("…"))` (a `TextView`'s text is never the ellipsised string) | BLOCKER | `item_task.xml:116` and `:137` are `wrap_content`; the ellipsis lives in the `Layout`, not in `mText` | both the 1.0 and the 1.3 tests use `layout.getEllipsisCount(...)` plus a containment check against the content edge |
+| g6 | Three blocks do not compile: `val midnight = /* … */` and `val viewModel = /* … */` put a comment where an expression belongs, `present(...)` and `activeFilterCount(...)` were never declared, and an `awaitUntil(...)` is called in an **instrumented** test where no such helper exists | BLOCKER | a compile of the blocks reproduces `expecting an expression`; `grep -rn "fun awaitUntil" app/src/androidTest` is empty while `TaskEditorInstrumentedTest:330` has `waitUntil` | `CardPresentationTest` became a complete file with a real `Calendar` instant, a `present(...)` fixture and a `DAY` companion; 3.6's chip test became a pure `TasksState` count; 3.1 declares the project's own `waitUntil` and `TIMEOUT_MILLIS` |
+| g7 | `TextView(themed, null, 0, R.attr.textAppearanceBody2)` puts a theme **attribute** in the `defStyleRes` slot, where no style is ever resolved, so the view comes back at the platform default and the test fails forever | BLOCKER | the constructor's signature in `android-34`'s `android.jar`; the sibling `sizeSp()` correctly passes a style in that slot | the three-argument form, with the reason written into the test |
+| g8 | The page asserted "emulator-5554 is live" in the present tense and hard-coded that serial in 33 `adb` lines | BLOCKER for the evidence chain | `adb devices -l` now lists only `adb-WCLJBINVEAT4PVGM-…`; `adb -s emulator-5554 get-state` answers `error: device not found`; the attached device reads API 35, `arm64-v8a`, 1220x2712 at 480dpi, `font_scale 0.81`, animation scales 0.5 | §6 resolves the serial into `$S`, records both devices and their measured values in a table, states the per-device density formula, and keeps the emulator's `PASS` as what happened on that device at that commit. 9.5 and 10.x set the font and animation scales instead of inheriting them |
+| g9 | 1.6 wrote the type scale **before** 1.6a wrote its failing test, so the promised red never existed — while §20b recorded that the move had been made | MAJOR | the two checkboxes' order in the document | the test is 1.6 and the implementation is 1.6b, in that order; 1.5a's reference follows |
+| g10 | The rail test asserted `chipGroupCategory.parent.parent`, false today because the `ChipGroup` is the scroller's direct child (`fragment_tasks.xml:72` then `:80`), and `assertSame(view, chipGroupStatus.parent)`, comparing a `CoordinatorLayout` root against an inner `ConstraintLayout` — while the prose put the `Filters · n` chip in the status row that the same test pins to three children | MAJOR | the shipped hierarchy, read line by line | the `categoryBand` wrapper is named as part of 3.6's change, the second assertion became a non-descendant walk, the chip moved into the category band, and the "share one horizontal band" sentence that contradicted spec §4.1 is gone |
+| g11 | 2.1's second test asserted `panel.left <= card.right − panel.width`, which is algebraically the same statement as the first test's `panel.right <= card.right`, so it proved nothing new — and it was satisfied **before** the fix | MAJOR | `panel.left ≡ panel.right − panel.width`; today's numbers are 241 against 233 | equality against the panel's own width, plus `panel.width == 152dp` and a height floor; 2.2's expected-red list is derived from the geometry rather than guessed |
+| g12 | The single-row fixture was itself overdue, so it printed "3 days late" — shorter than the full date the 84dp allowance is defined against, which therefore was never measured | MAJOR | `CardPresentation.dueLine`'s overdue branch | the fixture's default is `now + 30 days`, with the reason stated |
+| g13 | The fixture's category was built `color = 0`, which is transparent, while the test asserted the dot carries the colour | MAJOR | `Category.color` is an `Int` and 0 is `@android:color/transparent` | a real ARGB, and the assertion reads `dot.backgroundTintList.defaultColor`, the mechanism this adapter already uses (`TasksAdapter:237`) |
+| g14 | 9.0's class never read `motion_entry_max`, 9.3 stated the threshold in prose with no code, and 9.4 claimed the item animator tweens a group's height — which no item animator does, two lines under `getChangeDuration() = 0L` | MAJOR | the class body, and `RecyclerView.ItemAnimator`'s API | the ceiling is a holder set with `endAnimation` and `endAnimations` bookkeeping plus a `runningAddCount()` a test can read; 9.4 restates collapse as removes and adds |
+| g15 | 10.1a's variant-surface walk, the two menu files 3.0 creates, `anim.xml`, `bg_pill_neutral.xml`, `CardItemAnimator.kt`, `CardItemAnimatorTest.kt` and the fragment render test were all referenced by steps with no inventory line owning them | MAJOR | §8 against the stage bodies | each is listed; S10's row names the source it edits, and S3's `menu_tasks.xml` row says deleted rather than modified |
+| g16 | `ListGutterTest` asserted `row_min_height >= 48dp`, so collapsing the row to the touch-target floor satisfied it and violated spec §3.4's 56dp | MINOR | the test body against §3.4 | two floors, two numbers, named in the test |
+| g17 | `TypeScaleTest`'s five-attribute test asserted only that `resolveAttribute` succeeded and that five ids were distinct; under an M3 parent an unmapped attribute still resolves and still yields five distinct ids | MAJOR | `StatisticsLayoutTest:655` asserts `assertNotEquals(0, value.resourceId)` for exactly this reason | the non-zero check and a role-size check carried over, with `assertNotEquals` imported |
+| g18 | 1.7a had Stage 1 editing `fragment_tasks.xml`, which S3 and S4 own, contradicting §7 and Stage 1's own acceptance | MAJOR | §8's rows and Stage 1's "no layout changed" line | Stage 1 keeps the dimens and the test; the literal moves to 3.2, and the grep gate is dated to Stage 3 |
+| g19 | 8.4b's parentheticals "(4.4)", "(5.4)", "(8b)" described edits those steps never perform, and claimed a failed read leaves the screen showing nothing while both screens show a `Snackbar` | MAJOR | `fragment_tasks.xml:156` and `:165`, `StatisticsFragment:101`, `ReportFragment:516` | 8.4b owns its edits, cites the lines, and states the snackbar behaviour accurately |
+| g20 | Spec §8's fragment-level Tasks coverage was mapped only to the header tests, leaving groups, the empty state and the closed panel with no fragment-level assertion | MAJOR | spec §8 against §17 | step 4.9a adds `TasksFragmentRenderTest`, patterned on the project's one existing fragment-level test, `ui/util/WorkAdjustmentUiTest` |
+| g21 | `colors.xml:4-25` was cited for sixteen names, four of which live at 28-31; and the three dead `*_dark` colours are declared in **both** files, so a night-only deletion left three behind | MINOR | `status_todo:28` through `status_paused:31`; `values/colors.xml:9,11,15` | the range is 4-31, and the deletion says both files, naming the three readers at `values-night/themes.xml:15,16,19` |
+| g22 | `python scripts/contrast_report.py --resources … --check` does not report a missing token — it raises `KeyError: 'ink_error'` | MAJOR | run at this commit; the traceback is the output | 1.11a hardens the script to print `MISSING <theme> <token>` and keep the non-zero exit, and 1.11 now says what the tool does today |
+| g23 | `TasksScreenInstrumentedTest:56` clicks `navigation_statistics` and asserts `contentGroup`, which exists only in `fragment_profile.xml:19` and `fragment_category_detail.xml:15` | MAJOR, and a **critical premise** rather than a plan detail | `grep -c contentGroup app/src/main/res/layout/fragment_statistics.xml` returns `0`; CI runs `assembleDebugAndroidTest` only, so no job ever instrumented | 0.1a runs `connectedDebugAndroidTest` before C1, records the real pass list, and fixes that assertion in its own pre-redesign commit. §14's third criterion is measured from then on, and §2 states plainly that the 17 methods were counted, not executed |
+| g24 | "Line B reflows onto two lines at font scale 1.3" had **no mechanism**: a `ConstraintLayout` horizontal chain cannot wrap, while the plan mandates one `cardContent` for all three lines and locks `taskTitle.parent == workRow.parent` | BLOCKER | the spec's own structure rule against chain semantics | 4.4 names a `Flow` helper (`app:flow_wrapMode="chain"`, constraintlayout 2.1.4, already the resolved artifact) over pill, date and name. A helper does not reparent, so the locked sibling assertion survives; `lineBFlow` is declared in 4.1a, and the reflow is asserted as `due.top > pill.top` at 1.3 against equality at 1.0 |
+| g25 | 9.1's payload branch repainted the pill and nothing else, while status also drives the four `show*` visibilities — so a paused card kept offering Start, wired to `startTask` | BLOCKER | `TasksAdapter:320-323`, and spec §4.1's one-control-per-status rule | the branch's scope is written out: pill, the four visibilities, the holder's stored row; only the work measure and the category text are skipped, and §9.5 names the status-change test that catches a future omission |
+| g26 | The closed-panel fixture measured with `UNSPECIFIED` height, where `ViewGroup.getChildMeasureSpec` maps a `match_parent` child to 0, so the panel was zero-high and both vertical assertions passed on an empty rectangle | MAJOR | the shipped `actionPanel` is `layout_height="match_parent"` (`item_task.xml:12`) | a two-pass measure — learn the height, then give it `EXACTLY` — plus a `panel.height >= 40dp` guard in both tests |
+| g27 | The `layout_marginVertical` correction was applied to `item_task.xml` only, while ten layouts carry API-26 margins, `item_group_header.xml` among them, and lint never flags it | MAJOR | `grep -rl "layout_marginHorizontal\|layout_marginVertical" app/src/main/res/layout` lists exactly ten; `app/lint-baseline.xml` has no `UnusedAttribute` entry and the lint report has zero | step 2.3a converts all ten in Stage 2 and makes the grep a §14 gate; spec §2.1 states the inset as two margins (spec revision 9) |
+| g28 | 3.7 moved the `selectionBar` id onto the include, which leaves the `MaterialCardView` with no reachable id and no settable visibility, because `binding.selectionBar`'s root is the **included** root — and its test body was a single comment, so it passed either way | MAJOR | ViewBinding's include semantics; the empty `@Test` in the plan | `bar_selection.xml`'s root is the card itself, and the test asserts both directions of the header and bar swap |
+| g29 | 3.1's `rowCount()` was the adapter's `itemCount`, which counts `GroupHeader` rows too (`TasksViewModel.render:255-277`), so "two seeded, one after filtering" depended on whether the account on the device uses groups | MINOR | the render code | it counts `TasksListItem.TaskRow` instances through `currentList` |
+| g30 | The performance metric "the flattened row must measure fewer views" contradicts 4.4, which keeps all 23 ids and adds four more, taking 26 to about 30 | MAJOR | 4.4's own id list | 10.5 measures what costs — row height and a 20-fling frame-stats p95 against the 0.4 baseline — and spec §7's sentence now reads "flatter to lay out". §6's density pairs are stated per device with the formula |
+| g31 | The `FAIL` branch of the APK-identity script printed `local=$DEV`, labelling the device hash as local; §8's S7 row contained a double negative | MINOR | the script line, the table cell | `FAIL local=$LOCAL device=$DEV pulled=$PULLED`, and the sentence now reads "and **not** `MainActivity.kt`" |
+
+### Rejected with evidence
+
+| finding | why it does not hold |
+|---|---|
+| "§0.2's pairs 240 for 360dp and 270 for 320dp are wrong; the panel is 1220px, so they are 610 and 542" | Correct arithmetic, wrong panel. Those pairs belong to the `540x1140` record measured there: `540 / (360/160) = 240` and `540 / (320/160) = 270`. The 610 and 542 figures are the *handset's* answers to the same formula. What was genuinely wrong is carrying one device's table as universal, which is why §6 and §0.2 now state `density = px_width / dp_width × 160` and give all three panels' numbers |
+| "The card's overdue predicate can disagree with the dashboard's" (raised again in this pass) | It cannot, and the reason is in the SQL: `TaskStatisticsDao.kt:76-77` restricts its `WHERE` to `is_deleted = 0 AND archived = 0 AND UPPER(status) NOT IN ('COMPLETED','DONE')`, and `:63` adds `due_date IS NOT NULL AND due_date < :now`. `CardPresentation`'s extra `status != COMPLETED` is a subset of a population the query already excludes, so the two cannot diverge. The drift test in 4.1 stays as the guard |
+| "The 13-callback `TasksAdapter` constructor in the snippets will not match the real one" | It matches: `TasksAdapter.kt:27-41` is exactly the callback list every fixture here writes, and `reorderEnabled` and `selectionMode` are public `var`s at `:43`. `CardPresentationTest`, which builds a real `Task`, compiles against the app's own classes (g6) |
+
+### Confirmed, open at the end of this pass
+
+| finding | severity | why it is still open, and what closes it |
+|---|---|---|
+| §16 calls a stage one revertible unit while §18 gives three stages two or three commits each (the skeletons) | MINOR, wording | §16 should read "revert the change commit and its skeleton together, or neither". One sentence, left to the next document edit so this pass's diff stays reviewable; execution is not ambiguous, because §18 names the commits |
+| 4.5 sets the priority rule `INVISIBLE` for LOW while the budget arithmetic assumes a `GONE` left column contributes no width | MINOR | these are different columns — the rule keeps its 4dp to avoid jitter, the handle is what collapses — and the plan should say so rather than leave the reader to reconcile 2022 with the 64dp and 12dp arithmetic. It does not block Stage 4 |
+| Stage 2's stated S1 dependency is not the one its test reads | MINOR | Stage 2's precondition should name `bg_row_backdrop`, `card_gap` and `spacing_xs` rather than "`ink_*`". The real dependency is satisfied either way |
+| The opened-row 8dp gutter: `bg_row_backdrop` is the panel's background, so it is clipped to the panel's own rect and the strip to its right stays the window background | MINOR, and acknowledged in spec §2.1 | the fix is to move the backdrop to the row root while a row is open; 2.4's visual check will see it. Spec §2.1 already declares the gutter accepted rather than discovered late, so this is an honesty line, not a hidden defect |
+| `android:lineHeight` is API 28 and the floor is 24 | MINOR | 1.6 pins it with `tools:targetApi="28"` and the tests read `textSize`, so nothing asserts a 24-27 device behaves like the emulator. The plan should state that line spacing falls back to font metrics below 28 instead of leaving it implied; 10.2's device pass covers what unit tests cannot |
+
+### What this pass says about the six before it
+
+The seventh pass compiled this document's code and still left g1, g2, g7, g24 and g25 standing. A compile
+with **stubbed** resources proves a reference is well-formed and nothing more: it could not see that
+`R.plurals.task_late_days` would not exist until two commits later (g2), no compiler has ever rejected a
+layout that cannot wrap (g24), and no type checker objects to a payload branch that repaints half a row
+(g25). Two of the three items here that were rated critical came from reading the repository, and one —
+g23, §14's instrumented premise — came from noticing that a number was *counted* where a *run* was implied.
+That is the reason §3's rule now names, for every check, the thing it cannot prove.

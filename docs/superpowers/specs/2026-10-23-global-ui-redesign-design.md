@@ -5,9 +5,10 @@ Branch: `feat/global-ui-redesign` (one branch, one PR, staged commits)
 Baseline: `master` = `origin/master` = `c2c767d1b80db756c1a3517eecc083de598ff7af` (merge of PR #21)
 Direction approved by the user: **Ink & Accent**.
 
-Revision 8. The header and the body had drifted apart — revisions 4 through 7 were each committed with
-their own correction notes in place while this line still read "revision 3", which is what an audit of the
-downloaded copy caught. The history, in order:
+Revision 9. The header names this document's newest table row: revisions 4 through 7 each landed with their
+own correction notes in place while this line still read "revision 3", which is what an audit of the
+downloaded copy caught, and the rule since then is that a header must name its own newest row.
+The history, in order:
 
 | revision | what moved | commit |
 |---|---|---|
@@ -19,6 +20,7 @@ downloaded copy caught. The history, in order:
 | 6 | five errors two reviews found: the budget, the `letterSpacing` unit, the pill allowance, five distinct text styles, the ramp staged twice, `@dimen/text_caption`'s reader | `422d7cd` |
 | 7 | the budget meets font scale 1.3 and loses: the card grows rather than the type shrinking, plus four arithmetic and count corrections | `ee75e61` |
 | 8 | §5 motion rewritten around the item animator after the plan's version proved non-overridable; the rail split into a scrolling category row and a fixed status row; the chart ramp given its own base token so stage 1 cannot move it by aliasing | `d1839a8` + this commit |
+| 9 | §2.1's inset written as two margins rather than `layout_marginVertical`, because API 26 attributes are dropped silently on this app's API 24 floor — the same reason the plan's 2.3a sweeps nine more layouts | this commit |
 
 Revision 3's own note, kept because it explains why §3.2 is generated: an independent review of revision 1
 falsified six of its claims against the source, and revision 2's contrast section then proved to carry two
@@ -162,8 +164,11 @@ Two consequences, both visible on every row with no interaction:
 - horizontally, the panel's right edge sits at the FrameLayout edge while the card's stops 8dp short, so
   8dp of the delete button is exposed down the right side — the red column.
 
-Fix: the panel gets `layout_marginEnd="8dp"` and `layout_marginVertical="4dp"`, matching the card's
-insets, so the panel's rectangle coincides with the card's while closed.
+Fix: the panel gets `layout_marginEnd="8dp"` and a 4dp top and bottom inset, matching the card's
+insets, so the panel's rectangle coincides with the card's while closed. The inset is written as
+`layout_marginTop` and `layout_marginBottom`, not `layout_marginVertical`: the vertical pair is API 26 and
+this app's floor is 24, where it is dropped silently — so the strip would return on exactly the older
+devices the fix is for, and a Robolectric test running at SDK 34 could not see it.
 
 > Correction from review: revision 1 said `layout_marginStart`. For a `gravity="end"` child `marginStart`
 > does not move the right edge, so the red strip would have survived.
@@ -644,7 +649,8 @@ Screenshots of every combination are kept, not asserted.
 ## 7. Performance
 
 No new dependency. `RecyclerView` keeps its adapter and diffing; the card layout is flattened from today's
-266-line nesting so each row measures less. No image loading and no bitmap cache — the avatar is an
+266-line nesting so the row is flatter to lay out — fewer nested groups, not necessarily fewer views, since
+the ids the tests read are kept. No image loading and no bitmap cache — the avatar is an
 initial, per §1. Scroll performance is compared before and after on the same seeded account size.
 
 ## 8. Verification
