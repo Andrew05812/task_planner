@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The actions that are not about order: make a topic, and leave the screen for the two places a task
+     goes when it stops being in the list. Reached from the header's kebab.
+
+     `action_search` used to be here as a SearchView item. It is gone because the header carries a real
+     search field instead — a menu item cannot be drawn in an app with no Toolbar, which is what four of
+     these five actions had been waiting on since the first stage. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/action_new_group"
+        android:title="@string/new_group" />
+
+    <item
+        android:id="@+id/action_archive"
+        android:title="@string/action_archive" />
+
+    <item
+        android:id="@+id/action_work_history"
+        android:title="@string/action_work_history" />
+</menu>

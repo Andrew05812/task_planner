@@ -10,6 +10,16 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <!-- The screen's own header: its name, what the list holds, and the three controls that reach
+             search, sort and the rest of the actions. Selection mode replaces it — see the barrier below —
+             rather than stacking a second bar on top of it. -->
+        <include
+            android:id="@+id/tasksHeader"
+            layout="@layout/header_screen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <!-- Mass-actions bar (selection mode) -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/selectionBar"
@@ -69,13 +79,24 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- The rail sits under whichever of the two occupies the slot. A Barrier takes the lower edge of
+             the header and the selection bar, and a GONE widget contributes its own collapsed position, so
+             the list starts under the bar while selecting and under the header otherwise — without the
+             fragment having to move constraints at runtime. -->
+        <androidx.constraintlayout.widget.Barrier
+            android:id="@+id/headerBarrier"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:barrierDirection="bottom"
+            app:constraint_referenced_ids="tasksHeader,selectionBar" />
+
         <HorizontalScrollView
             android:id="@+id/categoryScroll"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:scrollbars="none"
-            app:layout_constraintTop_toBottomOf="@id/selectionBar">
+            app:layout_constraintTop_toBottomOf="@id/headerBarrier">
 
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/chipGroupCategory"

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- How the list is ordered. Reached from the header's sort button, because the app runs a NoActionBar
+     theme and these entries used to live in a menu that was never drawn. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/action_sort_manual"
+        android:title="@string/sort_manual" />
+
+    <item
+        android:id="@+id/action_sort_by_date"
+        android:title="@string/sort_by_date" />
+
+    <item
+        android:id="@+id/action_sort_by_priority"
+        android:title="@string/sort_by_priority" />
+
+    <item
+        android:id="@+id/action_sort_by_name"
+        android:title="@string/sort_by_name" />
+</menu>

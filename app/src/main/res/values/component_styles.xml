@@ -122,6 +122,17 @@
         <item name="boxStrokeWidth">1dp</item>
     </style>
 
+    <!-- A control that says what it is by its shape alone, so it carries a contentDescription at every use
+         site and a touch target that does not depend on the glyph's size. -->
+    <style name="Widget.TaskPlanner.IconButton" parent="android:Widget.ImageButton">
+        <item name="android:layout_width">@dimen/touch_target_min</item>
+        <item name="android:layout_height">@dimen/touch_target_min</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:padding">@dimen/spacing_small</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:tint">@color/ink_text_secondary</item>
+    </style>
+
     <style name="Widget.TaskPlanner.BottomBar" parent="Widget.Material3.BottomNavigationView">
         <item name="itemActiveIndicatorStyle">@style/Widget.TaskPlanner.BottomBar.Indicator</item>
         <item name="elevation">0dp</item>

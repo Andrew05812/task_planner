@@ -184,6 +184,12 @@
     <string name="group_task_count_format">%1$d</string>
     <string name="drag_to_reorder">Drag to reorder</string>
     <string name="select_task">Select task</string>
+    <!-- The screen header: what the list holds, and the three controls beside its title. -->
+    <string name="header_search_hint">Search tasks</string>
+    <string name="header_more_actions">More actions</string>
+    <string name="tasks_open_count_format">%1$d open</string>
+    <string name="filters_count_format">Filters · %1$d</string>
+    <string name="filters_clear_all">Clear all filters</string>
     <string name="error_no_profile_first">Create a profile first</string>
     <string name="settings_local_data">Local data</string>
     <string name="migrate_local_data">Move local data into this account</string>

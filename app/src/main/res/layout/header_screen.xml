@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -8,19 +10,80 @@
     android:paddingTop="@dimen/spacing_normal"
     android:paddingBottom="@dimen/spacing_small">
 
-    <!-- A screen's name, and the one line that says what is in it. Stage 3 puts the actions beside the
-         title; the slot belongs to the screen, not to the header, so a screen and its header are included
-         as one thing and stay aligned with every other screen. -->
-    <TextView
-        android:id="@+id/headerTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textAppearance="@style/TextAppearance.TaskPlanner.Headline" />
+    <!-- A screen's name, the one line that says what is in it, and the actions the screen offers.
+         The slot belongs to the screen, not to the header, so a screen and its header are included as one
+         thing and stay aligned with every other screen.
 
-    <TextView
-        android:id="@+id/headerSubtitle"
-        android:layout_width="wrap_content"
+         The three buttons are the reason this file exists. `menu_tasks.xml` has declared search, sort, new
+         group, archive and work history since the first stage, and `TasksFragment` wired all five — but the
+         app runs a NoActionBar theme with no Toolbar anywhere, so the menu was never drawn and four
+         features had no way in. They live here instead, beside the title they act on. -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/spacing_xs"
-        android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/headerTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Headline"
+                tools:text="Tasks" />
+
+            <TextView
+                android:id="@+id/headerSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                tools:text="9 open" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/headerSearchButton"
+            style="@style/Widget.TaskPlanner.IconButton"
+            android:contentDescription="@string/action_search"
+            android:src="@drawable/ic_search" />
+
+        <ImageButton
+            android:id="@+id/headerSortButton"
+            style="@style/Widget.TaskPlanner.IconButton"
+            android:contentDescription="@string/action_sort"
+            android:src="@drawable/ic_sort" />
+
+        <ImageButton
+            android:id="@+id/headerMenuButton"
+            style="@style/Widget.TaskPlanner.IconButton"
+            android:contentDescription="@string/header_more_actions"
+            android:src="@drawable/ic_more_vert" />
+    </LinearLayout>
+
+    <!-- Away until asked for: a search box that is always on screen spends the list's height on a
+         question most visits do not ask. The magnifier opens it and focuses it. -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/headerSearchLayout"
+        style="@style/Widget.TaskPlanner.Field"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:hint="@string/header_search_hint"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/headerSearchField"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1" />
+    </com.google.android.material.textfield.TextInputLayout>
 </LinearLayout>
