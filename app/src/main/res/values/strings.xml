@@ -194,6 +194,7 @@
     <string name="repeat_icon_description">Repeats</string>
     <string name="task_due_today_format">Today %1$s</string>
     <string name="task_due_tomorrow_format">Tomorrow %1$s</string>
+    <string name="task_late_today">Late today</string>
     <plurals name="task_late_days">
         <item quantity="one">%d day late</item>
         <item quantity="other">%d days late</item>
@@ -249,7 +250,8 @@
     <string name="repeats_every_n_years">repeats every N years</string>
     <string name="series_short_paused">series paused</string>
     <string name="series_short_ended">series stopped</string>
-    <string name="task_due_repeats_format">%1$s · %2$s</string>
+    <!-- `task_due_repeats_format` ("%1$s · %2$s") went with the rate: the due line no longer prints one.
+         The rate itself is now the repeat icon's content description, in these same words. -->
 
     <string name="repeat_unit_days">Days between repeats</string>
     <string name="repeat_unit_weeks">Weeks between repeats</string>

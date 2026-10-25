@@ -7,9 +7,7 @@
 
     <!-- The action panel, inset to exactly the card's own gutter so a closed row shows none of it, and
          painted with the row's backdrop rather than two full-bleed colour slabs. The card slides left over
-         it to reveal it. It used to carry no margins at all while the card above it carried 8dp and 4dp,
-         which is why every closed row in the audit photographs showed a band along the top and a red
-         column down the right. -->
+         it to reveal it. -->
     <LinearLayout
         android:id="@+id/actionPanel"
         android:layout_width="wrap_content"
@@ -46,170 +44,219 @@
         android:id="@+id/taskCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginEnd="8dp"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="4dp"
+        android:layout_marginStart="@dimen/card_gap"
+        android:layout_marginEnd="@dimen/card_gap"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:layout_marginBottom="@dimen/spacing_xs"
         app:cardElevation="2dp">
 
+        <!-- Three lines, one ConstraintLayout.
+
+             The lines are spec §4.1's, and they are the same at 320dp and at 393dp on purpose: a card that
+             rearranges itself between widths is two cards to maintain, and one of them is never tested.
+             They are siblings rather than three nested containers because `TaskCardWorkTest` asserts that
+             the work line is a sibling of the title, and a per-line wrapper would break a test that is
+             measuring something else entirely.
+
+             The padding lives here, on the content, not on the card: the width budget is arithmetic against
+             this layout's own edges, and a MaterialCardView padding itself would clip its own ripple. -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/cardContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="12dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp">
+            android:minHeight="@dimen/row_min_height"
+            android:paddingStart="@dimen/card_padding_horizontal"
+            android:paddingEnd="@dimen/card_padding_horizontal"
+            android:paddingTop="@dimen/card_padding_vertical"
+            android:paddingBottom="@dimen/card_padding_vertical">
 
-            <!-- Declared here and placed in 4.4: the three parts of the card's three-line structure that
-                 the presentation tests name by id. All three are away for now, so this commit changes no
-                 rendering — it only makes the next two commits compile. -->
-            <View
-                android:id="@+id/categoryDot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:background="@drawable/bg_category_dot"
-                android:visibility="gone"
-                tools:visibility="visible" />
-
-            <ImageView
-                android:id="@+id/repeatIcon"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:contentDescription="@string/repeat_icon_description"
-                android:src="@drawable/ic_repeat"
-                android:visibility="gone"
-                app:tint="@color/ink_text_tertiary"
-                tools:visibility="visible" />
-
-            <androidx.constraintlayout.helper.widget.Flow
-                android:id="@+id/lineBFlow"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:visibility="gone"
-                app:flow_horizontalGap="8dp"
-                app:flow_wrapMode="chain" />
-
+            <!-- The left column: 48dp handle, 4dp gap, 4dp rule, 8dp gap = 64dp before any text begins.
+                 The check takes the handle's place while selecting, at the same width, so the column does
+                 not move between the two modes. -->
             <ImageView
                 android:id="@+id/selectionCheck"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginEnd="8dp"
+                android:layout_width="@dimen/touch_target_min"
+                android:layout_height="@dimen/touch_target_min"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/select_task"
+                android:padding="12dp"
                 android:src="@drawable/ic_radio_unchecked"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:tint="?attr/colorPrimary" />
+                app:tint="@color/ink_accent"
+                tools:visibility="visible" />
 
             <ImageView
                 android:id="@+id/dragHandle"
-                android:layout_width="24dp"
-                android:layout_height="40dp"
+                android:layout_width="@dimen/touch_target_min"
+                android:layout_height="@dimen/touch_target_min"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/drag_to_reorder"
-                android:padding="2dp"
+                android:padding="12dp"
                 android:src="@drawable/ic_drag_handle"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toEndOf="@id/selectionCheck"
                 app:layout_constraintTop_toTopOf="parent"
-                app:tint="?android:attr/textColorSecondary" />
+                app:tint="@color/ink_text_tertiary" />
 
             <View
                 android:id="@+id/priorityIndicator"
-                android:layout_width="4dp"
+                android:layout_width="@dimen/priority_rule_width"
                 android:layout_height="0dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="@dimen/spacing_xs"
                 android:background="@drawable/bg_priority_indicator"
-                app:layout_constraintBottom_toBottomOf="@id/taskDescription"
+                app:layout_constraintBottom_toBottomOf="@id/buttonGroup"
+                app:layout_goneMarginStart="0dp"
                 app:layout_constraintStart_toEndOf="@id/dragHandle"
-                app:layout_constraintTop_toTopOf="@id/taskTitle" />
+                app:layout_constraintTop_toTopOf="@id/taskTitle"
+                tools:background="@color/ink_error" />
+
+            <!-- Line A: the dot carries the category colour — never the word, which is what made the pale
+                 category greens in the audit photograph measure 1.41:1 against the card. Then the title,
+                 then the marks for what is present on the task. -->
+            <View
+                android:id="@+id/categoryDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:background="@drawable/bg_category_dot"
+                app:layout_constraintBottom_toBottomOf="@id/taskTitle"
+                app:layout_constraintStart_toEndOf="@id/priorityIndicator"
+                app:layout_constraintTop_toTopOf="@id/taskTitle"
+                tools:background="@color/ink_accent" />
 
             <TextView
                 android:id="@+id/taskTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="@dimen/spacing_small"
                 android:ellipsize="end"
                 android:maxLines="2"
-                android:textAppearance="?attr/textAppearanceSubtitle1"
-                app:layout_constraintEnd_toStartOf="@id/buttonGroup"
-                app:layout_constraintStart_toEndOf="@id/priorityIndicator"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Title"
+                app:layout_constraintEnd_toStartOf="@id/repeatIcon"
+                app:layout_constraintStart_toEndOf="@id/categoryDot"
                 app:layout_constraintTop_toTopOf="parent"
-                tools:text="Task Title" />
+                tools:text="A title long enough to wrap onto its second line and then truncate" />
 
-            <TextView
-                android:id="@+id/taskDescription"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="2"
-                android:textAppearance="?attr/textAppearanceBody2"
-                app:layout_constraintEnd_toEndOf="@id/taskTitle"
-                app:layout_constraintStart_toStartOf="@id/taskTitle"
-                app:layout_constraintTop_toBottomOf="@id/taskTitle"
-                tools:text="Task Description" />
-
-            <TextView
-                android:id="@+id/taskDueDate"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textAppearance="?attr/textAppearanceCaption"
-                app:layout_constraintStart_toStartOf="@id/taskTitle"
-                app:layout_constraintTop_toBottomOf="@id/taskDescription"
-                tools:text="Due: Today" />
-
-            <TextView
-                android:id="@+id/taskCategory"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:textAppearance="?attr/textAppearanceCaption"
-                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
-                app:layout_constraintStart_toEndOf="@id/taskDueDate"
-                app:layout_constraintTop_toTopOf="@id/taskDueDate"
-                tools:text="Work" />
-
-            <TextView
-                android:id="@+id/taskStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:textAppearance="?attr/textAppearanceCaption"
-                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
-                app:layout_constraintStart_toEndOf="@id/taskCategory"
-                app:layout_constraintTop_toTopOf="@id/taskDueDate"
-                tools:text="In progress" />
+            <ImageView
+                android:id="@+id/repeatIcon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:contentDescription="@string/repeat_icon_description"
+                android:src="@drawable/ic_repeat"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="@id/taskTitle"
+                app:layout_constraintEnd_toStartOf="@id/reminderBadge"
+                app:layout_constraintTop_toTopOf="@id/taskTitle"
+                app:tint="@color/ink_text_tertiary"
+                tools:visibility="visible" />
 
             <ImageView
                 android:id="@+id/reminderBadge"
                 android:layout_width="16dp"
                 android:layout_height="16dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="@dimen/spacing_xs"
                 android:contentDescription="@string/reminder_badge_description"
                 android:src="@drawable/ic_reminder"
                 android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
-                app:layout_constraintStart_toEndOf="@id/taskStatus"
-                app:layout_constraintTop_toTopOf="@id/taskDueDate"
-                app:tint="?attr/colorPrimary" />
+                app:layout_constraintBottom_toBottomOf="@id/taskTitle"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="@id/taskTitle"
+                app:tint="@color/ink_text_secondary"
+                tools:visibility="visible" />
 
-            <!-- Measured time: the total the task has cost, the live figure while a stretch runs, and
-                 the one control that starts, pauses or resumes it. Its own row so the status buttons and
-                 the swipe panel keep the places they had. -->
-            <LinearLayout
-                android:id="@+id/workRow"
+            <TextView
+                android:id="@+id/taskDescription"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+                android:textColor="@color/ink_text_secondary"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="@id/taskTitle"
+                app:layout_constraintStart_toStartOf="@id/taskTitle"
+                app:layout_constraintTop_toBottomOf="@id/taskTitle"
+                tools:text="A description, when the task has one"
+                tools:visibility="visible" />
+
+            <!-- Line B: the status pill, then the relative date, then the category name. A `Flow` helper
+                 rather than a horizontal chain, because a chain cannot wrap: at font scale 1.3 the pill and
+                 the widest date need more than the 208dp column, and a chain would squeeze all three into
+                 one row and clip the date — the outcome spec §4.1 forbids. A helper positions children that
+                 stay direct children of `cardContent`, which is what keeps line C a sibling of the title.
+
+                 The pill wears the `pill` role, not the `label` role: same size, and the difference is that
+                 `label` sets all caps, which would measure "IN PROGRESS" at about 105dp — half the narrowest
+                 column, and the reason spec §4.1's 82dp allowance is written against the pill role. -->
+            <androidx.constraintlayout.helper.widget.Flow
+                android:id="@+id/lineBFlow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
+                app:constraint_referenced_ids="taskStatus,taskDueDate,taskCategory"
+                app:flow_horizontalGap="@dimen/spacing_small"
+                app:flow_verticalGap="@dimen/spacing_xs"
+                app:flow_wrapMode="chain"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="@id/taskTitle"
-                app:layout_constraintTop_toBottomOf="@id/taskDueDate">
+                app:layout_constraintTop_toBottomOf="@id/taskDescription" />
+
+            <!-- The pill's own geometry: 8dp of horizontal padding is the width the spec's 82dp allowance
+                 budgets for, and the 2dp above and below is the inset that makes the rounded ends read as a
+                 pill rather than a chip. It is not a gap between views, so it is not drawn from the
+                 `spacing_*` scale that governs those. -->
+            <TextView
+                android:id="@+id/taskStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_pill_neutral"
+                android:paddingStart="@dimen/spacing_small"
+                android:paddingTop="2dp"
+                android:paddingEnd="@dimen/spacing_small"
+                android:paddingBottom="2dp"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Pill"
+                android:textColor="@color/ink_text_secondary"
+                tools:text="In progress" />
+
+            <TextView
+                android:id="@+id/taskDueDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                android:textColor="@color/ink_text_secondary"
+                tools:text="Nov 23, 2026" />
+
+            <TextView
+                android:id="@+id/taskCategory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                android:textColor="@color/ink_text_tertiary"
+                tools:text="Диссертация" />
+
+            <!-- Line C: what the task has cost, and the actions. The figures give way before the buttons do
+                 — a number that has to shrink was never the point of the row, while a control under 48dp is
+                 a control a thumb misses. All five buttons live in the cluster now, which is where the spec
+                 puts them: the work control, the one lifecycle button the status calls for, and completion.
+                 The work control left `workRow` for this, and `TaskCardWorkTest` reaches it by id, so the
+                 move changes where it is drawn and nothing about what it does. -->
+            <LinearLayout
+                android:id="@+id/workRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                app:layout_constrainedWidth="true"
+                app:layout_constraintEnd_toStartOf="@id/buttonGroup"
+                app:layout_constraintHorizontal_bias="0"
+                app:layout_constraintStart_toStartOf="@id/taskTitle"
+                app:layout_constraintTop_toBottomOf="@id/lineBFlow">
 
                 <View
                     android:id="@+id/workDot"
@@ -218,89 +265,89 @@
                     android:background="@drawable/bg_work_dot"
                     android:visibility="gone" />
 
+                <!-- The figure pairs with the dot the way line A's title pairs with the category dot: a
+                     `spacing_xs` gap, so the two read as one element rather than two. -->
                 <TextView
                     android:id="@+id/workTime"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:textAppearance="?attr/textAppearanceCaption"
+                    android:layout_marginStart="@dimen/spacing_xs"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                    android:textColor="@color/ink_text_secondary"
                     tools:text="1 h 45 min" />
 
                 <TextView
                     android:id="@+id/workTicker"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textAppearance="?attr/textAppearanceCaption"
+                    android:layout_marginStart="@dimen/spacing_xs"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                    android:textColor="@color/ink_text_secondary"
                     android:visibility="gone"
-                    tools:text="01:24:35" />
-
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
-                <ImageButton
-                    android:id="@+id/workControlButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/work_start"
-                    android:padding="8dp"
-                    android:src="@drawable/ic_play"
-                    app:tint="?attr/colorPrimary" />
+                    tools:text="01:24:35"
+                    tools:visibility="visible" />
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/buttonGroup"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
                 android:orientation="horizontal"
-                app:layout_constraintBottom_toBottomOf="@id/taskDueDate"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="@id/taskTitle">
+                app:layout_constraintTop_toBottomOf="@id/lineBFlow">
 
                 <ImageButton
                     android:id="@+id/startTaskButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="@dimen/touch_target_min"
+                    android:layout_height="@dimen/touch_target_min"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/start_task"
-                    android:padding="8dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_play"
-                    app:tint="?attr/colorPrimary" />
+                    app:tint="@color/ink_text_secondary" />
 
                 <ImageButton
                     android:id="@+id/pauseTaskButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="@dimen/touch_target_min"
+                    android:layout_height="@dimen/touch_target_min"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/pause_task"
-                    android:padding="8dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_pause"
-                    app:tint="@color/status_paused" />
+                    app:tint="@color/ink_text_secondary" />
 
                 <ImageButton
                     android:id="@+id/resumeTaskButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="@dimen/touch_target_min"
+                    android:layout_height="@dimen/touch_target_min"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/resume_task"
-                    android:padding="8dp"
-                    android:src="@drawable/ic_play"
-                    app:tint="@color/status_paused" />
+                    android:padding="12dp"
+                    android:src="@drawable/ic_resume"
+                    app:tint="@color/ink_text_secondary" />
 
                 <ImageButton
                     android:id="@+id/completeTaskButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:layout_width="@dimen/touch_target_min"
+                    android:layout_height="@dimen/touch_target_min"
+                    android:background="@drawable/bg_action_complete"
                     android:contentDescription="@string/complete_task"
-                    android:padding="8dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_check"
-                    app:tint="@color/status_done" />
-            </LinearLayout>
+                    app:tint="@color/ink_on_accent" />
 
+                <ImageButton
+                    android:id="@+id/workControlButton"
+                    android:layout_width="@dimen/touch_target_min"
+                    android:layout_height="@dimen/touch_target_min"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/work_start"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_work"
+                    app:tint="@color/ink_accent" />
+            </LinearLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
     </com.google.android.material.card.MaterialCardView>
 </FrameLayout>

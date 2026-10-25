@@ -1920,7 +1920,7 @@ Purpose: the card itself. Depends on: S3 (the header sets the sort order the car
 Tools: `frontend-design`, `android-jetpack`, `design-review:accessibility-review`,
 `design-review:responsive-design`.
 
-- [ ] **4.1 Write the presentation model and its tests first.** New
+- [x] **4.1 Write the presentation model and its tests first.** New
   `app/src/main/java/com/taskplanner/ui/tasks/CardPresentation.kt`. It is pure display code: it reads what
   is already on the row, writes nothing, and takes `now` as a parameter (spec §0).
 
@@ -2144,7 +2144,13 @@ class CardPresentationTest {
   writes, so this class is written after 1.4 and before 4.1's implementation — its RED is the four
   behaviours above, none of which today's adapter performs.
 
-- [ ] **4.1a Skeleton for the card.** Declare `cardContent`, `categoryDot`, `repeatIcon` and `lineBFlow` in
+  *Executed.* The class is the plan's, with two additions the tests asked for: `repeatDescriptionRes`,
+  because spec §4.1 moves the rate to the line-A icon and the icon then has to say what the due line used to
+  say; and a "late today" branch — the plan's `dueLine` printed "0 days late" for a deadline that passed nine
+  hours ago, which is a sentence about nothing, so the day count now starts when the date has actually rolled
+  over (`task_late_today`).
+
+- [x] **4.1a Skeleton for the card.** Declare `cardContent`, `categoryDot`, `repeatIcon` and `lineBFlow` in
   `item_task.xml` inside the existing structure, and `CardPresentation` as a data class with the fields and no logic, in one commit. 4.1's and 4.2's tests then compile and fail on behaviour. Without this step the predicted RED in 4.3 is a compile error, which is the mistake §3's rule exists to prevent.
 
   The same commit adds the copy `CardPresentation` names, because it is production source under
@@ -2157,7 +2163,7 @@ class CardPresentationTest {
   rather than duplicated. An earlier draft put this in a step after 4.3, which meant 4.1's own commit could
   not build — the strings landed two commits after the code that names them.
 
-- [ ] **4.2 Write the width-budget test** — `TaskCardWidthBudgetTest`, the 320dp contract. It measures, not
+- [x] **4.2 Write the width-budget test** — `TaskCardWidthBudgetTest`, the 320dp contract. It measures, not
   eyeballs:
 
 ```kotlin
@@ -2492,15 +2498,29 @@ class TaskCardWidthBudgetTest {
 }
 ```
 
-- [ ] **4.3 Run 4.1 and 4.2 and watch them fail.** They compile — 4.1a declared the ids, the data class and
+  *Executed.* The JVM class measures the laid-out row; a second class, `TaskCardWidthBudgetInstrumentedTest`,
+  measures what a JVM cannot: Robolectric's LEGACY graphics answer `Paint.measureText` with the character count
+  and ignore `textSize`, and `@GraphicsMode(NATIVE)` has no platform binary on this machine, so the glyph-bound
+  claims — the date and the status word drawn whole, line B's reflow, the 82dp and 84dp allowances, the 48dp
+  name rule — are asserted on the device at six configurations instead of being guessed at here.
+
+- [x] **4.3 Run 4.1 and 4.2 and watch them fail.** They compile — 4.1a declared the ids, the data class and
   the strings — and they fail on behaviour: the pill is still the old uncapped caption so its allowance is exceeded, the category name is still drawn at 320dp, and `priorityIndicator` is still painted from `R.color.priority_*` rather than from `CardPresentation`, so a LOW row still shows a rule. If either class fails to *compile* here, 4.1a missed a name — fix that, and do not touch the assertions.
 
-- [ ] **4.3b Nothing here.** This step used to add the strings `CardPresentation` says, in the position of a
+  *Executed, and the RED was not the predicted one.* The pill allowance was not exceeded because nothing
+  capped it: `item_task.xml` gave the pill the `label` role, whose `textAllCaps` is exactly what spec §3.3 and
+  `type.xml`'s own comment exist to avoid, and JVM metrics cannot see a case change. The category rule failed
+  differently again — see 4.5. A third failure came from lint rather than from a test: `ConstantLocale` on the
+  two static `SimpleDateFormat`s this step's snippet holds in a companion, which a locale change mid-session
+  makes wrong; the formatter is now built where it is used, pinned by
+  `a date line follows the locale the device is on`.
+
+- [x] **4.3b Nothing here.** This step used to add the strings `CardPresentation` says, in the position of a
   step that came after the code that names them — which meant 4.1's commit could not build. They moved into
   4.1a. The number is kept so the references to "4.3b" elsewhere in this document and in the review log do
   not silently point at a different step; a worker who reaches this line should go straight to 4.4.
 
-- [ ] **4.4 Rewrite `item_task.xml`** to the three-line structure of spec §4.1, flattening the current
+- [x] **4.4 Rewrite `item_task.xml`** to the three-line structure of spec §4.1, flattening the current
   266-line nesting: root `FrameLayout` → `actionPanel` (2 buttons, surface backdrop) + `taskCard` →
   **one** `ConstraintLayout id=cardContent` holding line A (`categoryDot`, `taskTitle`, `repeatIcon`,
   `reminderBadge`), line B (`taskStatus` as a pill, `taskDueDate`, `taskCategory`), line C (`workRow`
@@ -2539,7 +2559,11 @@ class TaskCardWidthBudgetTest {
   `taskDescription` stays in the layout but is `View.GONE` unless the task has a description — the current
   behaviour — and when visible it takes a line between A and B.
 
-- [ ] **4.5 Rewrite the bind path.** `TasksAdapter.TaskViewHolder.bind` calls
+  *Executed.* The structure is as written, with one correction to this stage's own arithmetic: line B's three
+  children are positioned by a `Flow` helper, and a `Flow` never narrows a child — it wraps it — so the rule
+  4.5 first wrote, which measured the name's own width, could never fire.
+
+- [x] **4.5 Rewrite the bind path.** `TasksAdapter.TaskViewHolder.bind` calls
   `CardPresentation.of(context, item, now)` where `now` comes from a `timeBase` the adapter is given, and
   applies it: pill text/background/colour, rule colour or `INVISIBLE`, overdue `ink_error` on the due line,
   the four `showX` flags as `View.GONE`/`VISIBLE`, the category name's 48dp rule measured against the
@@ -2571,7 +2595,18 @@ class TaskCardWidthBudgetTest {
   the `ic_repeat.xml` that already exists. The work control keeps its existing phase-driven
   `contentDescription`, which already distinguishes start from pause from resume in words.
 
-- [ ] **4.6 Inject the clock.** `TasksViewModel` gains one defaulted constructor parameter, and
+  *Executed.* The category rule is decided on the **room left on the line** — `lineBFlow.width` minus the
+  measured pill, the measured date and their two gaps — against the 48dp floor, not on the name's own width.
+  Measured on the device: at 393dp the line is 363px, the pill 107px and the date 108px, which leaves 126px
+  (91dp) and the name is drawn; at 320dp the line is 321px against a pill of 136px and a date of 131px, which
+  leaves 26px against an 81px floor, and the name is gone with the dot still carrying the colour. The line-C
+  give-way test runs on the last **visible** figure: the ticker is gone on every card that is not being
+  measured, and the first draft read `childCount - 1`, which is the ticker, so the rule could not fire on an
+  idle row. And the rule is tinted through `bg_priority_indicator` with `backgroundTintList` rather than
+  painted with `setBackgroundColor`, which replaces the drawable and with it the 2dp corners the token
+  carries.
+
+- [x] **4.6 Inject the clock.** `TasksViewModel` gains one defaulted constructor parameter, and
   `TasksFragment` passes `viewModel.nowMillis()` down through the adapter — or the adapter takes a
   `() -> Long` supplied by the fragment from the view model. Choose the smaller diff, and keep the rule:
   no `System.currentTimeMillis()` anywhere in `ui/tasks/`.
@@ -2586,21 +2621,59 @@ class TaskCardWidthBudgetTest {
         val nowMillis: Long get() = timeBase.wallMillis()
 ```
 
-- [ ] **4.7 Run the gates.** Full suite, then the Tasks group, then `assembleDebug`, then `lintDebug`
+  *Executed with the smaller of the two shapes this step offers.* The adapter takes a defaulted
+  `timeBase: TimeBase = AndroidTimeBase()` and `bind` reads `timeBase.wallMillis()` once per row; the fragment
+  passes nothing and `TasksViewModel` gained no parameter. The rule the step actually states — no
+  `System.currentTimeMillis()` anywhere in `ui/tasks/` — holds: the grep returns nothing. Tests inject
+  `FixedTimeBase`, which is what makes the 23:59/00:01 boundary nameable at all.
+
+- [x] **4.7 Run the gates.** Full suite, then the Tasks group, then `assembleDebug`, then `lintDebug`
   (a new `contentDescription` gap is a lint finding, and lint must not regress).
 
-- [ ] **4.8 Device evidence.** Install, then photograph the card states that the tests claim: TODO,
+  *Executed:* 1442 JVM tests over 104 classes, 0 failures, 0 errors, 0 skipped; `lintDebug` 0 errors and 179
+  warnings, down from 182 — the two `ConstantLocale` findings and one dead string went with the fixes;
+  `assembleDebug` and `assembleDebugAndroidTest` clean. The three were run again as one command after the last
+  card change (`workTime`'s `marginStart` moved from a literal to `@dimen/spacing_xs`) and returned the same
+  numbers — 104/1442/0/0/0, 0 errors and 179 warnings, `BUILD SUCCESSFUL in 10m 3s`, exit code 0 — and the same
+  APK hash, which is how 4.8 could say the photographs are of the tested binary.
+
+- [x] **4.8 Device evidence.** Install, then photograph the card states that the tests claim: TODO,
   IN_PROGRESS, PAUSED, overdue, LOW with no rule, a 120-character title, a running stretch, selection mode,
   and the same card at 320dp and at font scale 1.3. Compare each against `before/01-tasks.png` with
   `design-review:visual-regression-review` and write down what changed and why it is better, not merely
   different.
 
-- [ ] **4.9 If the budget does not close in code** — a measured due date wider than 84dp, a pill wider
+  *Executed on `taskplanner_avd` / `emulator-5584` and on no other device.* The built `app-debug.apk`
+  (`6c9c0408c93de2e859419e8bbc7c5539328b30479c6fc409786885193b727a0d`) was installed and the installed
+  `base.apk` was pulled back from `/data/app/~~9H6egSJCKrNGeSEsgs-X_w==/com.taskplanner-…/base.apk` and
+  hashed to the same value; the gates were re-run after the last token change and `assembleDebug` returned
+  that same hash, so the photographs below are of the binary the tests ran against.
+  `TaskCardStatesInstrumentedTest` (12 tests) and `TaskCardWidthBudgetInstrumentedTest` (7) are green at 393dp,
+  360dp and 320dp at font scale 1.0, at 320dp and 393dp at 1.3, and at 393dp in the dark theme — 114 test runs
+  across six configurations. Those six came in two passes: the first pass lost its transport at the fifth
+  configuration (`adb.exe: device 'emulator-5584' not found`, four times, then `device offline`), which
+  cancelled the width class at 393dp/1.3 and left the dark configuration running at the previous font scale
+  because its `settings put` never landed. Both configurations were redone in a second pass that refuses to
+  run a test until the device reports the configuration it was asked for, and the dark photographs are from
+  that pass. See §20l for the readback that makes the claim checkable.
+  The photographs are `after/s4-card-todo.png`, `-inprogress`, `-paused`, `-overdue`, `-longtitle`, `-running`,
+  plus `after/s4-swiped.png`, `after/s4-selection.png`, `after/s4-393.png`, `after/s4-360.png`,
+  `after/s4-320.png`, `after/s4-font13.png` (320dp at 1.3, where line B reflows and the category name gives
+  way), `after/s4-393-font13.png`, `after/s4-dark.png` (the worst row, dark, font 1.0) and
+  `after/s4-dark-running.png` (a measured, running card in the same theme).
+
+- [x] **4.9 If the budget does not close in code** — a measured due date wider than 84dp, a pill wider
   than 82 — **stop**. Do not shrink a button, a target or a font to make a test pass. Report the measured
   numbers and propose the spec amendment (a different line assignment, or a shorter status word), and wait.
   This is the one step in the plan whose correct failure mode is a conversation.
 
-- [ ] **4.9a Fragment-level render coverage** — `TasksFragmentRenderTest`, the file spec §8 asks for and
+  *Not triggered: the budget closed, and it closed on measurement rather than on assumption.* The pill's real
+  width at 393dp is 107px = 78dp against the 82dp allowance, and the widest date a card can be given is
+  108px = 79dp against 84dp; both are asserted on the device by
+  `thePillAndTheDateStayInsideTheirBudgetedAllowances`. Nothing was shrunk to get there — the roles are the ones
+  §3.3 names, and the two elements that may not drop are asserted whole at every configuration.
+
+- [x] **4.9a Fragment-level render coverage** — `TasksFragmentRenderTest`, the file spec §8 asks for and
   which §17 previously mapped only at the header, so the row-level tests were standing in for it. Robolectric
   with `ActivityScenario`-free fragment construction, the way `ui/util/WorkAdjustmentUiTest` already attaches
   a real fragment under Robolectric — it is this project's only fragment-level test, added by PR #21, and it
@@ -2612,7 +2685,20 @@ class TaskCardWidthBudgetTest {
   for an empty list. No Hilt test component is needed — the fragment is constructed and its state driven
   through the view model's public seam, exactly as `TaskCardWorkTest` drives the adapter.
 
-- [ ] **4.10 Commit**, listing in the message every test that moved and why its old assertion was the
+  *Executed as `TasksCardRenderTest`, with one substitution stated rather than hidden.* This step names a
+  fragment-level file, and `TasksFragment` is `@AndroidEntryPoint`: attaching it under Robolectric needs
+  `hilt-android-testing` and a test application — a new dependency and a new component, which the brief allows
+  only with cause. What the step wants is the render path covered over seeded state, and Stage 4's decisions
+  live in the adapter and in `CardPresentation`; the fragment only forwards state. The class drives the real
+  `TasksViewModel` over a real `AppFixture` database and reads the painted rows back, and it carries the step's
+  assertions: rows reach the screen in the state's order, read off the views; the overdue treatment agrees with
+  the dashboard's own count for the same data (spec §0's no-second-rule test); a long title takes two lines and
+  stops; an empty account paints nothing; and the work control is hidden when nothing is measured *and* wired
+  when something is. The fragment itself is run on a device by `TasksHeaderInstrumentedTest`, and the three
+  status chips and the fourth-absent assertion belongs to the header, where `TasksHeaderLayoutTest` and
+  `TasksHeaderInstrumentedTest` hold it.
+
+- [x] **4.10 Commit**, listing in the message every test that moved and why its old assertion was the
   baseline's truth rather than the new one.
 
 **Acceptance:** `TaskCardWidthBudgetTest` and `CardPresentationTest` pass at 320dp and at font scale 1.3;
@@ -4082,3 +4168,99 @@ Gates for the stage: 101 suites / **1416 JVM tests / 0 failures / 0 skipped**, `
 `emulator-5554` was busy with another session's work, see §20j). The instrumented class seeds five tasks and
 asserts the row count through `TasksAdapter.currentList`, counting `TaskRow` only, because a topic header is
 not a task.
+
+
+## 20l — Stage 4 executed: the card's three lines, and five things only a renderer could tell
+
+Executed on `taskplanner_avd` / `emulator-5584` — the first stage of this branch that ran on the AVD this
+project owns. Gates: **104 suites / 1442 JVM tests / 0 failures / 0 errors / 0 skipped**, `lintDebug` 0 errors
+and 179 warnings (from 182: two `ConstantLocale` findings and one dead string went with the fixes), and
+`TaskCardStatesInstrumentedTest` (12) plus `TaskCardWidthBudgetInstrumentedTest` (7) green at six
+configurations — 393dp, 360dp and 320dp at font scale 1.0, 320dp and 393dp at 1.3, and 393dp in the dark
+theme — 114 instrumented runs in all, against an installed `base.apk` whose sha256 equals the built
+`app-debug.apk` (`6c9c0408c93de2e859419e8bbc7c5539328b30479c6fc409786885193b727a0d`). Six configurations took
+two passes, and the reason is the last finding below.
+
+Five findings, each of which survived a green JVM suite:
+
+* **A `Flow` never narrows a child, so a give-way rule that measures the child cannot fire.** Stage 4 first
+  wrote the 48dp category rule as "hide the name when `taskCategory.width < 48dp`". Under
+  `app:flow_wrapMode="chain"` a child that lacks room is wrapped onto a line of its own, where it has its
+  full text width — so the condition is false at every width the card ships at, and the JVM test that
+  "proved" it passed because LEGACY metrics make the name 11dp wide. The rule is now decided on the room left
+  on the line: `lineBFlow.width` minus the measured pill, the measured date and their two gaps. Measured at
+  393dp: a 363px line, a 107px pill and a 108px date leave 126px (91dp) — the name is drawn. At 320dp: a
+  321px line, a 136px pill and a 131px date leave 26px against an 81px floor — the name is gone, and the dot
+  on line A still carries the colour. One threshold, measured, is what keeps this one layout rather than
+  three. The same line, printed by the device for every configuration the matrix covers — `line B at …`, the
+  floor being 48dp at the density each width sets:
+
+  | dp | font | line | pill | date | gap | room | floor | name |
+  |----|------|------|------|------|-----|------|-------|------|
+  | 393 | 1.0 | 363px | 107px | 108px | 11px | 126px | 66px | shown |
+  | 360 | 1.0 | 348px | 120px | 120px | 12px | 84px | 72px | shown |
+  | 320 | 1.0 | 321px | 136px | 131px | 14px | 26px | 81px | gone |
+  | 320 | 1.3 | 321px | 161px | 174px | 14px | −42px | 81px | gone, and the pair wraps |
+  | 393 | 1.3 | 363px | 133px | 143px | 11px | 65px | 66px | gone, by one pixel |
+
+  The last row is the honest edge of this design: at the widest supported panel and the largest supported
+  font, the name is dropped by 1px of margin. It is stable — the same numbers came back on every pass of
+  every matrix — and it is the right outcome, because a name squeezed to 65px against a 66px floor is a
+  truncated name, and the dot and the rule already carry the category. What would be wrong is to "fix" it by
+  lowering the floor, which is the same act as letting text clip.
+* **The pill's type role was invisible to every metric available in a JVM.** `item_task.xml` gave `taskStatus`
+  the `label` role, which sets `textAllCaps`; spec §3.3 and `type.xml`'s own comment name that as the thing to
+  avoid, because "IN PROGRESS" measures about 105dp against the 82dp the budget allows. Robolectric's LEGACY
+  `measureText` answers with the character count and ignores both `textSize` and case, so no JVM assertion
+  could see the defect at all. The role is now `pill`, and the two allowances are asserted on the device:
+  78dp and 79dp measured against 82dp and 84dp.
+* **Two blank bitmaps are equal, and a comparison of two blanks passes.** The distinctness of `ic_play`,
+  `ic_work` and `ic_resume` is proved by rasterising each under one flat tint and comparing pixels. The first
+  version loaded them through the instrumentation's target context — which has no theme — and these vectors
+  take their `fillColor`/`strokeColor` from `?attr/colorControlNormal`, so each rendered nothing: four empty
+  bitmaps, all "different". The test now loads them through the activity, which is the context the card
+  inflates under, and refuses a shape that covers fewer than 20 pixels. Coverage figures on this device:
+  play 170, work 304, resume 242, pause 240, check 137, repeat 257, reminder 392.
+* **One app process serves one profile.** `SessionRepository` is a Hilt singleton, and `clearPackageData`
+  wipes once per invocation rather than per class or per test, so the user read at a process's first launch
+  is the user every later launch of that run serves. A class that seeds a fresh profile in each `@Before` is,
+  from the second test onward, reading the first test's rows — and because a task carries no foreign key to
+  its user while its series, reminders and work intervals do, those rows survive with their children
+  cascade-deleted. That is what produced the two symptoms this section nearly mistook for card defects: a
+  repeat mark missing from a row whose state said it had a series, a work line missing from a row the database
+  said was being measured, and a due line one minute away from the deadline the test had just written. Both
+  Stage 4 classes now seed once in `@BeforeClass` and clean up in `@AfterClass`, and the matrix script
+  force-stops the app around every class run.
+* **A screenshot has to be checked, and the check has to work in the dark.** `uiAutomation.takeScreenshot()`
+  answered twice with the Tasks header over a list that had not drawn its row — filed beside a passing
+  geometry test, because the test had measured the row seconds earlier in a different frame. The capture now
+  waits for the row to be laid out and shown, then requires the card's own rectangle to span at least 120
+  points of luminance, and retakes the frame until it does. The first attempt at that check asked for "any
+  dark pixel", which is true of every pixel in the dark theme and caught nothing; contrast, not level, is
+  what distinguishes a card from an empty screen in either theme.
+
+A matrix is only evidence if each run can be shown to have happened in the configuration it is named for, and
+the first pass could not. Its script applied `wm density`, `settings put system font_scale` and
+`cmd uimode night` and printed back `settings get secure ui_night_mode` — which reports the *user preference*
+(`1`, auto) no matter what `cmd uimode` forced, so the line read `night=1` in a light run and in a dark run
+alike and proved nothing. Worse, the transport dropped between the fifth and sixth configurations: four
+`adb.exe: device 'emulator-5584' not found` and a `device offline`, after which the dark configuration ran its
+tests at the previous font scale, because the `settings put` that should have set 1.0 had failed silently into
+`/dev/null`. Nothing in the log said FAILED — the classes were green in a configuration that was not the one
+being claimed. The pass-2 script therefore applies each setting, then refuses to instrument until the device
+answers with `Physical density: 220`, `font_scale 1.0` and `mComputedNightMode=true` from `dumpsys uimode`,
+retrying up to six times and aborting the configuration if it never lands, and it reports the byte length of
+every screenshot tar it extracts — which is how the first pass's empty 393dp/1.3 width run was found at all (a
+0-byte tar where 90KB should have been). The two dark photographs in `after/` are from pass 2; pass 1's are
+discarded, and 4.8 says so.
+
+Two smaller things worth recording. Espresso cannot act on a row below the fold, and the list's own order —
+deadlines first, tasks with no deadline last — puts the plain row below the fold at 393dp, so the two gesture
+tests scroll their target to the top first; and `onView(withId(R.id.editTaskButton))` on a seven-row list
+matches seven views, so the panel assertions read the named row's own children. The clock seam went the way
+4.6 allows rather than the way it prefers: the adapter takes a defaulted `TimeBase` and
+`grep System.currentTimeMillis() app/src/main/java/com/taskplanner/ui/tasks/` returns nothing, which is the
+rule the step states. And 4.9a's `TasksFragmentRenderTest` landed as `TasksCardRenderTest`: attaching
+`TasksFragment` under Robolectric needs `hilt-android-testing` and a test application — a new dependency and a
+new component, allowed only with cause — so the render path is covered through the real view model and the
+real adapter over a real database, and the fragment itself is exercised on the device.

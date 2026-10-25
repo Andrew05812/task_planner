@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one filled action on a card. Every other control in the cluster is a borderless tint, so the
+     completion toggle is the only thing that reads as the primary answer without needing to be a different
+     colour to be found — spec §4.1's "one primary action per card, which is the whole reason the card
+     stopped looking like a toolbar". -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ink_accent" />
+    <corners android:radius="@dimen/radius_control" />
+</shape>

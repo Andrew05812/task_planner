@@ -141,6 +141,23 @@ carrying the category's identity, so the fix is not "pick darker colours" but "s
 the dot carries the colour, the name is ink. The user's own palette is not the problem — the pattern is —
 which is why the same five values are still legal data after the redesign.
 
+**Resolved in Stage 4.** Line A now opens with an 8dp dot tinted with `category.color` (`TasksAdapter.kt`
+`bind`), and the name on line B is `ink_text_tertiary` — the word never takes the category's colour, so the
+five palette values above are no longer text colours at all and none of them has to clear 4.5:1. The name is
+also the only element on the card allowed to give way, and it gives way by a measured rule rather than by
+truncation: it is drawn when at least 48dp are left on the line after the pill and the date, and gone
+otherwise. Measured on the device, at 393dp the line is 363px, the pill 107px and the date 108px, which
+leaves 126px — the name is drawn (`after/s4-393.png`); at 320dp the same row's line is 321px against a pill
+of 136px and a date of 131px, which leaves 26px against a floor of 81px — the name is gone and the dot stands
+alone (`after/s4-320.png`). `TaskCardWidthBudgetInstrumentedTest` asserts both the dot's tint and that
+visibility, so neither half can drift back. The room is measured from the laid-out line rather than from the
+screen width, which is what lets one layout serve 320dp, 360dp and 393dp and font scale 1.0 and 1.3. The two
+remaining points of that grid are 360dp at 1.0 — 348px line, 120px pill, 120px date, 84px of room against a
+72px floor, name drawn — and 393dp at font scale 1.3, where the pill grows to 133px and the date to 143px and
+the room lands on 65px against a 66px floor: the name goes, by one pixel (`after/s4-393-font13.png`). At
+320dp/1.3 the room is negative (−42px), so the pill and the date wrap onto two lines rather than clip
+(`after/s4-font13.png`). The full five-row table is in plan §20l.
+
 ### 4.4 Four of the five bottom-bar items show no label — `before/01-tasks.png`
 
 `uiautomator` on the Tasks screen reports `navigation_bar_item_large_label_view` with text `Tasks` for the
@@ -168,6 +185,21 @@ and they call different repositories: `TasksViewModel.kt:418` → `taskRepositor
 `workTrackingRepository.start/pause/resume`. Two buttons that look identical and do different things is a
 legibility defect, not a cosmetic one. Stage 4 gives them distinct icons and labels; it does **not** merge
 the operations, because they are different facts about the task.
+
+**Resolved in Stage 4.** The timer control draws `ic_work`, a stopwatch drawn for this stage because the
+repository had no clock-shaped icon among its 42; the paused card draws `ic_resume`, a bar plus a triangle,
+which is what replaces the second bare play triangle; `ic_play` is left on `startTaskButton` alone. The
+distinctness is measured rather than asserted in XML: the device test rasterises each vector under one flat
+tint and compares the pixels, so a difference in colour cannot be mistaken for a difference in shape, and it
+refuses a frame in which a shape drew nothing (which is what the first version of that check did — these
+vectors take their colour from a theme attribute, and loaded on an unthemed context they render blank, so
+four empty bitmaps "proved" they were all different). Completion is now the only filled control on the card
+(`bg_action_complete`, an `ink_on_accent` check on `ink_accent`), which is the other half of the same
+complaint: the baseline's card had eight borderless glyphs and no answer to "what does this row want me to
+do". Photographs: `after/s4-card-running.png` (stopwatch, pause, filled check) and `after/s4-card-paused.png`
+(resume mark, no second triangle). Every visible control is a 48dp target with a content description, and the
+work control's description names its phase — "Start measuring", "Pause measuring", "Resume measuring" — so
+the two operations stay distinct to a screen reader as well as to an eye.
 
 ### 4.7 `dimens.xml` carries two spacing scales and five text sizes, four of which nobody reads
 
@@ -308,6 +340,29 @@ if one is wanted — is a separate task with its own migration and its own test.
 third-party PDF viewer, a real finger's pressure on a swipe, talkback announcements, and battery-optimiser
 behaviour around alarms. Those are named in `docs/UI_REDESIGN_REVIEW.md` when the stage that touches them
 runs.
+
+**One app process serves one profile, and a screenshot can miss the card.** Two limits found while taking
+Stage 4's evidence, both of which produce a *wrong result that looks like a real one*:
+
+* A connected run is one app process, and `SessionRepository` is a Hilt singleton inside it: the user read
+  at the process's first launch is the user every later launch of that run serves, however many rows
+  `setCurrentUser` has moved underneath it. `clearPackageData` wipes once per *invocation*, not per class and
+  never per test. So an instrumented class that seeds a fresh profile in each `@Before` is, from the second
+  test onward, reading the *first* test's rows — and because a task carries no foreign key to its user while
+  its series, reminders and work intervals do, those rows survive with their cascade-deleted children gone.
+  The symptoms Stage 4 met were exactly that and looked like card defects: a repeat mark missing from a row
+  whose state said it had a series, a work line missing from a row the database said was being measured, and
+  a due line one minute away from the deadline the test had just written. The rule the Stage 4 classes now
+  follow is one profile per class, written in `@BeforeClass` before any screen opens and deleted in
+  `@AfterClass` along with its rows; a class that ignores it must also `am force-stop` the app between
+  classes, which is what the matrix script does around every run.
+* `uiAutomation.takeScreenshot()` answers with whatever the compositor holds, and twice in Stage 4's first
+  matrix it answered with the Tasks header over a list that had not drawn its row yet — a photograph of an
+  empty screen filed beside a passing geometry test, because the test had measured the row seconds earlier
+  in a different frame. Both screenshot helpers now require the row to be laid out and shown, then count the
+  ink inside the card's own rectangle in the captured frame, and retake the frame until it holds one (up to
+  six attempts). The `after/s4-*.png` files in this repository were produced that way, and each run prints
+  the number of frames a photograph needed alongside the dp and font scale it was taken at.
 
 ## 6. What the redesign must not change
 

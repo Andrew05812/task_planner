@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A stopwatch, because the button measures elapsed time. The repository had no clock-shaped icon at all
+     (`ls app/src/main/res/drawable | grep "^ic_"` lists 42, none of them a timer), and the alternative was
+     to keep drawing this control as a play triangle — which is exactly how the baseline ended up with two
+     identical triangles meaning two different things on the same card. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="?attr/colorControlNormal"
+        android:strokeWidth="2"
+        android:pathData="M5,14 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+    <path
+        android:strokeColor="?attr/colorControlNormal"
+        android:strokeWidth="2"
+        android:pathData="M12,10.5 L12,14 L14.8,15.6" />
+    <path
+        android:fillColor="?attr/colorControlNormal"
+        android:pathData="M10.5,2.5 h3 v2 h-3 z" />
+    <path
+        android:strokeColor="?attr/colorControlNormal"
+        android:strokeWidth="2"
+        android:pathData="M12,4.5 L12,7" />
+</vector>

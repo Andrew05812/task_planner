@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -14,13 +15,12 @@ import androidx.recyclerview.widget.RecyclerView
 import com.taskplanner.R
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
+import com.taskplanner.data.tracking.AndroidTimeBase
+import com.taskplanner.data.tracking.TimeBase
 import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.databinding.ItemGroupHeaderBinding
 import com.taskplanner.databinding.ItemTaskBinding
 import com.taskplanner.ui.util.WorkTimeFormat
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlin.math.abs
 
 class TasksAdapter(
@@ -37,7 +37,13 @@ class TasksAdapter(
     private val onWorkToggle: (com.taskplanner.data.model.Task) -> Unit,
     private val onToggleGroup: (TaskGroup) -> Unit,
     private val onGroupMenu: (View, TaskGroup) -> Unit,
-    private val onStartDrag: (RecyclerView.ViewHolder) -> Unit
+    private val onStartDrag: (RecyclerView.ViewHolder) -> Unit,
+    /**
+     * The instant the cards measure "late" against. Injectable, and defaulted to the device's own clock,
+     * because the one moment a deadline changes its mind — 23:59 against 00:01 — has to be nameable in a
+     * test, and this repository has already been bitten once by a test that could not pin it.
+     */
+    private val timeBase: TimeBase = AndroidTimeBase()
 ) : ListAdapter<TasksListItem, RecyclerView.ViewHolder>(DIFF) {
 
     var selectionMode = false
@@ -236,8 +242,24 @@ class TasksAdapter(
             val context = b.root.context
             val work = item.work
 
-            b.workRow.isVisible = work.isShown && item.task.status != TaskStatus.COMPLETED
-            if (!b.workRow.isVisible) return
+            val showsWork = work.isShown && item.task.status != TaskStatus.COMPLETED
+            // The control is configured before it is shown or hidden, and it is one shape rather than
+            // three: the phase is said by the dot, the ticker and the description, while the button itself
+            // stays the timer. Drawing it as a pause triangle would put two identical triangles on one
+            // card — `pauseTaskButton` and this — which is the same ambiguity the audit found in the two
+            // play triangles this stage removed.
+            b.workControlButton.setImageResource(R.drawable.ic_work)
+            b.workControlButton.contentDescription = context.getString(
+                when (work.phase) {
+                    TrackingPhase.RUNNING -> R.string.work_pause
+                    TrackingPhase.PAUSED -> R.string.work_resume
+                    else -> R.string.work_start
+                }
+            )
+            b.workControlButton.setOnClickListener { current?.task?.let { onWorkToggle(it) } }
+            b.workControlButton.isVisible = showsWork
+            b.workRow.isVisible = showsWork
+            if (!showsWork) return
 
             // A task nothing has been measured on gets no zero: the line says "work is happening here",
             // and a bare 0 s would say it about every card.
@@ -258,17 +280,10 @@ class TasksAdapter(
                     else R.color.status_paused
                 )
             )
-            b.workControlButton.setImageResource(
-                if (work.phase == TrackingPhase.RUNNING) R.drawable.ic_pause else R.drawable.ic_play
-            )
-            b.workControlButton.contentDescription = context.getString(
-                when (work.phase) {
-                    TrackingPhase.RUNNING -> R.string.work_pause
-                    TrackingPhase.PAUSED -> R.string.work_resume
-                    else -> R.string.work_start
-                }
-            )
-            b.workControlButton.setOnClickListener { current?.task?.let { onWorkToggle(it) } }
+            // The dot's two colours are the ones the global work bar already uses for the same two phases
+            // (`MainActivity`), so a running stretch reads the same red at the top of the screen and on the
+            // card. The names come from the priority palette for a historical reason, not a semantic one:
+            // they are the app's two amber/red tokens, and Stage 10 renames them, not this stage.
         }
 
         fun bind(item: TasksListItem.TaskRow) {
@@ -283,41 +298,66 @@ class TasksAdapter(
             b.taskDescription.visibility =
                 if (task.description.isBlank()) View.GONE else View.VISIBLE
             val context = b.root.context
-            val dueText = task.dueDate?.let { dateFormat.format(Date(it)) }
-                ?: context.getString(R.string.no_due_date)
-            val seriesLabel = item.series?.let { rule ->
-                context.getString(
-                    when {
-                        rule.paused -> R.string.series_short_paused
-                        rule.endedAt != null -> R.string.series_short_ended
-                        else -> RepeatPreset.of(rule).shortLabelRes
-                    }
+            // Everything the card says about the task is decided once, in `CardPresentation`, from the row
+            // and the clock it is given — the adapter only paints the answer. That boundary is the point:
+            // the overdue rule, the status wording, the pill's colours and the lifecycle visibility are
+            // all spec §4.1 arithmetic, and arithmetic a JVM test can hold still.
+            val p = CardPresentation.of(context, item, timeBase.wallMillis())
+
+            b.taskDueDate.text = p.dueLine
+            // Late is a word and a colour, never a colour alone: the date line already reads "3 days late".
+            b.taskDueDate.setTextColor(
+                ContextCompat.getColor(
+                    context, if (p.isOverdue) R.color.ink_error else R.color.ink_text_secondary
                 )
-            }
-            b.taskDueDate.text = if (seriesLabel == null) {
-                dueText
-            } else {
-                context.getString(R.string.task_due_repeats_format, dueText, seriesLabel)
-            }
-
-            b.taskCategory.text = item.category?.name
-                ?: b.root.context.getString(R.string.no_category)
-            item.category?.let {
-                b.taskCategory.setTextColor(it.color)
-            } ?: b.taskCategory.setTextColor(
-                ContextCompat.getColor(b.root.context, R.color.material_grey_600)
             )
 
-            b.taskStatus.text = b.root.context.getString(
-                when (task.status) {
-                    TaskStatus.TODO -> R.string.status_todo
-                    TaskStatus.IN_PROGRESS -> R.string.status_in_progress
-                    TaskStatus.PAUSED -> R.string.status_paused
-                    TaskStatus.COMPLETED -> R.string.status_done
+            b.taskStatus.setText(p.statusLabelRes)
+            b.taskStatus.setBackgroundResource(p.pillBackgroundRes)
+            b.taskStatus.setTextColor(ContextCompat.getColor(context, p.pillTextRes))
+
+            b.taskCategory.text = item.category?.name ?: context.getString(R.string.no_category)
+            // Restored on every bind: a holder whose previous row had no room for the name would otherwise
+            // keep it hidden for the rest of the list's life, and the room is re-measured below.
+            b.taskCategory.visibility = View.VISIBLE
+            // The dot carries the colour; the word never does. That swap is the fix for the audit's
+            // illegible categories, where a pale green name on the card measured 1.41:1.
+            val category = item.category
+            b.categoryDot.isVisible = category != null
+            if (category != null) {
+                b.categoryDot.backgroundTintList = ColorStateList.valueOf(category.color)
+            }
+            // The name is the one element on the card allowed to give way, and it gives way by the rule
+            // rather than by truncation: below the floor it is gone, and the dot still says "categorised".
+            b.cardContent.doOnLayout { content ->
+                // Spec §4.1's one threshold, decided on the room that is left — not on the name's own
+                // width, because under a `Flow` a child that lacks room is wrapped onto a line of its own,
+                // where it always has its full text width and a check against that could never fail. The
+                // room is read off the laid-out helper, so it is the column the renderer made rather than
+                // the one the arithmetic predicted.
+                val resources = content.resources
+                val floor = CardPresentation.CATEGORY_NAME_MIN_DP.dp(resources)
+                val gap = resources.getDimensionPixelSize(R.dimen.spacing_small)
+                val room = b.lineBFlow.width - b.taskStatus.width - b.taskDueDate.width - 2 * gap
+                if (b.taskCategory.isVisible && room < floor) b.taskCategory.visibility = View.GONE
+
+                // Line C: the figures give way before the buttons do. A number that has to shrink was never
+                // the point of the row; a control that shrinks is a control a thumb misses. The test runs on
+                // the last *visible* figure — the ticker is gone on every card that is not being measured,
+                // and a check against a hidden child measures a rectangle nobody sees.
+                val figures = b.workRow
+                if (figures.isVisible) {
+                    val last = (0 until figures.childCount).map { figures.getChildAt(it) }
+                        .lastOrNull { it.visibility == View.VISIBLE }
+                    if (last != null && last.right > figures.width - figures.paddingEnd) {
+                        b.workTime.isVisible = false
+                        b.workTicker.isVisible = false
+                    }
                 }
-            )
+            }
 
-            // The bell says "this task will speak up", so a screen reader gets the same news.
+            // The bell says "this task will speak up", and it counts: a screen reader gets the same news
+            // the eye does, in the same words.
             b.reminderBadge.isVisible = item.pendingReminders > 0
             if (item.pendingReminders > 0) {
                 b.reminderBadge.contentDescription = context.resources.getQuantityString(
@@ -325,19 +365,33 @@ class TasksAdapter(
                 )
             }
 
-            val priorityColor = when (task.priority) {
-                com.taskplanner.data.model.Priority.LOW -> R.color.priority_low
-                com.taskplanner.data.model.Priority.MEDIUM -> R.color.priority_medium
-                com.taskplanner.data.model.Priority.HIGH -> R.color.priority_high
-            }
-            b.priorityIndicator.setBackgroundColor(
-                ContextCompat.getColor(b.root.context, priorityColor)
-            )
+            b.repeatIcon.isVisible = item.series != null
+            // The words the due line used to carry now live on the icon, so moving the marker does not
+            // move the information: a reader who asks the icon still hears "weekly".
+            p.repeatDescriptionRes?.let { b.repeatIcon.contentDescription = context.getString(it) }
 
-            b.startTaskButton.visibility = if (task.status == TaskStatus.TODO) View.VISIBLE else View.GONE
-            b.pauseTaskButton.visibility = if (task.status == TaskStatus.IN_PROGRESS) View.VISIBLE else View.GONE
-            b.resumeTaskButton.visibility = if (task.status == TaskStatus.PAUSED) View.VISIBLE else View.GONE
-            b.completeTaskButton.visibility = if (task.status != TaskStatus.COMPLETED) View.VISIBLE else View.GONE
+            // LOW draws no rule — but it draws the space for one, so a list of mixed priorities does not
+            // shift its titles by 4dp between a HIGH row and a LOW row.
+            // Late wins over priority for the rule's colour, which is what spec §4.1's "date text and
+            // priority rule in ink_error" asks for: a LOW row that is late still shows a red edge, and a
+            // LOW row that is on time shows no edge at all.
+            val ruleColor = if (p.isOverdue) R.color.ink_error else p.priorityRuleColorRes
+            if (ruleColor == null) {
+                b.priorityIndicator.visibility = View.INVISIBLE
+            } else {
+                b.priorityIndicator.visibility = View.VISIBLE
+                // Tinted through the shape rather than painted over it: `setBackgroundColor` replaces the
+                // background, and with it the 2dp corners `bg_priority_indicator` carries — so painting the
+                // rule would quietly flatten the token it is meant to be using.
+                b.priorityIndicator.backgroundTintList = ColorStateList.valueOf(
+                    ContextCompat.getColor(context, ruleColor)
+                )
+            }
+
+            b.startTaskButton.visibility = if (p.showStart) View.VISIBLE else View.GONE
+            b.pauseTaskButton.visibility = if (p.showPause) View.VISIBLE else View.GONE
+            b.resumeTaskButton.visibility = if (p.showResume) View.VISIBLE else View.GONE
+            b.completeTaskButton.visibility = if (p.showComplete) View.VISIBLE else View.GONE
 
             b.startTaskButton.setOnClickListener { current?.task?.let { onStart(it) } }
             b.pauseTaskButton.setOnClickListener { current?.task?.let { onPause(it) } }
@@ -362,7 +416,6 @@ class TasksAdapter(
         private const val LONG_PRESS_TIMEOUT = 400L
         private const val SLIDE_MS = 180L
         private const val MAX_OVERSCROLL = 24f
-        private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
         private val DIFF = object : DiffUtil.ItemCallback<TasksListItem>() {
             override fun areItemsTheSame(o: TasksListItem, n: TasksListItem): Boolean =
@@ -378,5 +431,9 @@ class TasksAdapter(
 
         private val View.touchSlop: Float
             get() = android.view.ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+
+        /** A dp value in this view's own density — the budget is written in dp and measured in px. */
+        private fun Int.dp(resources: android.content.res.Resources): Int =
+            (this * resources.displayMetrics.density).toInt()
     }
 }
