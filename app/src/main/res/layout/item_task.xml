@@ -53,12 +53,42 @@
         app:cardElevation="2dp">
 
         <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cardContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingStart="12dp"
             android:paddingEnd="16dp"
             android:paddingTop="12dp"
             android:paddingBottom="12dp">
+
+            <!-- Declared here and placed in 4.4: the three parts of the card's three-line structure that
+                 the presentation tests name by id. All three are away for now, so this commit changes no
+                 rendering — it only makes the next two commits compile. -->
+            <View
+                android:id="@+id/categoryDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/bg_category_dot"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <ImageView
+                android:id="@+id/repeatIcon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="@string/repeat_icon_description"
+                android:src="@drawable/ic_repeat"
+                android:visibility="gone"
+                app:tint="@color/ink_text_tertiary"
+                tools:visibility="visible" />
+
+            <androidx.constraintlayout.helper.widget.Flow
+                android:id="@+id/lineBFlow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                app:flow_horizontalGap="8dp"
+                app:flow_wrapMode="chain" />
 
             <ImageView
                 android:id="@+id/selectionCheck"

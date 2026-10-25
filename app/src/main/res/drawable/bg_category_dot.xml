@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The 8dp dot that carries a category's colour on a card's line A. Tinted at bind time with the row's
+     own ARGB, which is why the solid colour below is a neutral ink rather than a guess at any category:
+     the word is never the thing that shows the colour, because the pale greens that did that in the
+     baseline measured 1.41:1 against the card. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/ink_text_tertiary" />
+    <size android:width="8dp" android:height="8dp" />
+</shape>

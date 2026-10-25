@@ -189,6 +189,15 @@
     <string name="header_more_actions">More actions</string>
     <string name="tasks_open_count_format">%1$d open</string>
     <string name="filters_count_format">Filters · %1$d</string>
+    <!-- What a card says about a deadline. `no_due_date` and the four status words already exist and are
+         reused; these three are the relative wording spec 4.1 line B asks for. -->
+    <string name="repeat_icon_description">Repeats</string>
+    <string name="task_due_today_format">Today %1$s</string>
+    <string name="task_due_tomorrow_format">Tomorrow %1$s</string>
+    <plurals name="task_late_days">
+        <item quantity="one">%d day late</item>
+        <item quantity="other">%d days late</item>
+    </plurals>
     <string name="error_no_profile_first">Create a profile first</string>
     <string name="settings_local_data">Local data</string>
     <string name="migrate_local_data">Move local data into this account</string>
