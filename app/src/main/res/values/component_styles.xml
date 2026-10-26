@@ -105,6 +105,20 @@
          dot beside the name, drawn at bind time (4.4). -->
     <style name="Widget.TaskPlanner.Chip.Category" parent="Widget.TaskPlanner.Chip.Filter" />
 
+    <!-- A filter chip whose checked state is a fact the reader has to be able to recover without seeing the
+         fill. `Chip.Filter` above hides the check mark because the chips it was made for — the category rail,
+         the status row — are single-choice filters where the pill *is* the choice. The task editor's chips
+         are different: "15 min before" and "Tuesday" are ticked independently, and one of them ticked is a
+         reminder that will fire or a day the task will come back on. A fill alone would make that a colour
+         difference, and the brief's own rule is that colour is never the only indicator. So the mark the
+         platform chip has is put back, tinted with the ink the label is written in so it holds in both
+         themes. Owned here rather than at each chip because the editor has fourteen of them. -->
+    <style name="Widget.TaskPlanner.Chip.State" parent="Widget.TaskPlanner.Chip.Filter">
+        <item name="checkedIcon">@drawable/ic_check</item>
+        <item name="checkedIconTint">@color/ink_text</item>
+        <item name="checkedIconVisible">true</item>
+    </style>
+
     <style name="Widget.TaskPlanner.Field" parent="Widget.Material3.TextInputLayout.OutlinedBox">
         <item name="boxCornerRadiusTopStart">@dimen/radius_control</item>
         <item name="boxCornerRadiusTopEnd">@dimen/radius_control</item>

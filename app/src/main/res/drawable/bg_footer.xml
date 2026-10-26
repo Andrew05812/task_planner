@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The surface a sticky footer sits on: the page's own surface role, with a hairline across its top edge.
+
+     The line is the part that does the work. `ink_surface` against `ink_background` measures 1.05:1, so a
+     footer painted only with a surface role is invisible as a boundary, and fields scrolling behind it
+     read as if they continue underneath. A 1dp rule in `ink_outline` is what says "the form ends here" —
+     the same argument Stage 7 makes for the bottom bar. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="?attr/colorSurface" />
+    </item>
+    <item
+        android:gravity="top|fill_horizontal"
+        android:height="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/ink_outline" />
+        </shape>
+    </item>
+</layer-list>

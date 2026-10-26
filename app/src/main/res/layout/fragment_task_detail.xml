@@ -1,862 +1,902 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-    The task editor. This step groups the fields it already had into the six sections the design names,
-    without moving the sections yet: the order the form ends up in is decided by a test in the next commit,
-    not by whatever the file happened to look like after the wrappers went in.
+    The task editor: a scrolling form of six labelled sections, above a footer that does not scroll.
 
-    The content container becomes a plain vertical LinearLayout on the way. Its children used to be thirteen
-    loose fields chained to each other, and a chain of fields cannot be moved as a group — every cut asks
-    for the constraints of its two neighbours to be rewritten, which is where a redesign loses a field. Six
-    named blocks stack by themselves.
+    Two decisions, both argued in the plan and both pinned by `TaskDetailLayoutTest`:
 
-    Every id the fragment and the tests bind to is unchanged, including the four the recurrence bug of PR #21
-    is tested through and the four the work-adjustment dialog opens on.
+    The order. The fields used to run title, description, deadline, plan, *measured time*, priority, status,
+    category, *reminders*, *repeat*, buttons — so the record of what a task had already cost sat in the
+    middle of filling it in, and the warnings came before the rule that decides which deadlines there are to
+    warn about. The six blocks now answer one question after another: what the task is, when it happens, how
+    it is classified, how often it comes back, when to warn about it, what it actually cost.
+
+    The footer. Save and Cancel used to be the last views inside the scroll, which measured 1619px down a
+    500px window in the layout test — a reader on a small phone had to scroll a form they had just finished
+    typing in to find the button that saves it. They are now a sibling of the scroll, on a surface of their
+    own with a hairline over them, and the fields scroll behind them.
+
+    Every id is the id it was, including `repeat_preset`, `repeat_interval_layout` and `repeat_interval`
+    (PR #21's crash, tested through the real fragment) and the plan and work fields the view model writes
+    back. Nothing here changes what a field saves: the editor writes the same task it wrote before.
 -->
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <!-- The weighted height is the whole mechanism: the form gets what the footer leaves, so the footer is
+         on the window whether or not the reader has scrolled, and the keyboard resizing the window takes
+         room from the form and never from Save. -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false">
 
-        <!-- Task: what the thing is. -->
         <LinearLayout
-            android:id="@+id/task_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingStart="@dimen/screen_margin"
+            android:paddingEnd="@dimen/screen_margin"
+            android:paddingTop="@dimen/spacing_normal"
+            android:paddingBottom="@dimen/spacing_large">
 
-            <TextView
-                style="@style/Widget.TaskPlanner.SectionLabel"
-                android:accessibilityHeading="true"
-                tools:targetApi="28"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/section_task" />
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/task_title_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_small"
-                android:hint="@string/hint_task_title"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/task_title"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="text"
-                    android:maxLines="1"
-                    android:imeOptions="actionNext" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/task_description_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:hint="@string/hint_task_description"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/task_description"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine"
-                    android:minLines="3" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-        </LinearLayout>
-
-        <!-- When: the deadline, and the plan around it. The plan stays its own block inside the section,
-             because `plan_hint` and `plan_clear` speak about the plan and not about the deadline. -->
-        <LinearLayout
-            android:id="@+id/when_section"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/Widget.TaskPlanner.SectionLabel"
-                android:accessibilityHeading="true"
-                tools:targetApi="28"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/section_when" />
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/task_due_date_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_small"
-                android:hint="@string/label_due_date"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                app:startIconDrawable="@drawable/ic_calendar">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/task_due_date"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:focusable="false"
-                    android:inputType="none" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/task_due_time_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:hint="@string/label_due_time"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                app:startIconDrawable="@drawable/ic_reminder">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/task_due_time"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:focusable="false"
-                    android:inputType="none" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
+            <!-- Task: what the thing is. -->
             <LinearLayout
-                android:id="@+id/plan_section"
+                android:id="@+id/task_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
                 android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/plan_title"
                     style="@style/Widget.TaskPlanner.SectionLabel"
                     android:accessibilityHeading="true"
                     tools:targetApi="28"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/plan_section_title" />
+                    android:text="@string/section_task" />
 
-                <LinearLayout
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/task_title_layout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal">
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/hint_task_title"
+                    style="@style/Widget.TaskPlanner.Field">
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/plan_start_date_layout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="0dp"
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/task_title"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:hint="@string/plan_start_date">
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:imeOptions="actionNext" />
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/plan_start_date"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:focusable="false"
-                            android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-                    </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/task_description_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/hint_task_description"
+                    style="@style/Widget.TaskPlanner.Field">
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/plan_start_time_layout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="0dp"
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/task_description"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:hint="@string/plan_start_time">
+                        android:gravity="top"
+                        android:inputType="textMultiLine"
+                        android:minLines="3" />
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/plan_start_time"
-                            android:layout_width="match_parent"
+                </com.google.android.material.textfield.TextInputLayout>
+
+            </LinearLayout>
+
+            <!-- When: the deadline the task is owed by, and the plan of when it actually gets done. The
+                 plan stays its own block inside the section, because `plan_hint` and `plan_clear` speak
+                 about the plan and not about the deadline. -->
+            <LinearLayout
+                android:id="@+id/when_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_section"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_when" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/task_due_date_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/label_due_date"
+                    style="@style/Widget.TaskPlanner.Field"
+                    app:startIconDrawable="@drawable/ic_calendar">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/task_due_date"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:focusable="false"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/task_due_time_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/label_due_time"
+                    style="@style/Widget.TaskPlanner.Field"
+                    app:startIconDrawable="@drawable/ic_reminder">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/task_due_time"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:focusable="false"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <LinearLayout
+                    android:id="@+id/plan_section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_normal"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/plan_title"
+                        style="@style/Widget.TaskPlanner.SectionLabel"
+                        android:accessibilityHeading="true"
+                        tools:targetApi="28"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_section_title" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/plan_start_date_layout"
+                            style="@style/Widget.TaskPlanner.Field"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:focusable="false"
-                            android:inputType="none" />
+                            android:layout_weight="1"
+                            android:hint="@string/plan_start_date">
 
-                    </com.google.android.material.textfield.TextInputLayout>
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/plan_start_date"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:focusable="false"
+                                android:inputType="none" />
+
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/plan_start_time_layout"
+                            style="@style/Widget.TaskPlanner.Field"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/spacing_small"
+                            android:layout_weight="1"
+                            android:hint="@string/plan_start_time">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/plan_start_time"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:focusable="false"
+                                android:inputType="none" />
+
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/plan_end_date_layout"
+                            style="@style/Widget.TaskPlanner.Field"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="@string/plan_end_date">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/plan_end_date"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:focusable="false"
+                                android:inputType="none" />
+
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/plan_end_time_layout"
+                            style="@style/Widget.TaskPlanner.Field"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/spacing_small"
+                            android:layout_weight="1"
+                            android:hint="@string/plan_end_time">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/plan_end_time"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:focusable="false"
+                                android:inputType="none" />
+
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/plan_estimate_layout"
+                            style="@style/Widget.TaskPlanner.Field"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="@string/plan_estimate">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/plan_estimate_minutes"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="number" />
+
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/plan_clear"
+                            style="@style/Widget.TaskPlanner.Button.Text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="bottom"
+                            android:text="@string/plan_clear" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/plan_hint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:text="@string/plan_hint_none"
+                        android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
 
                 </LinearLayout>
 
-                <LinearLayout
+            </LinearLayout>
+
+            <!-- How the task is classified: the three choices that put it among the others. -->
+            <LinearLayout
+                android:id="@+id/how_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_section"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal">
+                    android:text="@string/section_how" />
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/plan_end_date_layout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:hint="@string/plan_end_date">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/plan_end_date"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:focusable="false"
-                            android:inputType="none" />
-
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/plan_end_time_layout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:hint="@string/plan_end_time">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/plan_end_time"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:focusable="false"
-                            android:inputType="none" />
-
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                </LinearLayout>
-
-                <LinearLayout
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/task_priority_layout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal">
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/label_priority"
+                    style="@style/Widget.TaskPlanner.Field.Dropdown"
+                    app:startIconDrawable="@drawable/ic_priority">
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/plan_estimate_layout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="0dp"
+                    <AutoCompleteTextView
+                        android:id="@+id/task_priority"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:hint="@string/plan_estimate">
+                        android:inputType="none" />
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/plan_estimate_minutes"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="number" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-                    </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/task_status_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/label_status"
+                    style="@style/Widget.TaskPlanner.Field.Dropdown"
+                    app:startIconDrawable="@drawable/ic_status">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/plan_clear"
-                        style="@style/Widget.Material3.Button.TextButton"
+                    <AutoCompleteTextView
+                        android:id="@+id/task_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/task_category_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/label_category"
+                    style="@style/Widget.TaskPlanner.Field.Dropdown"
+                    app:startIconDrawable="@drawable/ic_category">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/task_category"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+            </LinearLayout>
+
+            <!-- Repeat: whether the task comes back. The block is the collapsed one — a plain task shows
+                 only the picker, and the interval, weekdays, day of the month and series controls stay away
+                 until the preset asks for them, which is `applyPreset`'s own rule, not a new one. -->
+            <LinearLayout
+                android:id="@+id/repeat_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_section"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/repeat_title"
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_repeat" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/repeat_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_medium"
+                    android:hint="@string/label_repeat"
+                    style="@style/Widget.TaskPlanner.Field.Dropdown"
+                    app:startIconDrawable="@drawable/ic_repeat">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/repeat_preset"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/repeat_interval_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:visibility="gone"
+                    style="@style/Widget.TaskPlanner.Field">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/repeat_interval"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:maxLength="3"
+                        android:maxLines="1" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/repeat_week_days_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:visibility="gone"
+                    android:text="@string/repeat_weekdays"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/repeat_week_days"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:visibility="gone"
+                    app:chipSpacingHorizontal="@dimen/spacing_xs"
+                    app:singleLine="false">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/day_mon"
+                        style="@style/Widget.TaskPlanner.Chip.State"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="bottom"
-                        android:text="@string/plan_clear" />
+                        android:text="@string/day_short_mon" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/day_tue"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/day_short_tue" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/day_wed"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/day_short_wed" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/day_thu"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/day_short_thu" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/day_fri"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/day_short_fri" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/day_sat"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/day_short_sat" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/day_sun"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/day_short_sun" />
+
+                </com.google.android.material.chip.ChipGroup>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/repeat_day_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:visibility="gone"
+                    android:hint="@string/repeat_day_of_month"
+                    style="@style/Widget.TaskPlanner.Field">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/repeat_day_of_month"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:maxLength="2"
+                        android:maxLines="1" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/repeat_day_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:visibility="gone"
+                    android:text="@string/repeat_day_of_month_hint"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
+
+                <RadioGroup
+                    android:id="@+id/repeat_scope_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <RadioButton
+                        android:id="@+id/repeat_scope_future"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/touch_target_min"
+                        android:text="@string/repeat_scope_future" />
+
+                    <RadioButton
+                        android:id="@+id/repeat_scope_this"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/touch_target_min"
+                        android:text="@string/repeat_scope_this" />
+
+                </RadioGroup>
+
+                <TextView
+                    android:id="@+id/repeat_scope_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:text="@string/repeat_scope_hint_new"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
+
+                <TextView
+                    android:id="@+id/series_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:visibility="gone"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+                    tools:text="@string/series_status_running" />
+
+                <LinearLayout
+                    android:id="@+id/series_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/pauseSeriesButton"
+                        style="@style/Widget.TaskPlanner.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_pause_series" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/finishSeriesButton"
+                        style="@style/Widget.TaskPlanner.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_finish_series" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/deleteSeriesButton"
+                        style="@style/Widget.TaskPlanner.Button.Destructive"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_delete_series" />
 
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/plan_hint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/plan_hint_none"
-                    android:textAppearance="?attr/textAppearanceCaption" />
-
             </LinearLayout>
 
-        </LinearLayout>
-
-        <!-- Measured time, as distinct from the plan above: what the task has actually cost, not what
-             it was guessed or scheduled to cost. Hidden until a saved task is on screen. -->
-        <LinearLayout
-            android:id="@+id/work_section"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/work_title"
-                style="@style/Widget.TaskPlanner.SectionLabel"
-                android:accessibilityHeading="true"
-                tools:targetApi="28"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/work_section_title" />
-
             <LinearLayout
+                android:id="@+id/reminder_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <View
-                    android:id="@+id/work_state_dot"
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
-                    android:background="@drawable/bg_work_dot"
-                    android:visibility="gone" />
+                android:layout_marginTop="@dimen/spacing_section"
+                android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/work_live_seconds"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/reminder_title"
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textAppearance="?attr/textAppearanceSubtitle2"
+                    android:text="@string/reminder_section_title" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/reminder_chips"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    app:chipSpacingHorizontal="@dimen/spacing_xs"
+                    app:singleLine="false">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/reminder_at_time"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reminder_at_time" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/reminder_five_min"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reminder_five_min" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/reminder_fifteen_min"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reminder_fifteen_min" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/reminder_thirty_min"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reminder_thirty_min" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/reminder_one_hour"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reminder_one_hour" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/reminder_one_day"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reminder_one_day" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/reminder_custom"
+                        style="@style/Widget.TaskPlanner.Chip.State"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reminder_custom" />
+
+                </com.google.android.material.chip.ChipGroup>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/reminder_custom_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
                     android:visibility="gone"
-                    tools:text="01:24:35" />
+                    android:hint="@string/reminder_custom_hint"
+                    style="@style/Widget.TaskPlanner.Field">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/reminder_custom_minutes"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:maxLength="5"
+                        android:maxLines="1" />
+
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <TextView
-                    android:id="@+id/work_state_hint"
-                    android:layout_width="0dp"
+                    android:id="@+id/reminder_hint"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:textAppearance="?attr/textAppearanceCaption"
-                    tools:text="Nothing is being measured on this task" />
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:text="@string/reminder_hint_needs_date"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/workStartButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
+                <TextView
+                    android:id="@+id/reminder_status"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/work_start" />
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:visibility="gone"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                    tools:text="2 reminders set" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/workPauseButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/work_pause"
-                    android:visibility="gone" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/workResumeButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/work_resume"
-                    android:visibility="gone" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/workStopButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/work_stop"
-                    android:visibility="gone" />
-
-                <!-- Work the timer did not measure. Its own button rather than a menu item, because the
-                     only thing that makes an entered stretch trustworthy is that the user can see it is
-                     theirs and not a measurement. -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/workAddButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/history_add_title" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/work_totals"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textAppearance="?attr/textAppearanceBody2"
-                tools:text="Actual 1 h 45 min - Today 25 min" />
-
-            <TextView
-                android:id="@+id/work_balance"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:textAppearance="?attr/textAppearanceCaption"
-                tools:text="Estimate 2 h - 15 min left inside the estimate" />
-
-            <TextView
-                android:id="@+id/work_intervals_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/work_intervals_title"
-                android:textAppearance="?attr/textAppearanceCaption"
-                android:textStyle="bold" />
-
+            <!-- Measured time, as distinct from the plan above: what the task has actually cost, not what
+                 it was guessed or scheduled to cost. Hidden until a saved task is on screen, and last in the
+                 form because it is a record the reader reads rather than a field they fill. -->
             <LinearLayout
-                android:id="@+id/work_intervals"
+                android:id="@+id/work_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <TextView
-                android:id="@+id/work_intervals_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/work_no_intervals"
-                android:textAppearance="?attr/textAppearanceCaption" />
-
-        </LinearLayout>
-
-        <!-- How the task is classified: the three choices that put it beside the others. -->
-        <LinearLayout
-            android:id="@+id/how_section"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/Widget.TaskPlanner.SectionLabel"
-                android:accessibilityHeading="true"
-                tools:targetApi="28"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/section_how" />
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/task_priority_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_small"
-                android:hint="@string/label_priority"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                app:startIconDrawable="@drawable/ic_priority">
-
-                <AutoCompleteTextView
-                    android:id="@+id/task_priority"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="none" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/task_status_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:hint="@string/label_status"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                app:startIconDrawable="@drawable/ic_status">
-
-                <AutoCompleteTextView
-                    android:id="@+id/task_status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="none" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/task_category_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:hint="@string/label_category"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                app:startIconDrawable="@drawable/ic_category">
-
-                <AutoCompleteTextView
-                    android:id="@+id/task_category"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="none" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/reminder_section"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/reminder_title"
-                style="@style/Widget.TaskPlanner.SectionLabel"
-                android:accessibilityHeading="true"
-                tools:targetApi="28"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/reminder_section_title" />
-
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/reminder_chips"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                app:chipSpacingHorizontal="4dp"
-                app:singleLine="false">
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/reminder_at_time"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/reminder_at_time" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/reminder_five_min"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/reminder_five_min" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/reminder_fifteen_min"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/reminder_fifteen_min" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/reminder_thirty_min"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/reminder_thirty_min" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/reminder_one_hour"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/reminder_one_hour" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/reminder_one_day"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/reminder_one_day" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/reminder_custom"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/reminder_custom" />
-
-            </com.google.android.material.chip.ChipGroup>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/reminder_custom_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                android:hint="@string/reminder_custom_hint"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/reminder_custom_minutes"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:maxLength="5"
-                    android:maxLines="1" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <TextView
-                android:id="@+id/reminder_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/reminder_hint_needs_date"
-                android:textAppearance="?attr/textAppearanceCaption" />
-
-            <TextView
-                android:id="@+id/reminder_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:visibility="gone"
-                android:textAppearance="?attr/textAppearanceCaption"
-                tools:text="2 reminders set" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/repeat_section"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/repeat_title"
-                style="@style/Widget.TaskPlanner.SectionLabel"
-                android:accessibilityHeading="true"
-                tools:targetApi="28"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/section_repeat" />
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/repeat_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_small"
-                android:hint="@string/label_repeat"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                app:startIconDrawable="@drawable/ic_repeat">
-
-                <AutoCompleteTextView
-                    android:id="@+id/repeat_preset"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="none" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/repeat_interval_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/repeat_interval"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:maxLength="3"
-                    android:maxLines="1" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <TextView
-                android:id="@+id/repeat_week_days_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                android:text="@string/repeat_weekdays"
-                android:textAppearance="?attr/textAppearanceBody2" />
-
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/repeat_week_days"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:visibility="gone"
-                app:chipSpacingHorizontal="4dp"
-                app:singleLine="false">
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/day_mon"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/day_short_mon" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/day_tue"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/day_short_tue" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/day_wed"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/day_short_wed" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/day_thu"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/day_short_thu" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/day_fri"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/day_short_fri" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/day_sat"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/day_short_sat" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/day_sun"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/day_short_sun" />
-
-            </com.google.android.material.chip.ChipGroup>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/repeat_day_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                android:hint="@string/repeat_day_of_month"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/repeat_day_of_month"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:maxLength="2"
-                    android:maxLines="1" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <TextView
-                android:id="@+id/repeat_day_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:visibility="gone"
-                android:text="@string/repeat_day_of_month_hint"
-                android:textAppearance="?attr/textAppearanceCaption" />
-
-            <RadioGroup
-                android:id="@+id/repeat_scope_group"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="@dimen/spacing_section"
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <RadioButton
-                    android:id="@+id/repeat_scope_future"
+                <TextView
+                    android:id="@+id/work_title"
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/repeat_scope_future" />
+                    android:text="@string/work_section_title" />
 
-                <RadioButton
-                    android:id="@+id/repeat_scope_this"
+                <!-- The reading and the commands are on separate lines. They shared one row before, and at
+                     320dp a running clock, a sentence about it and three buttons do not fit: the sentence
+                     took the space and the buttons left the screen. -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/repeat_scope_this" />
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-            </RadioGroup>
+                    <View
+                        android:id="@+id/work_state_dot"
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:background="@drawable/bg_work_dot"
+                        android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/repeat_scope_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/repeat_scope_hint_new"
-                android:textAppearance="?attr/textAppearanceCaption" />
+                    <TextView
+                        android:id="@+id/work_live_seconds"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_small"
+                        android:textAppearance="@style/TextAppearance.TaskPlanner.Title"
+                        android:visibility="gone"
+                        tools:text="01:24:35" />
 
-            <TextView
-                android:id="@+id/series_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                android:textAppearance="?attr/textAppearanceBody2"
-                tools:text="@string/series_status_running" />
+                    <TextView
+                        android:id="@+id/work_state_hint"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_small"
+                        android:layout_weight="1"
+                        android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                        tools:text="Nothing is being measured on this task" />
 
-            <LinearLayout
-                android:id="@+id/series_controls"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="vertical"
-                android:visibility="gone">
+                </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/pauseSeriesButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_pause_series" />
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:gravity="end"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/finishSeriesButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/workStartButton"
+                        style="@style/Widget.TaskPlanner.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/work_start" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/workPauseButton"
+                        style="@style/Widget.TaskPlanner.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/work_pause"
+                        android:visibility="gone" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/workResumeButton"
+                        style="@style/Widget.TaskPlanner.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/work_resume"
+                        android:visibility="gone" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/workStopButton"
+                        style="@style/Widget.TaskPlanner.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/work_stop"
+                        android:visibility="gone" />
+
+                    <!-- Work the timer did not measure. Its own button rather than a menu item, because the
+                         only thing that makes an entered stretch trustworthy is that the user can see it is
+                         theirs and not a measurement. -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/workAddButton"
+                        style="@style/Widget.TaskPlanner.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/history_add_title" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/work_totals"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_finish_series" />
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+                    tools:text="Actual 1 h 45 min - Today 25 min" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/deleteSeriesButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                <TextView
+                    android:id="@+id/work_balance"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/error"
-                    android:text="@string/action_delete_series" />
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                    tools:text="Estimate 2 h - 15 min left inside the estimate" />
+
+                <TextView
+                    android:id="@+id/work_intervals_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/work_intervals_title"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/work_intervals"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/work_intervals_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/work_no_intervals"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
 
             </LinearLayout>
 
         </LinearLayout>
 
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- The footer. A sibling of the scroll rather than its last child, on its own surface, with a hairline
+         across the top: the fields sliding behind it have to stop at a line and not run into the labels. -->
+    <LinearLayout
+        android:id="@+id/button_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_footer"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/screen_margin"
+        android:paddingEnd="@dimen/screen_margin"
+        android:paddingTop="@dimen/spacing_small"
+        android:paddingBottom="@dimen/spacing_small">
+
+        <!-- Where the save-in-progress figure sits: beside the button it disables, so the reader who pressed
+             Save sees the answer where their finger was rather than at the end of a scroll they have to
+             start hunting down. -->
         <ProgressBar
             android:id="@+id/progressBar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:visibility="gone"
-            android:layout_marginTop="16dp" />
+            android:layout_marginEnd="@dimen/spacing_small"
+            android:visibility="gone" />
 
-        <LinearLayout
-            android:id="@+id/button_container"
-            android:layout_width="match_parent"
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/cancelButton"
+            style="@style/Widget.TaskPlanner.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:orientation="horizontal">
+            android:layout_marginEnd="@dimen/spacing_small"
+            android:text="@string/action_cancel" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/cancelButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:text="@string/action_cancel" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/saveTask"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="@string/action_save" />
-
-        </LinearLayout>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/saveTask"
+            style="@style/Widget.TaskPlanner.Button.Filled"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_small"
+            android:text="@string/action_save" />
 
     </LinearLayout>
 
-</androidx.core.widget.NestedScrollView>
+</LinearLayout>
