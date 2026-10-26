@@ -1,233 +1,280 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+    The task editor. This step groups the fields it already had into the six sections the design names,
+    without moving the sections yet: the order the form ends up in is decided by a test in the next commit,
+    not by whatever the file happened to look like after the wrappers went in.
+
+    The content container becomes a plain vertical LinearLayout on the way. Its children used to be thirteen
+    loose fields chained to each other, and a chain of fields cannot be moved as a group — every cut asks
+    for the constraints of its two neighbours to be rewritten, which is where a redesign loses a field. Six
+    named blocks stack by themselves.
+
+    Every id the fragment and the tests bind to is unchanged, including the four the recurrence bug of PR #21
+    is tested through and the four the work-adjustment dialog opens on.
+-->
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:orientation="vertical"
         android:padding="16dp">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/task_title_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/hint_task_title"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-            app:layout_constraintTop_toTopOf="parent">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/task_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="text"
-                android:maxLines="1"
-                android:imeOptions="actionNext" />
-
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/task_description_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="@string/hint_task_description"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-            app:layout_constraintTop_toBottomOf="@id/task_title_layout">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/task_description"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="top"
-                android:inputType="textMultiLine"
-                android:minLines="3" />
-
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/task_due_date_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="@string/label_due_date"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-            app:startIconDrawable="@drawable/ic_calendar"
-            app:layout_constraintTop_toBottomOf="@id/task_description_layout">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/task_due_date"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:focusable="false"
-                android:inputType="none" />
-
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/task_due_time_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="@string/label_due_time"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-            app:startIconDrawable="@drawable/ic_reminder"
-            app:layout_constraintTop_toBottomOf="@id/task_due_date_layout">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/task_due_time"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:focusable="false"
-                android:inputType="none" />
-
-        </com.google.android.material.textfield.TextInputLayout>
-
+        <!-- Task: what the thing is. -->
         <LinearLayout
-            android:id="@+id/plan_section"
+            android:id="@+id/task_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/Widget.TaskPlanner.SectionLabel"
+                android:accessibilityHeading="true"
+                tools:targetApi="28"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/section_task" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/task_title_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
+                android:hint="@string/hint_task_title"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/task_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:imeOptions="actionNext" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/task_description_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:hint="@string/hint_task_description"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/task_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine"
+                    android:minLines="3" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+        </LinearLayout>
+
+        <!-- When: the deadline, and the plan around it. The plan stays its own block inside the section,
+             because `plan_hint` and `plan_clear` speak about the plan and not about the deadline. -->
+        <LinearLayout
+            android:id="@+id/when_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:orientation="vertical"
-            app:layout_constraintTop_toBottomOf="@id/task_due_time_layout">
+            android:orientation="vertical">
 
             <TextView
-                android:id="@+id/plan_title"
+                style="@style/Widget.TaskPlanner.SectionLabel"
+                android:accessibilityHeading="true"
+                tools:targetApi="28"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/plan_section_title"
-                android:textAppearance="?attr/textAppearanceSubtitle2" />
+                android:text="@string/section_when" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/task_due_date_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
+                android:hint="@string/label_due_date"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                app:startIconDrawable="@drawable/ic_calendar">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/task_due_date"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:focusable="false"
+                    android:inputType="none" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/task_due_time_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:hint="@string/label_due_time"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                app:startIconDrawable="@drawable/ic_reminder">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/task_due_time"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:focusable="false"
+                    android:inputType="none" />
+
+            </com.google.android.material.textfield.TextInputLayout>
 
             <LinearLayout
+                android:id="@+id/plan_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
+                android:layout_marginTop="16dp"
+                android:orientation="vertical">
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/plan_start_date_layout"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="0dp"
+                <TextView
+                    android:id="@+id/plan_title"
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="@string/plan_start_date">
+                    android:text="@string/plan_section_title" />
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/plan_start_date"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:focusable="false"
-                        android:inputType="none" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/plan_start_time_layout"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:hint="@string/plan_start_time">
+                    android:layout_marginTop="4dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/plan_start_time"
-                        android:layout_width="match_parent"
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/plan_start_date_layout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:focusable="false"
-                        android:inputType="none" />
+                        android:layout_weight="1"
+                        android:hint="@string/plan_start_date">
 
-                </com.google.android.material.textfield.TextInputLayout>
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/plan_start_date"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:inputType="none" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/plan_start_time_layout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:hint="@string/plan_start_time">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/plan_start_time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:inputType="none" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/plan_end_date_layout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="@string/plan_end_date">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/plan_end_date"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:inputType="none" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/plan_end_time_layout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:hint="@string/plan_end_time">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/plan_end_time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:inputType="none" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/plan_estimate_layout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="@string/plan_estimate">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/plan_estimate_minutes"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/plan_clear"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:text="@string/plan_clear" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/plan_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/plan_hint_none"
+                    android:textAppearance="?attr/textAppearanceCaption" />
 
             </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/plan_end_date_layout"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="@string/plan_end_date">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/plan_end_date"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:focusable="false"
-                        android:inputType="none" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/plan_end_time_layout"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:hint="@string/plan_end_time">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/plan_end_time"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:focusable="false"
-                        android:inputType="none" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/plan_estimate_layout"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="@string/plan_estimate">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/plan_estimate_minutes"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="number" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/plan_clear"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom"
-                    android:text="@string/plan_clear" />
-
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/plan_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/plan_hint_none"
-                android:textAppearance="?attr/textAppearanceCaption" />
 
         </LinearLayout>
 
@@ -239,15 +286,16 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:orientation="vertical"
-            android:visibility="gone"
-            app:layout_constraintTop_toBottomOf="@id/plan_section">
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/work_title"
+                style="@style/Widget.TaskPlanner.SectionLabel"
+                android:accessibilityHeading="true"
+                tools:targetApi="28"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/work_section_title"
-                android:textAppearance="?attr/textAppearanceSubtitle2" />
+                android:text="@string/work_section_title" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -363,74 +411,90 @@
 
         </LinearLayout>
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/task_priority_layout"
+        <!-- How the task is classified: the three choices that put it beside the others. -->
+        <LinearLayout
+            android:id="@+id/how_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:hint="@string/label_priority"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-            app:startIconDrawable="@drawable/ic_priority"
-            app:layout_constraintTop_toBottomOf="@id/plan_section">
+            android:orientation="vertical">
 
-            <AutoCompleteTextView
-                android:id="@+id/task_priority"
+            <TextView
+                style="@style/Widget.TaskPlanner.SectionLabel"
+                android:accessibilityHeading="true"
+                tools:targetApi="28"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="none" />
+                android:text="@string/section_how" />
 
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/task_status_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="@string/label_status"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-            app:startIconDrawable="@drawable/ic_status"
-            app:layout_constraintTop_toBottomOf="@id/task_priority_layout">
-
-            <AutoCompleteTextView
-                android:id="@+id/task_status"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/task_priority_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="none" />
+                android:layout_marginTop="@dimen/spacing_small"
+                android:hint="@string/label_priority"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                app:startIconDrawable="@drawable/ic_priority">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                <AutoCompleteTextView
+                    android:id="@+id/task_priority"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/task_category_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="@string/label_category"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-            app:startIconDrawable="@drawable/ic_category"
-            app:layout_constraintTop_toBottomOf="@id/task_status_layout">
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <AutoCompleteTextView
-                android:id="@+id/task_category"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/task_status_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="none" />
+                android:layout_marginTop="16dp"
+                android:hint="@string/label_status"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                app:startIconDrawable="@drawable/ic_status">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                <AutoCompleteTextView
+                    android:id="@+id/task_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/task_category_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:hint="@string/label_category"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                app:startIconDrawable="@drawable/ic_category">
+
+                <AutoCompleteTextView
+                    android:id="@+id/task_category"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/reminder_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:orientation="vertical"
-            app:layout_constraintTop_toBottomOf="@id/task_category_layout">
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/reminder_title"
+                style="@style/Widget.TaskPlanner.SectionLabel"
+                android:accessibilityHeading="true"
+                tools:targetApi="28"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/reminder_section_title"
-                android:textAppearance="?attr/textAppearanceSubtitle2" />
+                android:text="@string/reminder_section_title" />
 
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/reminder_chips"
@@ -541,13 +605,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:orientation="vertical"
-            app:layout_constraintTop_toBottomOf="@id/reminder_section">
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/repeat_title"
+                style="@style/Widget.TaskPlanner.SectionLabel"
+                android:accessibilityHeading="true"
+                tools:targetApi="28"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/section_repeat" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/repeat_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
                 android:hint="@string/label_repeat"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                 app:startIconDrawable="@drawable/ic_repeat">
@@ -754,10 +827,8 @@
             android:id="@+id/progressBar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
             android:visibility="gone"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/repeat_section"
             android:layout_marginTop="16dp" />
 
         <LinearLayout
@@ -765,8 +836,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:orientation="horizontal"
-            app:layout_constraintTop_toBottomOf="@id/progressBar">
+            android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/cancelButton"
@@ -787,6 +857,6 @@
 
         </LinearLayout>
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
 
-</androidx.core.widget.NestedScrollView> 
+</androidx.core.widget.NestedScrollView>

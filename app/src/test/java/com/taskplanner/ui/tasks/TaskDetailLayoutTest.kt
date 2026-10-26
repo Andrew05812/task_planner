@@ -13,6 +13,7 @@ import com.taskplanner.R
 import com.taskplanner.databinding.FragmentTaskDetailBinding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,6 +34,35 @@ class TaskDetailLayoutTest {
         // the chip styles do not resolve, which is not how the screen is used.
         val themed = ContextThemeWrapper(context, R.style.Theme_TaskPlanner)
         return FragmentTaskDetailBinding.inflate(LayoutInflater.from(themed))
+    }
+
+    /** The scrolling form's block list — the editor's sections, not the loose fields the form used to be. */
+    private fun FragmentTaskDetailBinding.content(): ViewGroup =
+        (root.getChildAt(0) as ViewGroup).also {
+            assertTrue(
+                "the form is a vertical stack of sections, so its container is a ViewGroup that stacks",
+                it.childCount > 0
+            )
+        }
+
+    /**
+     * Which block of the form a field belongs to, answered by walking up from the field to the content
+     * container and taking that ancestor's position.
+     *
+     * An earlier version of this file compared fields by their index among the container's direct children.
+     * That only worked while the editor was one flat list; with the fields grouped, the question a reader
+     * and a screen reader both ask is *which section is this in*, and a test that ignored the grouping would
+     * pass on a form that put the deadline inside the Repeat block.
+     */
+    private fun sectionOf(content: ViewGroup, id: Int): Int {
+        val field = content.findViewById<View>(id)
+        assertNotNull(
+            "the editor has no field #${content.context.resources.getResourceName(id)}",
+            field
+        )
+        var ancestor: View = field
+        while (ancestor.parent !== content) ancestor = ancestor.parent as View
+        return content.indexOfChild(ancestor)
     }
 
     @Test
@@ -125,10 +155,8 @@ class TaskDetailLayoutTest {
     @Test
     fun `the recurrence section sits between the task fields and the save buttons`() {
         val binding = inflated()
-        val content = binding.root.getChildAt(0) as ViewGroup
-        val index = { id: Int ->
-            (0 until content.childCount).first { content.getChildAt(it).id == id }
-        }
+        val content = binding.content()
+        val index = { id: Int -> sectionOf(content, id) }
 
         assertEquals(content.childCount - 1, index(R.id.button_container))
         assertEquals(
@@ -209,10 +237,8 @@ class TaskDetailLayoutTest {
     @Test
     fun `measured time sits under the plan it is kept apart from`() {
         val binding = inflated()
-        val content = binding.root.getChildAt(0) as ViewGroup
-        val index = { id: Int ->
-            (0 until content.childCount).first { content.getChildAt(it).id == id }
-        }
+        val content = binding.content()
+        val index = { id: Int -> sectionOf(content, id) }
 
         assertTrue(
             "the estimate and the actual are neighbours in the form but never the same line",
@@ -245,10 +271,8 @@ class TaskDetailLayoutTest {
     @Test
     fun `reminders sit with the deadline they count back from`() {
         val binding = inflated()
-        val content = binding.root.getChildAt(0) as ViewGroup
-        val index = { id: Int ->
-            (0 until content.childCount).first { content.getChildAt(it).id == id }
-        }
+        val content = binding.content()
+        val index = { id: Int -> sectionOf(content, id) }
 
         assertTrue(
             "the time of the deadline comes before the warnings about it",

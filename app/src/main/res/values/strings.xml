@@ -18,6 +18,17 @@
     <string name="label_actual_time">Actual Time</string>
     <string name="label_tags">Tags</string>
 
+    <!-- The four section headings the editor groups its fields under (spec 4.3). The other two headings on
+         the screen already existed — `plan_section_title`, `reminder_section_title` and `work_section_title`
+         are the same words the fields have always been labelled with, so grouping did not need new copy.
+         These four do: before Stage 6 the form had no name for "the deadline and the plan" or "the three
+         choices that classify the task", which is why a reader had to hold the whole list in their head to
+         find the field they wanted. -->
+    <string name="section_task">Task</string>
+    <string name="section_when">When</string>
+    <string name="section_how">How</string>
+    <string name="section_repeat">Repeat</string>
+
     <string name="title_category_detail">Category Details</string>
     <string name="hint_category_name">Category Name</string>
     <string name="label_category_color">Color</string>
