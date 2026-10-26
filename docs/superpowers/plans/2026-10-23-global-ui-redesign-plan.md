@@ -4449,3 +4449,45 @@ was right. They are recorded here because each is a way this stage's own evidenc
 8. *`ListRowView` announced every row as a button, including a display-only one* (`row_list` has a `rowValue`
    for exactly that case). The class name is now set only when the row is clickable, and the test asserts both
    halves — which is a stronger claim than the one it replaced.
+
+
+## 20n — The FAB claim, measured twice, and the step Stage 3 left behind
+
+A reviewer of the Stage 4 photographs said the floating add button covers a task card and may cover its
+actions, citing `after/s4-card-todo.png` and `after/s4-card-overdue.png`. Both frames do show it: the green
+square that completes a row sits under the button, with a corner of it peeking out. The claim about the
+pixels is true. Whether it is a defect is a different question, and it was answered by measurement rather
+than by argument — `TasksFabClearanceInstrumentedTest`, nine seeded rows, three assertions, run at 393dp,
+at 320dp and at 393dp with font scale 1.3 on `taskplanner_avd` / `emulator-5584`.
+
+* **The last row clears it.** At the end of the scroll the final row's complete button does not intersect the
+  button's rectangle, and at least 90% of it is on screen — the same bar Espresso's own `isDisplayed()`
+  applies, computed on that view rather than through a matcher that would hit three rows at once. The
+  clearance is `fab_size` + `fab_margin` = 56dp + 16dp = 72dp of button against `list_bottom_gutter`'s 88dp of
+  gutter, and the test reads both as rendered pixels on the device — the only form of the claim that can fail.
+* **A covered row is a state, not a trap.** Put a row under the button on purpose, scroll one item, and the
+  same button has left. The first version of this assertion *looked* for a covered row and failed at 320dp,
+  where the initial frame happens to contain none — a test failing for the shape of the screen instead of
+  for the behaviour of the design. The state is created deliberately now.
+* **The overlap in the Stage 4 frames is mid-list.** Those rows were brought to the top by `revealRow()` so a
+  specific card could be photographed; content passing under a non-hiding floating button while a list
+  scrolls is what a floating button is. `after/s6-fab-mid-list.png` shows that state on purpose, and
+  `after/s6-fab-bottom-row.png`, `-bottom-320.png` and `-bottom-font13.png` show the end of the scroll, where
+  the reader actually has to reach something.
+
+What the investigation did turn up was a step that had been planned and never taken. `list_bottom_gutter` was
+added in Stage 1 with the comment that it is "derived, and pinned by a test, so the list's last row and the
+FAB cannot drift apart", review row d16 made that a MAJOR finding, and row g18 moved the literal into
+Stage 3's ownership — "the literal moves to 3.2, and the grep gate is dated to Stage 3". Stage 3 then edited
+this very file twice (`f3216b3`, `ba907c3`) and left `android:paddingBottom="88dp"` and the FAB's
+`android:layout_margin="16dp"` as literals, and no test read the sum: `grep -rn list_bottom_gutter app/src`
+found the dimen and, since Stage 5, the Profile scroll. So the guarantee the comment promised was a
+coincidence between two numbers. This commit points both attributes at their dimens and replaces the
+would-be tautology ("padding equals the dimen") with the geometry the dimen exists to hold: the gutter is at
+least the button's height plus its margin, and it scrolls with the content (`clipToPadding=false`).
+
+The FAB is not hidden on scroll, is not moved, and no target was resized; nothing in the list's data or
+behaviour changed. Regression: `TaskCardStatesInstrumentedTest` 12, `TaskCardWidthBudgetInstrumentedTest` 7,
+`TaskCardSwipeInstrumentedTest` 2, `TaskEditorInstrumentedTest` 4, `TasksHeaderInstrumentedTest` 5 and
+`TasksScreenInstrumentedTest` 4 — 34 runs, all green, against the installed `base.apk` whose sha256 equals the
+built `app-debug.apk` (`314bba85c0ade69b7b3f1c8154deafa7f589661401770442fbdf2b0968de55eb`).
