@@ -72,7 +72,12 @@
     <string name="dialog_edit_profile_title">Edit Profile</string>
     <string name="dialog_delete_profile_title">Delete Profile</string>
     <string name="dialog_switch_profile_title">Switch Profile</string>
-    <string name="dialog_delete_profile_message">Are you sure you want to delete profile %1$s?</string>
+    <!-- Stage 5 rewrote this message. The old one read "Are you sure you want to delete profile %1$s?" and
+         the fragment passed it to `setMessage(int)` unformatted, so the reader met a literal "%1$s" on
+         screen and no word about what goes with the profile. Spec §4.9 asks a destructive confirmation to
+         name the consequences, and the tasks, categories, goals, habits and work intervals are the
+         consequences — they are cascade-deleted with the row. -->
+    <string name="dialog_delete_profile_message">Delete %1$s and everything this profile holds — its tasks, categories, goals, habits and tracked work? This cannot be undone.</string>
     <string name="dialog_switch_profile_message">Switch to profile %1$s?</string>
     <string name="dialog_start_task_title">Start Task</string>
     <string name="dialog_start_task_message">Start working on this task?</string>
@@ -107,6 +112,13 @@
     <string name="action_delete_profile">Delete Profile</string>
     <string name="action_switch_profile">Switch Profile</string>
     <string name="action_add_profile">Add Profile</string>
+
+    <!-- The four groups the account screen is divided into (Stage 5). The header is the only thing that
+         separates the destructive row from the rest, so it is a word and not a colour. -->
+    <string name="section_account">Account</string>
+    <string name="section_your_work">Your work</string>
+    <string name="section_data">Data</string>
+    <string name="section_danger_zone">Danger zone</string>
 
     <string name="hint_name">Name</string>
     <string name="hint_email">Email</string>

@@ -222,6 +222,24 @@ is no `ui/profile` package under `app/src/test/`, and where the instrumented sui
 all — `TaskEditorInstrumentedTest` creates and deletes one — the profile is a session fixture, never the
 thing under test. Stage 5 regroups it and the profile tests arrive with it.
 
+**Resolved in Stage 5.** The eight buttons are eight `row_list` rows under four named headers — Account (2),
+Your work (4), Data (1), Danger zone (1) — each row a 40dp icon plate with a real glyph, the words, and a
+chevron saying it goes somewhere; the header block carries a 64dp avatar with the initials, the name in
+`headline` and the address in `meta`. The destructive row is now separated by a section of its own rather
+than by paint, and the whole 56dp line is the click target (measured on the device at 104px tall at 393dp,
+against a 48dp floor the test names). The profile has tests: `ProfileLayoutTest` (11 JVM),
+`ProfileScreenInstrumentedTest` (6 on the device) and `ProfileNoUserInstrumentedTest` (2, the empty state
+this screen had never rendered).
+
+Two defects surfaced while writing them, and both are fixed rather than noted. The delete confirmation was
+built with `setMessage(R.string.dialog_delete_profile_message)`, and that string carries a `%1$s` —
+`setMessage(int)` does not substitute arguments, so the reader was shown *"Are you sure you want to delete
+profile %1$s?"*. It now names the profile and the loss: tasks, categories, goals, habits and tracked work.
+And `row_list` shipped in Stage 1 with an icon *container* and no icon, which is why the old buttons had to
+carry their glyphs through `app:icon` — three of the eight did not. The row also announced itself to TalkBack
+as a `LinearLayout`; `ListRowView` now reports `android.widget.Button` and the four headers are real
+headings, so a reader can jump between sections instead of walking eight rows.
+
 ### 4.9 The dashboard's three-up figure row has no gutter — `before/03-statistics.png`
 
 Found while capturing, not in the plan's list of eight. The headline card prints

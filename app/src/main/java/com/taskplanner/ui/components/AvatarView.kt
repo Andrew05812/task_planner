@@ -23,6 +23,14 @@ class AvatarView @JvmOverloads constructor(
     private val rect = RectF()
     private var initials: String = ""
 
+    /**
+     * What the circle says.
+     *
+     * Readable because "the avatar carries the reader's initials" is a claim a test has to be able to check:
+     * the letters are painted into a Canvas, so nothing else in the view tree knows them.
+     */
+    val initialsText: String get() = initials
+
     fun setInitials(text: String) {
         initials = text.take(2).uppercase()
         invalidate()

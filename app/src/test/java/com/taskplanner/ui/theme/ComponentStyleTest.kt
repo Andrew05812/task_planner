@@ -181,6 +181,13 @@ class IncludeBindingTest {
         assertNotNull(b.rowTitle)
         assertNotNull(b.rowValue)
         assertNotNull(b.rowChevron)
+        // Stage 5 put the glyph itself inside the plate: the container alone could not carry an icon, which
+        // is why Profile's eight rows had to reach for `app:icon` on a button before. Declared empty, on
+        // purpose — which picture a row shows is the screen's decision, and the device test is where
+        // `drawable != null` is asserted. A freshly inflated view is VISIBLE anyway, so that would have been
+        // a test of the default.
+        assertNotNull(b.rowIcon)
+        org.junit.Assert.assertNull("the include ships a place for a glyph, not a glyph", b.rowIcon.drawable)
         // The value line is hidden until a screen gives the row one, and `gone` rather than `invisible`
         // so a row without a value takes the width back for its title.
         assertEquals(android.view.View.GONE, b.rowValue.visibility)

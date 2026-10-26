@@ -2723,12 +2723,21 @@ Purpose: turn eight stacked buttons into a screen. Depends on: S1 (styles, inclu
 Profile has **no tests at all** today — verified by `find app/src/test -path "*profile*"` returning
 nothing — so this stage writes coverage as its first act, not as its last.
 
-- [ ] **5.1 Write `ProfileLayoutTest`** (JVM/Robolectric, inflates `fragment_profile.xml` under the app
+- [x] **5.1 Write `ProfileLayoutTest`** (JVM/Robolectric, inflates `fragment_profile.xml` under the app
   theme): every row is a `row_list` include with an icon, a title, a chevron and ≥ 48dp height; the four
   section labels exist; the danger row is separated from the others by a section header rather than by
   colour alone; no row is a bare `MaterialButton` spanning the screen.
 
-- [ ] **5.2 Write `ProfileScreenInstrumentedTest`** (device; `ActivityScenario`; seed the profile straight
+  *Executed as eleven tests, and every assertion is written so it cannot pass on an empty list.* Rows are found
+  through the ids `row_list` already gives its children (`rowTitle`, `rowChevron`, `rowIconContainer`) rather
+  than through ids Stage 5 invents, so the test cannot be satisfied by declaring a view and calling it done;
+  the 48dp test names the row count before measuring, because a loop over zero rows passes every assertion
+  inside it. Two assertions came out of the accessibility review rather than out of this step: a row reports
+  `android.widget.Button` as its accessibility class (it was a `LinearLayout`, so TalkBack announced the
+  eight destinations by their layout), and the four section labels are real headings
+  (`android:accessibilityHeading`, API 28, with `tools:targetApi` so lint stays clean).
+
+- [x] **5.2 Write `ProfileScreenInstrumentedTest`** (device; `ActivityScenario`; seed the profile straight
   into the app's storage the way `TaskEditorInstrumentedTest` does): the screen renders with a long name and
   a long email; each of the **six navigating** rows reaches its real destination — assert the destination by
   the `NavHostFragment`'s current destination id after the tap; the delete confirmation names the
@@ -2736,9 +2745,29 @@ nothing — so this stage writes coverage as its first act, not as its last.
   (`editProfileButton` and `deleteProfileButton`) open dialogs rather than navigating and are asserted as
   dialogs, which is what they are.
 
-- [ ] **5.3 Run both, watch them fail.**
+  *Executed as six tests, plus a second class for the state this one cannot reach.* The destination is read
+  from `NavHostFragment.navController.currentDestination?.id`, never from what happens to be visible. The
+  long name and the long email are written by their own test and taken back in a `finally` — the account is
+  a shared fixture, and a test that leaves it renamed fails the next one for the wrong reason (that is
+  exactly what the first run of this class did, and the cascade is why the restore moved into `finally`).
+  The empty state is `ProfileNoUserInstrumentedTest`, not a test in this class: one app process serves one
+  profile, so the no-user screen needs its own invocation, and ordering a class on JUnit's method order is
+  not a way to get it. That class deletes only fixtures at `@example.test` — this project's own seeded
+  profiles — and refuses with a named message if any other profile is on the device, because clearing a
+  reader's data is not a test's business.
 
-- [ ] **5.4 Rewrite `fragment_profile.xml`**: header (64dp `AvatarView` initial, name in `headline`, email
+- [x] **5.3 Run both, watch them fail.**
+
+  *Executed, and the failures were the interesting part.* The JVM class failed six of the eight tests it then had (it has eleven now, the two extra coming from the accessibility review below) against the old
+  layout — `expected:<0> but was:<8>` MaterialButtons, `expected:<8> but was:<0>` rows, `expected:<4> but
+  was:<8>` headers (a `MaterialButton` *is* a `TextView`, which is how the eight buttons were being counted
+  as section labels), and no avatar at all. The device class failed two of its first five: no chevron inside any row,
+  and a delete confirmation whose text was the literal string `Are you sure you want to delete profile
+  %1$s?` — the placeholder was never substituted, because `setMessage(int)` does not format arguments. That
+  is a defect the design work found by accident and fixed on the way: the message now names the tasks,
+  categories, goals, habits and tracked work that go with the profile, and the reader's name travels in.
+
+- [x] **5.4 Rewrite `fragment_profile.xml`**: header (64dp `AvatarView` initial, name in `headline`, email
   in `meta`), then four sections — Account (`editProfileButton`, `switchProfileButton`), Your work
   (`openGoalsButton`, `openHabitsButton`, `openInsightsButton`, `openReportsButton`), Data
   (`openSettingsButton`), Danger zone (`deleteProfileButton`) — each row an
@@ -2749,27 +2778,106 @@ nothing — so this stage writes coverage as its first act, not as its last.
   someone to discover. Keep `contentGroup`, `noUserGroup`, `progressBar`, `profileName`, `profileEmail`,
   `createProfileButton`, `switchProfileButtonNoUser`.
 
-  `contentGroup` is not merely a Profile detail: `TasksScreenInstrumentedTest:56` asserts it is displayed
-  after navigating away to Statistics and back, so removing or renaming it breaks a test on a different
-  screen. `profileCard` is bound by nothing in Kotlin or in any test — `grep -rn "profileCard" app/src`
-  returns the layout alone — so the header rewrite drops it, and the commit message says so rather than
-  leaving the deletion unexplained.
+  *Executed, with the ids kept under their own names.* The includes are `@+id/editProfileButton`,
+  `@+id/openGoalsButton` and so on rather than new `rowXxx` names, because `ReportScreenInstrumentedTest`
+  already clicks `R.id.openReportsButton` — a redesign that costs another screen's test its target is not a
+  redesign, and ViewBinding gives the fragment a `RowListBinding` per row either way. `profileCard` is gone
+  as planned: `grep -rn "profileCard" app/src` now returns nothing outside this document. Two things the
+  step did not anticipate: `row_list` had an icon *plate* and no icon, so the include gained a 24dp
+  `rowIcon` (`@dimen/icon_glyph`, AppCompat widget with `app:tint` — lint calls `android:tint` an error);
+  and the row root became `ListRowView`, because a `LinearLayout` announces itself as a layout.
+
+  `contentGroup` is not merely a Profile detail: `ProfileFragment.observeViewModel` shows and hides it for
+  three of the four states, and `ProfileNoUserInstrumentedTest` asserts it is gone when nobody is signed in,
+  so renaming it breaks the screen's own state machine. (This step was written claiming
+  `TasksScreenInstrumentedTest:56` asserted it from another screen; the audit table at row S4 and §20h
+  already record that assertion as superseded — it named a container that does not exist on Statistics, so it
+  could never have passed, and Stage 0.1a replaced it. Corrected here when Stage 5 re-read it.)
+  `profileCard` is bound by nothing in Kotlin or in any test — `grep -rn "profileCard" app/src` now returns
+  nothing at all — so the header rewrite drops it, and the commit message says so rather than leaving the
+  deletion unexplained.
 
   No Achievements row (spec §1: the screen does not exist). No archive or work-history row (they belong to
   Tasks). No backup row (Settings owns export and import). No avatar photo (spec §1).
 
-- [ ] **5.5 Update `ProfileFragment`**: bind through the include bindings, set each row's icon, title,
+  *The keep-list held: all seven views are still there, and `ProfileLayoutTest` asserts exactly that list by
+  id so a later rewrite cannot drop one quietly.*
+
+- [x] **5.5 Update `ProfileFragment`**: bind through the include bindings, set each row's icon, title,
   trailing value and `contentDescription`, and give the row root the click listener so the whole 56dp row is
   the target. `showDeleteConfirmation`, `validateInput`, `showEditProfileDialog`, `showCreateProfileDialog`
   and every `viewModel.*` call stay exactly as they are — the business logic is untouched, including the
   deletion path.
 
-- [ ] **5.6 Gates, then device evidence:** light and dark at 393dp, 320dp, font 1.3, a long name
+  *Executed, with one signature change and no logic change.* All eight row listeners hang on
+  `binding.<name>.root`; the avatar gets the initials it was always meant to carry
+  (`profileAvatar.setInitials(user.name)`); and each row's `contentDescription` is the same string as its
+  title, which the device test asserts pair by pair so a future edit cannot make the screen say one thing
+  and read another. No row carries a trailing value: the four "Your work" screens would each need a count,
+  and a count is a query this stage is not allowed to invent.
+
+  `showDeleteConfirmation()` became `showDeleteConfirmation(user)` for one reason — the message has a `%1$s`
+  and `setMessage(int)` never substituted it, so the reader was being shown the placeholder. The dialog
+  still asks, still deletes through `viewModel.deleteProfile()` on the positive button, and still does
+  nothing on cancel; `validateInput`, `showEditProfileDialog`, `showCreateProfileDialog` and every
+  `viewModel.*` call are the code that was there before — the only characters that moved in them are two
+  lines of trailing whitespace the editor dropped.
+
+- [x] **5.6 Gates, then device evidence:** light and dark at 393dp, 320dp, font 1.3, a long name
   ("Christopher Maximilian von und zu Thalberg"), a long email, and the no-profile state. Six screenshots.
   Run `design-review:accessibility-review` over the row list: targets, labels, focus order, contrast of the
   section labels.
 
-- [ ] **5.7 Commit.**
+  *Executed.* Gates: **105 suites / 1453 JVM tests / 0 failures / 0 errors / 0 skipped**, `lintDebug`
+  0 errors and 176 warnings (from 179; three findings went away with the rewrite, and this note does not claim to know which three — the report is a count, not a diff),
+  `assembleDebug` clean, `app-debug.apk` =
+  `9c3a634264161ecc2f4e1176a2103e857b5b3539b5cb3e5660ad39396989656f`, and the `base.apk` pulled back out of
+  `/data/app/~~2eCe-gwYpVlk0K-29meYMg==/com.taskplanner-…/base.apk` hashes to the same value. On
+  `taskplanner_avd` / `emulator-5584` and no other device: `ProfileScreenInstrumentedTest` 6/6 at 393dp light
+  font 1.0, 320dp light font 1.0, 393dp light font 1.3 and 393dp **dark** font 1.0 — each configuration
+  applied and read back before the run, with `mComputedNightMode` from `dumpsys uimode` as the proof of the
+  theme — plus `ProfileNoUserInstrumentedTest` 2/2. 26 instrumented runs in all. The six photographs are
+  `after/s5-profile-light.png`, `-dark`, `-320`, `-font13`, `-long` and `-nouser`.
+
+  The matrix took several passes. Two of them were this stage's own test bugs, and they are recorded rather
+  than quietly fixed: an assertion that a two-line name is at least `lineHeight × 2` tall fails by one pixel
+  on a real device, because the layout rounds once and the multiplication rounds twice — the check is now
+  against the view's own `Layout`, which is what "not clipped" actually means; and `ellipsize="middle"`
+  collapses the middle with one ellipsis mark per dropped character, so "the shown text is shorter" is false
+  and the true statement is that it differs, keeps both ends, and carries the mark in the middle. The third
+  pass was a real lesson about a shared fixture: the long-name test renamed the account and, when its own
+  assertion failed, never renamed it back — so the next test in the class failed on the name. The restore
+  moved into a `finally`.
+
+  **Accessibility review — manual, labelled as such.** The skill's automated path is a browser audit
+  (`audit-a11y.mjs` over a route with `design.qa.yaml`); this is an Android View system, so the review was
+  done against source and device screenshots, which is the path the skill prescribes when automation does not
+  apply. What it found, and where each went:
+
+  * **fixed here** — a row announced itself as `android.widget.LinearLayout`, so eight destinations were
+    read as layout; `ListRowView` now reports `android.widget.Button`, asserted in `ProfileLayoutTest`.
+  * **fixed here** — the four section labels were styled text, not headings; they now carry
+    `android:accessibilityHeading` (`tools:targetApi="28"`, so lint does not gain a warning), asserted.
+  * **fixed here** — the row is read as one node (`screenReaderFocusable`) whose name is the title, and the
+    device test pins that the announced `contentDescription` and the visible title are the same string, so
+    the screen cannot say one thing and read another.
+  * **already covered** — targets: 48dp floor asserted on the device per row (104px at 393dp); section-label
+    contrast: `ink_text_secondary` on all four surfaces and `ink_error` on the three light ones at ≥ 4.5:1 in
+    both themes, by `ContrastTest`, which ran in the 1453; focus order is document order in a vertical list,
+    and the dialogs are platform `MaterialAlertDialog`s, which own their own focus.
+  * **not colour alone** — the destructive row is marked by its own header and its own words; the red glyph
+    tint is a second carrier, not the first.
+  * **open, and owned elsewhere** — a distinct *focus-visible* ring for D-pad and keyboard users:
+    `selectableItemBackground` gives pressed feedback but no consistent focus ring across API levels. That is
+    Stage 10's (adaptivity and accessibility), and the chevron's low contrast in the dark theme is listed
+    with it, though the chevron carries no meaning on its own and so is not a WCAG failure today.
+
+- [x] **5.7 Commit.**
+
+  *Executed as one staged commit* (`stage 5: …`), carrying the layout, the fragment, `row_list`, `ListRowView`,
+  the four section strings and the rewritten delete message, the three new test classes, the two touched Stage 1
+  assertions, this plan and `docs/UI_UX_AUDIT.md` §4.8, and the six photographs. No probe, script or log from
+  the matrix runs is in it; `git diff --check` is clean and the tree is empty afterwards.
 
 **Acceptance:** every Profile row leads to a destination that exists and the test proves it; the screen has
 tests for the first time; the delete flow behaves as it did at the baseline; no invented row.
@@ -4264,3 +4372,80 @@ rule the step states. And 4.9a's `TasksFragmentRenderTest` landed as `TasksCardR
 `TasksFragment` under Robolectric needs `hilt-android-testing` and a test application — a new dependency and a
 new component, allowed only with cause — so the render path is covered through the real view model and the
 real adapter over a real database, and the fragment itself is exercised on the device.
+
+
+## 20m — Stage 5 executed: the account screen, and five things a screenshot cannot tell
+
+Executed on `taskplanner_avd` / `emulator-5584`. Gates: **105 suites / 1453 JVM tests / 0 failures / 0 errors
+/ 0 skipped**, `lintDebug` 0 errors and 176 warnings (from 179), and `ProfileScreenInstrumentedTest` (6) plus
+`ProfileNoUserInstrumentedTest` (2) green across four configurations — 26 runs against an installed `base.apk`
+whose sha256 equals the built `app-debug.apk`
+(`9c3a634264161ecc2f4e1176a2103e857b5b3539b5cb3e5660ad39396989656f`).
+
+* **`setMessage(int)` does not substitute arguments.** The delete confirmation asked the reader "Are you sure
+  you want to delete profile %1$s?" — on screen, in production, for as long as that string has had a
+  placeholder. No JVM test could see it: the resource is correct and the call site is the bug, and the only
+  way to catch it is to read the words off the open dialog. `ProfileScreenInstrumentedTest` does that now
+  (`dialogText(android.R.id.message)`) and requires them to name the tasks, categories, goals, habits and
+  tracked work that go with the profile. Every `%1$s` message in this app deserves the same look;
+  `dialog_switch_profile_message` is the next candidate and belongs with the profile-selection screen.
+* **A `MaterialButton` *is* a `TextView`.** The first draft of "count the section labels" counted the eight
+  buttons and reported four labels where there were none, because the assertion asked about a view class
+  rather than about reading order. The check is structural now — the group's own text children, in order, with
+  the rows falling between them 2 / 4 / 1 / 1 — which is both harder to satisfy by accident and a description
+  of what a section header actually *does*.
+* **Two device assertions were written against a model of the platform rather than the platform.** A two-line
+  name is not at least `lineHeight × lineCount` pixels tall: the layout rounds ascent-to-descent once and the
+  multiplication rounds twice, so the claim failed by one pixel on a real handset; the honest check is against
+  the view's own `Layout`. And `ellipsize="middle"` collapses the middle with one ellipsis mark per dropped
+  character, so "the shown text is shorter" is false for a correctly working ellipsis — what is true is that
+  it differs, keeps `christopher.` at the front and `example.test` at the end, and carries the mark between
+  them. Both passed under Robolectric and failed on the device, which is the argument for this stage having
+  device evidence at all. A third pass then failed in `@Before` on one test in six: the tab was pressed and the
+  account did not appear within 15s on a handset still bringing the previous scenario down. The set-up now
+  presses the tab up to three times and carries the screen's own state — current destination, which groups
+  exist — into the failure message. The claim the test makes is unchanged; what changed is that a slow start
+  can no longer be read as broken navigation, while genuinely broken navigation still reports what it saw.
+* **A shared fixture has to be restored even when the test fails.** The long-name test renamed the account and
+  restored it on the happy path only; when its own assertion failed the rename stayed, and the next test in the
+  class failed on the name instead of on what it was checking. The restore is in a `finally` now — cleanup, not
+  a swallowed assertion: the original failure still travels out unchanged.
+* **An include is not finished because it looks right.** `row_list` shipped in Stage 1 with a 40dp icon plate
+  and no icon on it — which is why the old buttons carried glyphs through `app:icon`, and three of the eight
+  carried none — and its root was a `LinearLayout`, so every row that used it announced itself to TalkBack as
+  a layout. The plate gained `rowIcon`, and the root became `ListRowView`, which reports
+  `android.widget.Button` and marks itself screen-reader-focusable. Both fixes are in the primitive, so
+  Stages 7 and 8 inherit them rather than rediscovering them.
+
+**Independent review, and what it changed.** A reviewer read the whole Stage 5 diff against the sources and
+returned eight findings; all eight were checked against the code before being accepted, and every one of them
+was right. They are recorded here because each is a way this stage's own evidence was weaker than it looked.
+
+1. *Step 5.7 claimed a commit that did not exist yet.* The note was written before the commit was made. Fixed
+   by making the commit; the claim is checked against `git log` rather than against intention.
+2. *Signing in is a write that displaces someone.* `setCurrentUser` clears the flag on every other row, and
+   `@AfterClass` restored nobody — on a device holding a real profile, the class would leave the app signed
+   out. The class now refuses to run when a non-fixture profile is present (the guard its sibling already had)
+   and puts back the fixture it moved aside.
+3. *Two of the stage's headline claims were unasserted.* "Every row has a glyph" was tested as "every row
+   contains an `ImageView`" — which the layout declares statically, empty — and "the avatar carries the
+   initials" was tested as "there is an `AvatarView`". Deleting `setImageResource` and `setInitials` left all
+   19 tests green. The device test now requires a non-null drawable per row and eight distinct ones, and
+   `AvatarView` exposes `initialsText` so the letters themselves can be checked. A `visibility == VISIBLE`
+   line added to `IncludeBindingTest` was a tautology about a default and became a statement of the real
+   contract: the include ships an empty plate, and a screen fills it.
+4. *The reason the plan gave for keeping `contentGroup` was stale.* It cited an assertion in
+   `TasksScreenInstrumentedTest` that Stage 0.1a had already replaced — the plan's own audit table and §20h
+   said so two sections earlier, and step 5.4 had not been re-read. The step now cites the consumers that
+   exist.
+5. *`runCatching { reopen() }` in a `finally` could hide a failed restore* — the very cascade the `finally`
+   was there to prevent. It is a plain call now.
+6. *Four numbers in the prose overreached*: eleven tests described as nine, "four of the eight carried no
+   icon" where the old layout had `app:icon` on five of eight, a RED run described against the current test
+   count, and a lint drop explained by strings that were never deleted. Each is corrected to what was measured.
+7. *The 320dp test could not fail for its stated reason* — it compared a child's width to its own parent's and
+   required only `height > 0`. It now requires the row to fill the group's content width exactly, hold the same
+   48dp floor as at 393dp, and keep its chevron inside itself.
+8. *`ListRowView` announced every row as a button, including a display-only one* (`row_list` has a `rowValue`
+   for exactly that case). The class name is now set only when the row is clickable, and the test asserts both
+   halves — which is a stronger claim than the one it replaced.

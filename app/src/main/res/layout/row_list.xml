@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.taskplanner.ui.components.ListRowView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:minHeight="@dimen/row_min_height"
+    android:focusable="true"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="@dimen/card_padding_horizontal"
@@ -14,13 +16,31 @@
     <!-- One row of a list: what it is, what it says, and where it goes. Profile includes this eight times
          (Account 2, Your work 4, Data 1, Danger zone 1), so every child carries an id and each `<include>`
          gets its own `android:id` — ViewBinding scopes an include's binding to that include's own view
-         tree, which is what keeps the eight copies from colliding on the same ids. -->
+         tree, which is what keeps the eight copies from colliding on the same ids.
+
+         `android:focusable` is on the root rather than left to chance because the row, not its title, is the
+         target: a screen reader and a D-pad have to be able to stop on the 56dp line the finger hits. -->
     <FrameLayout
         android:id="@+id/rowIconContainer"
         android:layout_width="@dimen/icon_container"
         android:layout_height="@dimen/icon_container"
         android:layout_marginEnd="@dimen/spacing_medium"
-        android:background="@drawable/bg_icon_container" />
+        android:background="@drawable/bg_icon_container">
+
+        <!-- The icon itself. Stage 1 shipped the container and left this out, which is why the rows had
+             nowhere to put a glyph; a row of Profile's is allowed to be colourless, never iconless.
+             The AppCompat widget and `app:tint`, not the platform `android:tint`: the compat inflater is
+             the one that applies the tint under this app's AppCompat theme, and lint calls the platform
+             attribute an error for exactly that reason. -->
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/rowIcon"
+            android:layout_width="@dimen/icon_glyph"
+            android:layout_height="@dimen/icon_glyph"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            app:tint="@color/ink_text_secondary" />
+
+    </FrameLayout>
 
     <TextView
         android:id="@+id/rowTitle"
@@ -47,4 +67,4 @@
         android:contentDescription="@null"
         android:scaleType="centerInside"
         android:src="@drawable/ic_chevron_right" />
-</LinearLayout>
+</com.taskplanner.ui.components.ListRowView>

@@ -1,4 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+    The account screen: who is signed in, and the eight things that can be done about it.
+
+    Stage 5 replaced a stack of eight full-width MaterialButtons with four named groups of rows, because a
+    stack of buttons says "here are eight things" while a grouped list says "here are four places, and this
+    is what is in each". The eight ids the buttons carried are kept on the `<include>` roots rather than
+    renamed: `ProfileFragment` binds them, `ReportScreenInstrumentedTest` clicks `openReportsButton`, and a
+    redesign that costs another screen's test its target is not a redesign. Each include therefore gets its
+    own `android:id`, and ViewBinding hands the fragment a `RowListBinding` per row.
+-->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -7,168 +16,191 @@
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/list_bottom_gutter">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Current User Group -->
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <!-- The signed-in account. Its direct children are the four section labels and the eight rows,
+                 in that order, and `ProfileLayoutTest` reads exactly that: 2 / 4 / 1 / 1. -->
+            <LinearLayout
                 android:id="@+id/contentGroup"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="16dp">
+                android:orientation="vertical"
+                android:paddingStart="@dimen/screen_margin"
+                android:paddingEnd="@dimen/screen_margin"
+                android:paddingTop="@dimen/spacing_normal"
+                android:paddingBottom="@dimen/spacing_normal">
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/profileCard"
+                <!-- Header: the initials, the name in `headline`, the address in `meta`. -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:layout_constraintTop_toTopOf="parent">
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.taskplanner.ui.components.AvatarView
+                        android:id="@+id/profileAvatar"
+                        android:layout_width="@dimen/avatar_header"
+                        android:layout_height="@dimen/avatar_header"
+                        android:layout_marginEnd="@dimen/spacing_normal" />
 
                     <LinearLayout
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
                         <TextView
                             android:id="@+id/profileName"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textAppearance="?attr/textAppearanceHeadline6"
-                            tools:text="John Doe" />
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:textAppearance="@style/TextAppearance.TaskPlanner.Headline"
+                            tools:text="Christopher Maximilian von und zu Thalberg" />
 
                         <TextView
                             android:id="@+id/profileEmail"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:textAppearance="?attr/textAppearanceBody2"
-                            android:textColor="?android:attr/textColorSecondary"
-                            tools:text="john.doe@example.com" />
+                            android:layout_marginTop="@dimen/spacing_xs"
+                            android:ellipsize="middle"
+                            android:maxLines="1"
+                            android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                            android:textColor="@color/ink_text_secondary"
+                            tools:text="christopher.maximilian@example.test" />
 
                     </LinearLayout>
 
-                </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
+                <TextView
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_section"
+                    android:text="@string/section_account" />
+
+                <include
                     android:id="@+id/editProfileButton"
+                    layout="@layout/row_list"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/action_edit_profile"
-                    app:layout_constraintTop_toBottomOf="@id/profileCard" />
+                    android:layout_height="wrap_content" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/switchProfileButton"
+                    layout="@layout/row_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/action_switch_profile"
-                    app:layout_constraintTop_toBottomOf="@id/editProfileButton" />
+                    android:layout_marginTop="@dimen/spacing_section"
+                    android:text="@string/section_your_work" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/openSettingsButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/title_settings"
-                    app:icon="@drawable/ic_settings"
-                    app:iconGravity="textStart"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    app:layout_constraintTop_toBottomOf="@id/switchProfileButton" />
-
-                <!-- The aims and the routines are the profile's own business rather than a column of the
-                     task list, so they are reached from the account the way settings are. -->
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/openGoalsButton"
+                    layout="@layout/row_list"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/title_goals"
-                    app:icon="@drawable/ic_goal"
-                    app:iconGravity="textStart"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    app:layout_constraintTop_toBottomOf="@id/openSettingsButton" />
+                    android:layout_height="wrap_content" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/openHabitsButton"
+                    layout="@layout/row_list"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/title_habits"
-                    app:icon="@drawable/ic_habit"
-                    app:iconGravity="textStart"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    app:layout_constraintTop_toBottomOf="@id/openGoalsButton" />
+                    android:layout_height="wrap_content" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/openInsightsButton"
+                    layout="@layout/row_list"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/title_insights"
-                    app:icon="@drawable/ic_insight"
-                    app:iconGravity="textStart"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    app:layout_constraintTop_toBottomOf="@id/openHabitsButton" />
+                    android:layout_height="wrap_content" />
 
-                <!-- The report is the document the account takes away with it, so it is opened from the account
-                     like the aims, the routines and the readings are: it is counted from this profile's rows and
-                     names it on its first page. -->
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/openReportsButton"
+                    layout="@layout/row_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/title_reports"
-                    app:icon="@drawable/ic_report"
-                    app:iconGravity="textStart"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    app:layout_constraintTop_toBottomOf="@id/openInsightsButton" />
+                    android:layout_marginTop="@dimen/spacing_section"
+                    android:text="@string/section_data" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
+                    android:id="@+id/openSettingsButton"
+                    layout="@layout/row_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <!-- The one row that cannot be undone gets its own header rather than a red word: the header
+                     is what a screen reader and a colour-blind reader both get. -->
+                <TextView
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_section"
+                    android:text="@string/section_danger_zone"
+                    android:textColor="@color/ink_error" />
+
+                <include
                     android:id="@+id/deleteProfileButton"
+                    layout="@layout/row_list"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/action_delete_profile"
-                    app:layout_constraintTop_toBottomOf="@id/openReportsButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                    android:layout_height="wrap_content" />
 
-            </androidx.constraintlayout.widget.ConstraintLayout>
+            </LinearLayout>
 
-            <!-- No User Group -->
+            <!-- No account signed in: the two ways in, and nothing else. -->
             <LinearLayout
                 android:id="@+id/noUserGroup"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:padding="32dp"
-                android:visibility="gone">
+                android:padding="@dimen/spacing_xl"
+                android:visibility="gone"
+                tools:visibility="visible">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/msg_no_profile"
                     android:textAlignment="center"
-                    android:textAppearance="?attr/textAppearanceBody1" />
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/createProfileButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="@dimen/spacing_normal"
                     android:text="@string/action_create_profile" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/switchProfileButtonNoUser"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:minHeight="@dimen/touch_target_min"
                     android:text="@string/action_switch_profile" />
 
             </LinearLayout>
@@ -185,4 +217,4 @@
         android:visibility="gone"
         tools:visibility="visible" />
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout> 
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

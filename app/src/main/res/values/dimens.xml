@@ -25,6 +25,9 @@
     <dimen name="touch_target_min">48dp</dimen>
     <dimen name="priority_rule_width">4dp</dimen>
     <dimen name="icon_container">40dp</dimen>
+    <!-- The glyph inside that container. Material's own icon box is 24dp, and a row icon that fills its
+         40dp plate reads as a stamp rather than a mark, so the pair is named separately. -->
+    <dimen name="icon_glyph">24dp</dimen>
     <dimen name="avatar_header">64dp</dimen>
     <dimen name="fab_size">56dp</dimen>
     <!-- Nothing reads this yet and it stays anyway: 3.2 points the FAB's 16dp margin at it, which is the

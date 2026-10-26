@@ -1,9 +1,13 @@
 package com.taskplanner.ui.profile
 
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -16,9 +20,19 @@ import com.taskplanner.R
 import com.taskplanner.data.model.User
 import com.taskplanner.databinding.FragmentProfileBinding
 import com.taskplanner.databinding.DialogProfileEditBinding
+import com.taskplanner.databinding.RowListBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+/**
+ * The account screen: who is signed in, and the eight things that can be done about it.
+ *
+ * Stage 5 changed what a row is and nothing about what a row does. The eight `MaterialButton`s became eight
+ * `row_list` includes under four headers, so every listener now hangs on `binding.<name>.root` — the whole
+ * 56dp line is the target, which is what a finger aims at and a screen reader announces. The dialogs, the
+ * validation and every `viewModel.*` call are the code that was here before, unchanged, including the
+ * deletion path: this fragment's business logic is not a design surface.
+ */
 @AndroidEntryPoint
 class ProfileFragment : Fragment() {
     private var _binding: FragmentProfileBinding? = null
@@ -46,46 +60,48 @@ class ProfileFragment : Fragment() {
     }
 
     private fun setupUI() {
+        bindRows()
+
         binding.apply {
             createProfileButton.setOnClickListener {
                 showCreateProfileDialog()
             }
 
-            editProfileButton.setOnClickListener {
+            editProfileButton.root.setOnClickListener {
                 val currentState = viewModel.profileState.value
                 if (currentState is ProfileState.Success) {
                     showEditProfileDialog(currentState.user)
                 }
             }
 
-            deleteProfileButton.setOnClickListener {
+            deleteProfileButton.root.setOnClickListener {
                 val currentState = viewModel.profileState.value
                 if (currentState is ProfileState.Success) {
-                    showDeleteConfirmation()
+                    showDeleteConfirmation(currentState.user)
                 }
             }
 
-            switchProfileButton.setOnClickListener {
+            switchProfileButton.root.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_profile_selection)
             }
 
-            openSettingsButton.setOnClickListener {
+            openSettingsButton.root.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_settings)
             }
 
-            openGoalsButton.setOnClickListener {
+            openGoalsButton.root.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_goals)
             }
 
-            openHabitsButton.setOnClickListener {
+            openHabitsButton.root.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_habits)
             }
 
-            openInsightsButton.setOnClickListener {
+            openInsightsButton.root.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_insights)
             }
 
-            openReportsButton.setOnClickListener {
+            openReportsButton.root.setOnClickListener {
                 findNavController().navigate(R.id.action_profile_to_reports)
             }
 
@@ -93,6 +109,38 @@ class ProfileFragment : Fragment() {
                 findNavController().navigate(R.id.action_profile_to_profile_selection)
             }
         }
+    }
+
+    /**
+     * What each of the eight rows is, in the order the screen lists them.
+     *
+     * The pairs are the same words the buttons carried, so the copy is not new; what is new is that every
+     * row has a glyph and the row says it in the same words a reader would use out loud.
+     */
+    private fun bindRows() {
+        binding.run {
+            editProfileButton.row(R.string.action_edit_profile, R.drawable.ic_edit)
+            switchProfileButton.row(R.string.action_switch_profile, R.drawable.ic_profile)
+            openGoalsButton.row(R.string.title_goals, R.drawable.ic_goal)
+            openHabitsButton.row(R.string.title_habits, R.drawable.ic_habit)
+            openInsightsButton.row(R.string.title_insights, R.drawable.ic_insight)
+            openReportsButton.row(R.string.title_reports, R.drawable.ic_report)
+            openSettingsButton.row(R.string.title_settings, R.drawable.ic_settings)
+            deleteProfileButton.row(R.string.action_delete_profile, R.drawable.ic_delete, danger = true)
+        }
+    }
+
+    private fun RowListBinding.row(@StringRes titleRes: Int, @DrawableRes iconRes: Int, danger: Boolean = false) {
+        val words = getString(titleRes)
+        rowTitle.text = words
+        rowIcon.setImageResource(iconRes)
+        if (danger) {
+            val error = ContextCompat.getColor(requireContext(), R.color.ink_error)
+            rowIcon.imageTintList = ColorStateList.valueOf(error)
+        }
+        // The row is one target, so it is announced as one thing. The icon inside it is decoration — a
+        // stopwatch next to "Goals" does not need to be read out as well as the word.
+        root.contentDescription = words
     }
 
     private fun observeViewModel() {
@@ -130,12 +178,13 @@ class ProfileFragment : Fragment() {
         binding.apply {
             profileName.text = user.name
             profileEmail.text = user.email
+            profileAvatar.setInitials(user.name)
         }
     }
 
     private fun showCreateProfileDialog() {
         val dialogBinding = DialogProfileEditBinding.inflate(layoutInflater)
-        
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.dialog_create_profile_title)
             .setView(dialogBinding.root)
@@ -154,7 +203,7 @@ class ProfileFragment : Fragment() {
         val dialogBinding = DialogProfileEditBinding.inflate(layoutInflater)
         dialogBinding.nameInput.setText(user.name)
         dialogBinding.emailInput.setText(user.email)
-        
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.dialog_edit_profile_title)
             .setView(dialogBinding.root)
@@ -169,10 +218,17 @@ class ProfileFragment : Fragment() {
             .show()
     }
 
-    private fun showDeleteConfirmation() {
+    /**
+     * The one confirmation that has to say what it costs.
+     *
+     * The message is formatted here rather than passed as a resource id, because `setMessage(int)` does not
+     * substitute the placeholder and the reader was being shown "%1$s". The name travels in, and the words
+     * name what goes with it.
+     */
+    private fun showDeleteConfirmation(user: User) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.dialog_delete_profile_title)
-            .setMessage(R.string.dialog_delete_profile_message)
+            .setMessage(getString(R.string.dialog_delete_profile_message, user.name))
             .setPositiveButton(R.string.action_delete) { _, _ ->
                 viewModel.deleteProfile()
             }
@@ -204,4 +260,4 @@ class ProfileFragment : Fragment() {
         super.onDestroyView()
         _binding = null
     }
-} 
+}
