@@ -1,9 +1,11 @@
 package com.taskplanner.ui.theme
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.material.R as MaterialR
 import com.taskplanner.R
@@ -137,6 +139,90 @@ class ComponentStyleTest {
                 size(c, R.style.Widget_TaskPlanner_Field, MaterialR.attr.boxCornerRadiusTopStart), 0.5f)
             assertEquals(dp(c, "radius_control"),
                 size(c, R.style.Widget_TaskPlanner_Field_Dropdown, MaterialR.attr.boxCornerRadiusTopStart), 0.5f)
+        }
+    }
+
+    /**
+     * The outline a field draws while the reader is not in it, measured rather than assumed.
+     *
+     * The style inherited Material's own `boxStrokeColor`, which is a state list whose resting entry is
+     * `?attr/colorOutline` — and this design sets `colorOutline` to `ink_outline`, the 1.35:1 decorative
+     * hairline. Sixteen fields therefore rested on a boundary a low-vision reader cannot find, which the
+     * token table could never catch because `ink_outline_strong` clears the bar on its own: the pair that
+     * failed was a component's default and the page, and only reading the component sees that.
+     */
+    @Test fun `a field's resting outline is legible against the page`() {
+        bothThemes { c ->
+            listOf(
+                R.style.Widget_TaskPlanner_Field,
+                R.style.Widget_TaskPlanner_Field_Dropdown
+            ).forEach { style ->
+                val stroke = colorState(c, style, MaterialR.attr.boxStrokeColor)
+                    ?: throw AssertionError(
+                        "the field style carries no `boxStrokeColor`, so its outline is Material's " +
+                            "default and not this design's"
+                    )
+                val page = ContextCompat.getColor(c, R.color.ink_background)
+                val ratio = Wcag.ratio(stroke.defaultColor, page)
+                assertTrue(
+                    "the resting outline of a field is ${"%.2f".format(ratio)}:1 against the page; three " +
+                        "is what WCAG asks of a boundary a reader has to find to use the control",
+                    ratio >= 3.0
+                )
+            }
+        }
+    }
+
+    /**
+     * The tick on a state chip is this design's own mark, at this design's own size.
+     *
+     * Material's `Chip` ships a default checked icon, so "a ticked chip carries a mark" stays true with the
+     * attribute deleted from the style — which is why the device test's `checkedIcon != null` is not enough
+     * by itself. This pins the name and the 18 dp, so falling back to the framework's 24 dp mark — which
+     * reflows the weekday row from four chips a line to three — fails here rather than in a photograph.
+     * Written after the attribute shipped, as a pin rather than as a RED-first claim: what the mark does on
+     * screen is measured by `tickingALeadTimeShowsAMarkAndNotOnlyAColour`.
+     */
+    @Test fun `a ticked state chip draws this design's mark and not the framework's default`() {
+        bothThemes { c ->
+            val a = c.obtainStyledAttributes(
+                null,
+                intArrayOf(MaterialR.attr.checkedIcon, MaterialR.attr.checkedIconVisible),
+                0,
+                R.style.Widget_TaskPlanner_Chip_State
+            )
+            try {
+                assertEquals(
+                    "the chip style leaves the checked mark to Material's default, so the tick is not " +
+                        "this design's",
+                    R.drawable.ic_check_chip,
+                    a.getResourceId(0, 0)
+                )
+                assertTrue(
+                    "the mark is switched off, which puts the ticked state back into the fill alone",
+                    a.getBoolean(1, false)
+                )
+            } finally {
+                a.recycle()
+            }
+            val mark = ContextCompat.getDrawable(c, R.drawable.ic_check_chip)
+                ?: throw AssertionError("ic_check_chip does not load")
+            assertEquals(
+                "the checked mark is ${mark.intrinsicWidth}px wide; a chip lays its icon out at that width, " +
+                    "so a 24dp mark costs the row a chip",
+                (18 * c.resources.displayMetrics.density).toInt(),
+                mark.intrinsicWidth
+            )
+        }
+    }
+
+    /** A colour an attribute carries when a view is built with `styleRes` as its default style. */
+    private fun colorState(c: Context, styleRes: Int, attr: Int): android.content.res.ColorStateList? {
+        val a = c.obtainStyledAttributes(null, intArrayOf(attr), 0, styleRes)
+        try {
+            return a.getColorStateList(0)
+        } finally {
+            a.recycle()
         }
     }
 

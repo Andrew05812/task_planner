@@ -29,6 +29,7 @@
          on the window whether or not the reader has scrolled, and the keyboard resizing the window takes
          room from the form and never from Save. -->
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/editor_scroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -51,11 +52,12 @@
                 android:orientation="vertical">
 
                 <TextView
-                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:accessibilityHeading="true"
                     tools:targetApi="28"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:id="@+id/section_task_heading"
                     android:text="@string/section_task" />
 
                 <com.google.android.material.textfield.TextInputLayout
@@ -107,13 +109,21 @@
                 android:orientation="vertical">
 
                 <TextView
-                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:accessibilityHeading="true"
                     tools:targetApi="28"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/section_when" />
 
+                <!-- The ten chosen-rather-than-typed fields — date, time, the four plan boxes, priority, status,
+                     category and the repeat preset — are `inputType="none"` with `maxLines="1"` and
+                     `ellipsize="end"`. The four the reader writes into (title, description, the estimate and the
+                     custom lead time in minutes) are not among them and keep their own input types. A category called
+                     "Глава 3: методология" is longer than the box at 320dp and at a font scale of 1.3, and a
+                     field that wraps turns the form into a column of two-line boxes whose second line hides
+                     the field below it. Truncation says "there is more, tap to see it all", which is what a
+                     picker is for. -->
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/task_due_date_layout"
                     android:layout_width="match_parent"
@@ -128,7 +138,9 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:focusable="false"
-                        android:inputType="none" />
+                        android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -146,7 +158,9 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:focusable="false"
-                        android:inputType="none" />
+                        android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -186,7 +200,9 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:focusable="false"
-                                android:inputType="none" />
+                                android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -204,7 +220,9 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:focusable="false"
-                                android:inputType="none" />
+                                android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -230,7 +248,9 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:focusable="false"
-                                android:inputType="none" />
+                                android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -248,47 +268,46 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:focusable="false"
-                                android:inputType="none" />
+                                android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
                     </LinearLayout>
 
-                    <LinearLayout
+                    <!-- Measured at 320dp rather than guessed: this row held the estimate box and
+                         `Clear the plan times` side by side, the button's own label is longer than the box
+                         needs to show its floating hint, and the estimate came out 111px wide inside
+                         1015px of screen — "Estimated min…". Two lines, each with the width its words need. -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/plan_estimate_layout"
+                        style="@style/Widget.TaskPlanner.Field"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/spacing_small"
-                        android:baselineAligned="false"
-                        android:orientation="horizontal">
+                        android:hint="@string/plan_estimate">
 
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:id="@+id/plan_estimate_layout"
-                            style="@style/Widget.TaskPlanner.Field"
-                            android:layout_width="0dp"
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/plan_estimate_minutes"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:hint="@string/plan_estimate">
+                            android:inputType="number" />
 
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/plan_estimate_minutes"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="number" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/plan_clear"
-                            style="@style/Widget.TaskPlanner.Button.Text"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="bottom"
-                            android:text="@string/plan_clear" />
-
-                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/plan_clear"
+                        style="@style/Widget.TaskPlanner.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:text="@string/plan_clear" />
 
                     <TextView
                         android:id="@+id/plan_hint"
+                        android:accessibilityLiveRegion="polite"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/spacing_xs"
@@ -308,7 +327,7 @@
                 android:orientation="vertical">
 
                 <TextView
-                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:accessibilityHeading="true"
                     tools:targetApi="28"
                     android:layout_width="match_parent"
@@ -328,7 +347,9 @@
                         android:id="@+id/task_priority"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="none" />
+                        android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -345,7 +366,9 @@
                         android:id="@+id/task_status"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="none" />
+                        android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -362,7 +385,9 @@
                         android:id="@+id/task_category"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="none" />
+                        android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -380,7 +405,7 @@
 
                 <TextView
                     android:id="@+id/repeat_title"
-                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:accessibilityHeading="true"
                     tools:targetApi="28"
                     android:layout_width="match_parent"
@@ -400,7 +425,9 @@
                         android:id="@+id/repeat_preset"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="none" />
+                        android:inputType="none"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -424,12 +451,13 @@
 
                 <TextView
                     android:id="@+id/repeat_week_days_label"
+                    style="@style/Widget.TaskPlanner.SectionLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_small"
+                    android:labelFor="@id/repeat_week_days"
                     android:visibility="gone"
-                    android:text="@string/repeat_weekdays"
-                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body" />
+                    android:text="@string/repeat_weekdays" />
 
                 <com.google.android.material.chip.ChipGroup
                     android:id="@+id/repeat_week_days"
@@ -519,11 +547,27 @@
                     android:text="@string/repeat_day_of_month_hint"
                     android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
 
+                <!-- "Apply the change to" is the question the two radio buttons under it answer, and
+                     `labelFor` is how the platform ties the two together. It starts hidden with them, and
+                     `refreshRepeatUi` shows the pair together: the words alone over a collapsed block ask a
+                     reader which instance of a series to change when the task is not in one. The pairing is
+                     pinned by `TaskDetailLayoutTest`. -->
+                <TextView
+                    android:id="@+id/repeat_scope_label"
+                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:visibility="gone"
+                    android:labelFor="@id/repeat_scope_group"
+                    android:text="@string/repeat_scope_title" />
+
                 <RadioGroup
                     android:id="@+id/repeat_scope_group"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_small"
                     android:orientation="vertical"
                     android:visibility="gone">
 
@@ -545,6 +589,7 @@
 
                 <TextView
                     android:id="@+id/repeat_scope_hint"
+                    android:accessibilityLiveRegion="polite"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_xs"
@@ -553,6 +598,7 @@
 
                 <TextView
                     android:id="@+id/series_status"
+                    android:accessibilityLiveRegion="polite"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_small"
@@ -602,18 +648,32 @@
 
                 <TextView
                     android:id="@+id/reminder_title"
-                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:accessibilityHeading="true"
                     tools:targetApi="28"
+                    android:labelFor="@id/reminder_chips"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/reminder_section_title" />
+
+                <!-- The line that says what these lead times count back from used to sit under the chips,
+                     so read in order the screen went "Reminders — at the deadline, 5 minutes before, 15
+                     minutes before … — Choose a deadline first": the qualification arrived after the seven
+                     choices it applies to, and by then a reader working through TalkBack had ticked one. -->
+                <TextView
+                    android:id="@+id/reminder_hint"
+                    android:accessibilityLiveRegion="polite"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/reminder_hint_needs_date"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
 
                 <com.google.android.material.chip.ChipGroup
                     android:id="@+id/reminder_chips"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_small"
+                    android:layout_marginTop="@dimen/spacing_xs"
                     app:chipSpacingHorizontal="@dimen/spacing_xs"
                     app:singleLine="false">
 
@@ -688,15 +748,8 @@
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <TextView
-                    android:id="@+id/reminder_hint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_xs"
-                    android:text="@string/reminder_hint_needs_date"
-                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta" />
-
-                <TextView
                     android:id="@+id/reminder_status"
+                    android:accessibilityLiveRegion="polite"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_xs"
@@ -719,7 +772,7 @@
 
                 <TextView
                     android:id="@+id/work_title"
-                    style="@style/Widget.TaskPlanner.SectionLabel"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:accessibilityHeading="true"
                     tools:targetApi="28"
                     android:layout_width="match_parent"
@@ -736,11 +789,17 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
+                    <!-- Named by a token, because `bg_work_dot.xml` draws an 8dp circle and this view
+                             asked for 10dp, and which one wins depends on who draws it. It says nothing to
+                             TalkBack: the sentence beside it is the state in words ("Measuring since 14:02",
+                             "Paused at…"), the dot is the same fact in colour, and two announcements for one
+                             state is noise that makes the screen harder to listen to, not easier. -->
                     <View
                         android:id="@+id/work_state_dot"
-                        android:layout_width="10dp"
-                        android:layout_height="10dp"
+                        android:layout_width="@dimen/dot_state"
+                        android:layout_height="@dimen/dot_state"
                         android:background="@drawable/bg_work_dot"
+                        android:importantForAccessibility="no"
                         android:visibility="gone" />
 
                     <TextView
@@ -754,6 +813,7 @@
 
                     <TextView
                         android:id="@+id/work_state_hint"
+                        android:accessibilityLiveRegion="polite"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="@dimen/spacing_small"
@@ -763,12 +823,37 @@
 
                 </LinearLayout>
 
-                <LinearLayout
+                <!-- The commands a task can be given from this screen. A horizontal LinearLayout put
+                     them all on one line: "Pause measuring" and "Stop and save" together measure 498px of
+                     label at the narrowest width the app supports, inside 410px, and the leftmost button was
+                     then placed at a negative x — cut off, not ellipsized, and untappable at its left edge.
+                     A `Flow` — the mechanism this app already uses for the card's meta line — puts as many
+                     on a line as fit and takes the rest below. How many lines that is, at which width and at
+                     what font scale, is a question about the width of words, and only a device can answer it:
+                     `TaskEditorFramesInstrumentedTest.theWorkCommandsKeepTheirWordsOnTheScreen` measures the
+                     three commands a running stretch shows, at 320dp, at 393dp and at a scale of 1.3, and
+                     `shot` refuses a frame where the photographed region leaves the screen sideways. What
+                     this file can pin without glyphs is the structure: `TaskEditorCommandBudgetTest` checks
+                     that the row is a ConstraintLayout, that a Flow sits in it, that its mode is `chain` and
+                     that the five commands are its members — because a plain LinearLayout has no second line
+                     to put anything on, which is how the overflow happened in the first place. -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/work_commands"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_xs"
-                    android:gravity="end"
-                    android:orientation="horizontal">
+                    android:layout_marginTop="@dimen/spacing_xs">
+
+                    <androidx.constraintlayout.helper.widget.Flow
+                        android:id="@+id/work_commands_flow"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        app:constraint_referenced_ids="workStartButton,workPauseButton,workResumeButton,workStopButton,workAddButton"
+                        app:flow_horizontalGap="@dimen/spacing_xs"
+                        app:flow_verticalGap="@dimen/spacing_xs"
+                        app:flow_wrapMode="chain"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/workStartButton"
@@ -810,7 +895,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/history_add_title" />
-                </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <TextView
                     android:id="@+id/work_totals"
@@ -829,12 +914,11 @@
 
                 <TextView
                     android:id="@+id/work_intervals_title"
+                    style="@style/Widget.TaskPlanner.SectionLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_small"
-                    android:text="@string/work_intervals_title"
-                    android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
-                    android:textStyle="bold" />
+                    android:text="@string/work_intervals_title" />
 
                 <LinearLayout
                     android:id="@+id/work_intervals"
@@ -870,14 +954,17 @@
         android:paddingBottom="@dimen/spacing_small">
 
         <!-- Where the save-in-progress figure sits: beside the button it disables, so the reader who pressed
-             Save sees the answer where their finger was rather than at the end of a scroll they have to
-             start hunting down. -->
+             Save sees the answer where their finger was rather than at the end of a scroll they have to start
+             hunting down. Its slot is reserved — `invisible`, not `gone` — because a spinner that appears from
+             nothing takes 40dp out of a weighted row and both buttons slide sideways under the finger that is
+             still on the screen. `the footer does not move when a save starts` measures exactly that. -->
         <ProgressBar
             android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="@dimen/progress_indicator"
+            android:layout_height="@dimen/progress_indicator"
             android:layout_marginEnd="@dimen/spacing_small"
-            android:visibility="gone" />
+            android:contentDescription="@string/progress_saving"
+            android:visibility="invisible" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/cancelButton"

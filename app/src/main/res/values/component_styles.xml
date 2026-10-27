@@ -114,17 +114,22 @@
          platform chip has is put back, tinted with the ink the label is written in so it holds in both
          themes. Owned here rather than at each chip because the editor has fourteen of them. -->
     <style name="Widget.TaskPlanner.Chip.State" parent="Widget.TaskPlanner.Chip.Filter">
-        <item name="checkedIcon">@drawable/ic_check</item>
+        <item name="checkedIcon">@drawable/ic_check_chip</item>
         <item name="checkedIconTint">@color/ink_text</item>
         <item name="checkedIconVisible">true</item>
     </style>
 
+    <!-- Every field in the app. `boxStrokeColor` is spelled out rather than left to the parent because the
+         parent resolves to ?attr/colorOutline, which in this design is the decorative hairline: see
+         res/color/field_stroke_ink.xml, whose resting entry is the strong outline, and the test that
+         measures it (`ComponentStyleTest`, "a field's resting outline is legible against the page"). -->
     <style name="Widget.TaskPlanner.Field" parent="Widget.Material3.TextInputLayout.OutlinedBox">
         <item name="boxCornerRadiusTopStart">@dimen/radius_control</item>
         <item name="boxCornerRadiusTopEnd">@dimen/radius_control</item>
         <item name="boxCornerRadiusBottomStart">@dimen/radius_control</item>
         <item name="boxCornerRadiusBottomEnd">@dimen/radius_control</item>
         <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeColor">@color/field_stroke_ink</item>
     </style>
 
     <style name="Widget.TaskPlanner.Field.Dropdown"
@@ -134,6 +139,7 @@
         <item name="boxCornerRadiusBottomStart">@dimen/radius_control</item>
         <item name="boxCornerRadiusBottomEnd">@dimen/radius_control</item>
         <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeColor">@color/field_stroke_ink</item>
     </style>
 
     <!-- A control that says what it is by its shape alone, so it carries a contentDescription at every use
@@ -187,5 +193,21 @@
     <style name="Widget.TaskPlanner.SectionLabel" parent="android:Widget.TextView">
         <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Label</item>
         <item name="android:textColor">@color/ink_text_secondary</item>
+    </style>
+
+    <!-- A level-1 heading, and the reason it is not `SectionLabel` is measured rather than tasted: six
+         boundaries in a form the reader works through top to bottom have to be found by eye before the
+         fields under them are read, and an 11sp all-caps secondary grey is the same voice the field labels
+         and the captions in this screen already speak in — the first run of this screen photographed at
+         393dp read as one long form with two small grey words in it. `title` (16sp, medium, `ink_text`) is
+         the role the type scale has for "this is a heading", and it is deliberately not `headline`: spec
+         3.3 gives `headline` to a screen's own title, and six 22sp headings inside a scrolling form would
+         compete with the one heading that names the screen. `SectionLabel` stays for level-2 headings — the
+         "Plan" block inside When, which must sit under its section and not beside it. No margin here on
+         purpose: the gap between two sections belongs to the section block, so a heading can never be
+         moved out of step with the block it names. -->
+    <style name="Widget.TaskPlanner.SectionHeader" parent="android:Widget.TextView">
+        <item name="android:textAppearance">@style/TextAppearance.TaskPlanner.Title</item>
+        <item name="android:textColor">@color/ink_text</item>
     </style>
 </resources>

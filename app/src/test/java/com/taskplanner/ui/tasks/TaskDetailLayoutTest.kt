@@ -13,7 +13,9 @@ import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
 import androidx.test.core.app.ApplicationProvider
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
+import com.google.android.material.textfield.TextInputLayout
 import com.taskplanner.R
 import com.taskplanner.databinding.FragmentTaskDetailBinding
 import org.junit.Assert.assertEquals
@@ -24,6 +26,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.xmlpull.v1.XmlPullParser
 
 /**
  * The editor's layout, checked the way the screen sees it: inflated under the app's own theme, so a missing
@@ -270,7 +273,9 @@ class TaskDetailLayoutTest {
         val footer = binding.buttonContainer
         val finger = dp(context, 48f)
 
-        assertEquals(height, screen.height)
+        // No claim about `screen.height`: the window was measured EXACTLY, so the root's height is the
+        // number this test handed it and asserting it back proves nothing. What is not given by the spec is
+        // where the footer lands inside it, and that is what the next line asks.
         assertEquals(
             "the footer sits on the bottom edge of the window",
             height, footer.bottom
@@ -282,21 +287,83 @@ class TaskDetailLayoutTest {
             "the fields are taller than the room left for them, which is why they need the scroll",
             scroll.getChildAt(0).height > scroll.height
         )
+        // Only the bottom edge is claimed. "Save starts no higher than the footer does" is arithmetic —
+        // Save is inside the footer, so its offset from the window top is the footer's plus a non-negative
+        // padding — and a check that cannot fail is worse than none, because it reads like coverage.
         assertTrue(
-            "Save is fully inside the window without any scrolling",
-            topInWindow(binding.saveTask) >= topInWindow(footer) &&
-                topInWindow(binding.saveTask) + binding.saveTask.height <= height
+            "Save sits inside the window: bottom=${topInWindow(binding.saveTask) + binding.saveTask.height} " +
+                "of $height",
+            topInWindow(binding.saveTask) + binding.saveTask.height <= height
+        )
+        assertTrue(
+            "the spinner comes before the buttons it sits beside, so a reader walking the footer from the " +
+                "left finds the reason before the action",
+            footer.indexOfChild(binding.progressBar) < footer.indexOfChild(binding.cancelButton)
         )
         assertTrue("Save is at least a finger tall", binding.saveTask.height >= finger)
         assertTrue("Cancel is at least a finger tall", binding.cancelButton.height >= finger)
+    }
+
+    /**
+     * What the section tests cannot say: `sectionOf` answers "which block", so every field inside one block
+     * has the same index and their order among themselves is invisible. Inside a block the order still
+     * matters — a reader who has set the deadline reaches for the clock, not for the category — so it is
+     * asserted where it can be, against the views themselves.
+     */
+    @Test
+    fun `inside each block the fields are in the order the reader fills them in`() {
+        val binding = inflated()
+        val context = binding.root.context
+        // Without a measure and a layout every `top` below is 0, and the comparisons pass for the wrong
+        // reason — which is the exact mistake this file exists to stop making.
+        val width = dp(context, 393f)
+        val height = dp(context, 500f)
+        binding.root.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        )
+        binding.root.layout(0, 0, width, height)
+        val order: List<Pair<View, View>> = listOf(
+            binding.taskTitleLayout to binding.taskDescriptionLayout,
+            binding.taskDueDateLayout to binding.taskDueTimeLayout,
+            binding.taskDueTimeLayout to binding.planSection,
+            binding.taskPriorityLayout to binding.taskStatusLayout,
+            binding.taskStatusLayout to binding.taskCategoryLayout,
+            binding.repeatLayout to binding.reminderChips,      // Repeat's block, then Reminders'
+            binding.reminderTitle to binding.reminderChips
+        )
+        order.forEach { (before, after) ->
+            // Both halves have to be on the screen or the comparison is arithmetic about nothing: a field
+            // under a collapsed block keeps `top = 0` however tall the form is, and `0 < n` then passes for
+            // every `after` — the ordering claim would be a claim about a view that was never placed.
+            listOf(before to after, after to before).forEach { (subject, other) ->
+                assertTrue(
+                    "${name(context, subject.id)} is drawn at all, or its place relative to " +
+                        "${name(context, other.id)} proves nothing",
+                    isDrawn(subject) && subject.height > 0
+                )
+            }
+            assertTrue(
+                "${name(context, before.id)} comes before ${name(context, after.id)} in the " +
+                    "vertical order: top=${topInWindow(before)} vs ${topInWindow(after)}",
+                topInWindow(before) < topInWindow(after)
+            )
+        }
     }
 
     @Test
     fun `the saving spinner is beside the buttons that it disables`() {
         val binding = inflated()
 
+        assertEquals(
+            "the slot is reserved, so nothing in the row has to move when a save starts. A `gone` spinner " +
+                "took 40dp out of the weighted row the moment Save was pressed and both buttons slid under " +
+                "the reader's finger",
+            View.INVISIBLE,
+            binding.progressBar.visibility
+        )
         assertFalse(
-            "nothing is being saved, so nothing is spinning",
+            "and it is not being drawn while nothing is being saved",
             binding.progressBar.isVisible
         )
         assertTrue(
@@ -304,6 +371,75 @@ class TaskDetailLayoutTest {
                 "should not have to scroll to find out whether anything happened",
             isDescendantOf(binding.progressBar, binding.buttonContainer)
         )
+    }
+
+    /**
+     * The footer's geometry, before and during a save.
+     *
+     * The claim is about movement, so it is measured as two layouts of the same window: the widths of the two
+     * buttons with the spinner invisible, and again with it visible. Equal widths are the whole point of
+     * reserving the slot — a `gone` spinner fails the second measure, and that failure is the defect.
+     */
+    @Test
+    fun `the footer does not move when a save starts`() {
+        val binding = inflated()
+        val context = binding.root.context
+        val width = dp(context, 320f)
+        val height = dp(context, 500f)
+        binding.root.measureAndLayout(width, height)
+        val before = binding.cancelButton.width to binding.saveTask.width
+        assertTrue(
+            "the footer was never measured, so there is nothing to compare: $before",
+            before.first > 0 && before.second > 0
+        )
+
+        binding.progressBar.visibility = View.VISIBLE
+        binding.root.measureAndLayout(width, height)
+
+        assertEquals(
+            "Cancel keeps its width while a save is spinning beside it",
+            before.first,
+            binding.cancelButton.width
+        )
+        assertEquals(
+            "and so does Save, which is the button the reader's finger is still on",
+            before.second,
+            binding.saveTask.width
+        )
+    }
+
+    /** Measure and lay this view out at [width]x[height], the way a window that size would. */
+    private fun View.measureAndLayout(width: Int, height: Int) {
+        measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        )
+        layout(0, 0, width, height)
+    }
+
+    /**
+     * The lines under these fields say what the editor just did — "2 reminders set", "the series is paused",
+     * "start and end are outside the plan". A screen reader only speaks a view when focus moves to it, so a
+     * line that changes while the reader's focus is somewhere else changes silently, which is the same defect
+     * as a colour-only chip: the state moved and nothing said so. `polite`, not `assertive`, because none of
+     * these is an emergency and interrupting a reader mid-sentence to announce a hint is its own problem.
+     */
+    @Test
+    fun `a line that changes while the reader is on the screen is a live region`() {
+        val binding = inflated()
+        val context = binding.root.context
+        val changing = listOf(
+            R.id.plan_hint, R.id.repeat_scope_hint, R.id.series_status,
+            R.id.reminder_hint, R.id.reminder_status, R.id.work_state_hint
+        )
+        changing.forEach { id ->
+            val view = binding.root.findViewById<View>(id)
+            assertEquals(
+                "${name(context, id)} is rewritten while the reader is elsewhere",
+                View.ACCESSIBILITY_LIVE_REGION_POLITE,
+                view.accessibilityLiveRegion
+            )
+        }
     }
 
     @Test
@@ -324,12 +460,20 @@ class TaskDetailLayoutTest {
             val block = content.findViewById<ViewGroup>(section)
             val heading = block.getChildAt(0)
             assertTrue(
-                "${name(context, section)} opens with a label rather than with a field",
+                "${name(context, section)} opens a block with a label rather than with a field",
                 heading is TextView
             )
             assertEquals(context.getString(headingRes), (heading as TextView).text.toString())
+            // What this proves, and what it does not. `android:accessibilityHeading` is API 28; the app's
+            // minSdk is 24, and on 24-27 the framework has no such attribute in its resource table, so it is
+            // dropped when the layout inflates — silently, without a crash. Robolectric runs here at API 34,
+            // so this assertion shows the layout *asks* for a heading and that the platform honours it where
+            // it can; it cannot show heading navigation on a 24-to-27 handset, and this stage does not claim
+            // that. The words the heading carries are the fallback a reader on those versions still gets,
+            // because they are the same words the section opens with.
             assertTrue(
-                "and it announces itself as a heading, which is how TalkBack moves round a long form",
+                "and it announces itself as a heading, which is how TalkBack moves round a long form on " +
+                    "API 28 and above",
                 heading.isAccessibilityHeading
             )
         }
@@ -348,52 +492,126 @@ class TaskDetailLayoutTest {
         )
         binding.root.layout(0, 0, width, height)
 
-        assertTrue("the form must have a height at 320dp", binding.root.height > 0)
-        assertEquals("the screen takes the whole width", width, binding.root.width)
+        // The window is EXACTLY this wide because that is what a phone screen is; the root's own width and
+        // height therefore cannot be anything else and asserting them back would be coverage that no layout
+        // error could ever fail. The claims live on the children, which the root's spec does not constrain.
         // Nothing may stick out past the screen: a view that does is unreachable for the reader, because
         // the editor scrolls vertically only. A field the editor has not shown yet (the interval, the
         // weekday chips, the custom minutes) is measured by its container only when it is opened, so it is
         // asked for its bounds *and* to be either on screen or hidden — a view that has no width and is not
         // hidden either was laid out wrong, and that is the case this check exists for.
-        val checked = listOf(
-            binding.taskTitle, binding.taskDueDate, binding.taskDueTime, binding.taskCategory,
-            binding.reminderAtTime, binding.reminderOneDay, binding.reminderCustomMinutes,
-            binding.reminderHint, binding.reminderStatus,
-            binding.repeatPreset, binding.repeatInterval, binding.repeatDayOfMonth,
-            binding.repeatScopeThis, binding.repeatScopeFuture,
-            binding.pauseSeriesButton, binding.deleteSeriesButton, binding.saveTask
+        // Named one by one, because "at least nine of the seventeen are drawn" is a count and not a
+        // statement: a form that hides the category picker and shows three spares would satisfy it. The
+        // eight that are not drawn are the ones behind a preset or a chip the reader has not chosen yet,
+        // and for those the bounds claim would be about a view that was never measured — which is why they
+        // are checked here for being *hidden*, and their bounds are not asserted at all.
+        val drawnNow = listOf(
+            R.id.task_title, R.id.task_due_date, R.id.task_due_time, R.id.task_category,
+            R.id.reminder_at_time, R.id.reminder_one_day, R.id.repeat_preset, R.id.saveTask
         )
-        val content = binding.content()
-        val drawn = checked.filter { isDrawn(it) }
-        assertTrue(
-            "most of what the check walks has to be drawn for the bounds to mean anything: " +
-                "${drawn.size} of ${checked.size} are",
-            drawn.size >= 9
+        val hiddenNow = listOf(
+            R.id.reminder_custom_minutes, R.id.reminder_status, R.id.repeat_interval,
+            R.id.repeat_day_of_month, R.id.repeat_scope_this, R.id.repeat_scope_future,
+            R.id.pauseSeriesButton, R.id.deleteSeriesButton
         )
+        val byId = (drawnNow + hiddenNow).associateWith {
+            binding.root.findViewById<View>(it)
+        }
         assertEquals(
-            "every view the check walks is either inside the scrolling form or inside the footer — one in " +
-                "neither would be a view the layout has lost somewhere off both",
-            emptyList<String>(),
-            checked.filter {
-                !isDescendantOf(it, content) && !isDescendantOf(it, binding.buttonContainer)
-            }.map { name(context, it.id) }
+            "the fields a plain new task shows, in the order the reader meets them",
+            drawnNow.filter { isDrawn(byId.getValue(it)) },
+            (drawnNow + hiddenNow).filter { isDrawn(byId.getValue(it)) }
         )
-        checked.forEach { view ->
-            val label = name(context, view.id)
+        byId.filterKeys { it in drawnNow }.forEach { (id, view) ->
+            val label = name(context, id)
+            assertTrue("$label was given no width at 320dp", view.width > 0)
             assertTrue(
-                "$label is drawn and was given no width",
-                !isDrawn(view) || view.width > 0
-            )
-            assertTrue(
-                "$label is off the 320dp screen",
+                "$label is off the 320dp screen: left=${view.left} right=${view.right} of $width",
                 view.left >= 0 && view.right <= width
+            )
+        }
+        byId.filterKeys { it in hiddenNow }.forEach { (id, view) ->
+            assertFalse(
+                "${name(context, id)} is on the screen for a task that has no series, no custom lead time " +
+                    "and no preset chosen — the collapsed blocks are supposed to stay away",
+                isDrawn(view)
             )
         }
     }
 
+    /**
+     * Every control the reader can reach, measured against the floor the design promises.
+     *
+     * `touch_target_min` is 48dp and the component styles carry it, but a style is an intention and a box a
+     * finger lands in is a fact, so the drawn controls are asked for their measured size. Chips are asked in
+     * both axes: a chip 48dp tall and 20dp wide is still a target a thumb misses. A control the editor has
+     * not opened is not measured at all — a 0x0 box satisfies any bound, and the claim would be about a view
+     * nobody can reach either way. The count guard below is the difference: a form that drew no controls
+     * would otherwise pass by having nothing to fail.
+     */
     @Test
-    fun `a chip the reader has ticked says so without needing the colour`() {
+    fun `every control the reader can reach is at least the touch floor`() {
         val binding = inflated()
+        val context = binding.root.context
+        val width = dp(context, 393f)
+        val height = dp(context, 500f)
+        binding.root.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        )
+        binding.root.layout(0, 0, width, height)
+
+        val floor = dp(context, 48f).toFloat()
+        val controls = mutableListOf<View>()
+        fun walk(view: View) {
+            if (view is Chip || view is MaterialButton || view is TextInputLayout) {
+                if (isDrawn(view)) controls += view
+            }
+            if (view is ViewGroup) (0 until view.childCount).forEach { walk(view.getChildAt(it)) }
+        }
+        walk(binding.root)
+        assertTrue(
+            "the editor drew only ${controls.size} controls, which means the walk found almost nothing and " +
+                "the rest of this test would pass by absence",
+            controls.size >= 20
+        )
+
+        val tooSmall = controls.filter { control ->
+            control.height < floor || (control is Chip && control.width < floor)
+        }
+        assertEquals(
+            "controls under the 48dp floor, measured: " +
+                tooSmall.joinToString { "${name(context, it.id)} ${it.width}x${it.height}" },
+            emptyList<View>(),
+            tooSmall
+        )
+    }
+
+    /**
+     * "Apply the change to" is the question two radio buttons answer, so it is on the screen exactly when
+     * they are. It was added to this layout by Stage 6 and shipped showing the words over a collapsed block
+     * for every plain task — an editor that asks which instance of a series to change, when the task is not
+     * in one. The label and the group therefore start in the same state, and `refreshRepeatUi` reveals the
+     * pair together; asserting the pair rather than each half is what makes a later edit that shows only one
+     * of them fail here.
+     */
+    @Test
+    fun `the scope question appears only with the answers it belongs to`() {
+        val binding = inflated()
+
+        assertEquals(
+            "the question and its two answers are shown or hidden together",
+            binding.repeatScopeGroup.visibility,
+            binding.repeatScopeLabel.visibility
+        )
+        assertFalse(
+            "a plain editor draws ${name(binding.root.context, R.id.repeat_scope_label)} over nothing",
+            binding.repeatScopeLabel.isVisible
+        )
+    }
+
+    @Test
+    fun `a chip the reader has ticked says so without needing the colour`() {        val binding = inflated()
         val stateChips: List<Chip> = listOf(
             binding.reminderAtTime, binding.reminderFiveMin, binding.reminderFifteenMin,
             binding.reminderThirtyMin, binding.reminderOneHour, binding.reminderOneDay,
@@ -438,7 +656,13 @@ class TaskDetailLayoutTest {
             binding.dayFri, binding.daySat, binding.daySun
         )
 
-        assertEquals(7, chips.size)
+        // Not "7 == 7": the group is asked how many chips it holds, so a weekday added to the layout without
+        // being named here — or one moved out of the group — fails instead of being quietly untested.
+        assertEquals(
+            "the weekday group holds exactly the chips this test names",
+            binding.repeatWeekDays.childCount,
+            chips.size
+        )
         assertEquals(7, chips.map { it.text.toString() }.distinct().size)
         chips.forEach { chip ->
             assertTrue("a weekday must be checkable on its own", chip.isCheckable)
@@ -538,7 +762,8 @@ class TaskDetailLayoutTest {
         val index = { id: Int -> sectionOf(content, id) }
 
         assertTrue(
-            "the estimate and the actual are neighbours in the form but never the same line",
+            "the plan is inside When and the record of what the task cost is its own block after it — " +
+                "block indices, which is what `sectionOf` can honestly compare",
             index(R.id.plan_section) < index(R.id.work_section)
         )
         assertTrue(
@@ -575,7 +800,7 @@ class TaskDetailLayoutTest {
         val index = { id: Int -> sectionOf(content, id) }
 
         assertTrue(
-            "the time of the deadline comes before the warnings about it",
+            "the deadline's own block comes before the warnings block",
             index(R.id.task_due_time_layout) < index(R.id.reminder_section)
         )
         assertTrue(
@@ -583,4 +808,89 @@ class TaskDetailLayoutTest {
             index(R.id.repeat_section) < index(R.id.reminder_section)
         )
     }
+
+    /**
+     * Seven chips in a row announce themselves to TalkBack as "Monday, checkbox, checked" with nothing to
+     * say what they are checkboxes *of*, and the reader has to remember which block they are in — the same
+     * kind of gap as a chip whose only difference is its fill. `android:labelFor` is the platform's way of
+     * tying the line above to the group below, and the editor already does it for the repeat scope; these two
+     * groups were the ones left out, so the fix belongs with a claim that can notice it going missing again.
+     *
+     * The claim is read off the compiled layout rather than off an inflated tree, because the relation is
+     * resolved when an accessibility service asks for the node — Robolectric never asks, and an inflated
+     * `ChipGroup` would report the same nothing whether or not the attribute is there. Reading the resource
+     * is the same choice the flow test makes for the same reason.
+     */
+    @Test
+    fun `each chip group is named by the line above it`() {
+        val named = labellersByName()
+        val expected = mapOf(
+            "repeat_week_days" to "repeat_week_days_label",
+            "reminder_chips" to "reminder_title",
+            "repeat_scope_group" to "repeat_scope_label",
+        )
+        expected.forEach { (group, label) ->
+            val labeller = named[group]
+            assertNotNull(
+                "nothing in the layout names $group, so a reader hears the choices without their question; " +
+                    "named groups here: ${named.keys.sorted()}",
+                labeller
+            )
+            assertEquals("$group is named by ${labeller!!.id} rather than by $label", label, labeller.id)
+            assertTrue(
+                "${labeller.id} names $group but says nothing",
+                labeller.words.isNotBlank()
+            )
+        }
+    }
+
+    /** Every `android:labelFor` in the editor layout, keyed by the entry it names. */
+    private fun labellersByName(): Map<String, Labeller> {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val found = mutableMapOf<String, Labeller>()
+        context.resources.getXml(R.layout.fragment_task_detail).use { parser ->
+            while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+                if (parser.eventType == XmlPullParser.START_TAG) {
+                    val attrs = (0 until parser.attributeCount).associate { index ->
+                        parser.getAttributeName(index).substringAfterLast('.') to
+                            parser.getAttributeValue(index)
+                    }
+                    val group = attrs["labelFor"]?.let { entryName(context, it) }
+                    if (group != null) {
+                        val id = entryName(context, attrs["id"].orEmpty()) ?: ""
+                        val words = referencedId(attrs["text"])?.let { resId ->
+                            runCatching { context.getString(resId) }.getOrNull()
+                        }
+                        found[group] = Labeller(id = id, words = words.orEmpty())
+                    }
+                }
+                parser.next()
+            }
+        }
+        return found
+    }
+
+    /**
+     * The resource id a compiled reference attribute points at, or nothing when the value is not a
+     * reference. AAPT2 hands `@string/repeat_weekdays` to the parser as `@2131231515`, so the digits are
+     * the only form this reader sees for a reference.
+     */
+    private fun referencedId(value: String?): Int? {
+        val body = value?.removePrefix("@")?.removePrefix("+") ?: return null
+        return if (body.all { it.isDigit() } && body.isNotEmpty()) body.toIntOrNull() else null
+    }
+
+    /**
+     * `@id/x`, `@+id/x` and the compiled numeric form all name one entry; this returns that entry's name,
+     * which is what survives a reshuffle of ids and still says which view was meant.
+     */
+    private fun entryName(context: Context, reference: String): String? {
+        referencedId(reference)?.let { id ->
+            return runCatching { context.resources.getResourceName(id).substringAfterLast('/') }.getOrNull()
+        }
+        val body = reference.removePrefix("@").removePrefix("+")
+        return if (body.isEmpty()) null else body.substringAfterLast('/')
+    }
+
+    private class Labeller(val id: String, val words: String)
 }

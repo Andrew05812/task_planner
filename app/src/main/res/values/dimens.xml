@@ -28,6 +28,15 @@
     <!-- The glyph inside that container. Material's own icon box is 24dp, and a row icon that fills its
          40dp plate reads as a stamp rather than a mark, so the pair is named separately. -->
     <dimen name="icon_glyph">24dp</dimen>
+    <!-- The state dot in the editor's measured-work block. Named because `bg_work_dot.xml` draws an 8dp
+         circle and the layout asked for 10dp, and a dot that is two sizes depending on who draws it is a
+         dot nobody can compare. -->
+    <dimen name="dot_state">10dp</dimen>
+
+    <!-- The saving figure in the editor's footer. Named because a footer that reserves a slot for it has to
+         say how big the slot is in one place: 32dp is the smallest spinner that still reads as progress on
+         this panel, and the row's two buttons are weighted against exactly this width. -->
+    <dimen name="progress_indicator">32dp</dimen>
     <dimen name="avatar_header">64dp</dimen>
     <dimen name="fab_size">56dp</dimen>
     <!-- Nothing reads this yet and it stays anyway: 3.2 points the FAB's 16dp margin at it, which is the

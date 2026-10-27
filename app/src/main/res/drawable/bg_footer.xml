@@ -3,7 +3,9 @@
 
      The line is the part that does the work. `ink_surface` against `ink_background` measures 1.05:1, so a
      footer painted only with a surface role is invisible as a boundary, and fields scrolling behind it
-     read as if they continue underneath. A 1dp rule in `ink_outline` is what says "the form ends here" —
+     read as if they continue underneath. A 1dp rule is what says "the form ends here" — and it is
+     `ink_outline_strong` (3.73:1 against a surface, 3.78 in dark), not `ink_outline`, which measures
+     1.35:1 light and 1.30 dark and is the token the type scale itself calls decorative —
      the same argument Stage 7 makes for the bottom bar. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
@@ -13,7 +15,7 @@
         android:gravity="top|fill_horizontal"
         android:height="1dp">
         <shape android:shape="rectangle">
-            <solid android:color="@color/ink_outline" />
+            <solid android:color="@color/ink_outline_strong" />
         </shape>
     </item>
 </layer-list>

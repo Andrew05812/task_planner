@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The mark a ticked filter chip carries, at 18dp rather than the 24dp `ic_check` is drawn at.
+     A chip lays its checked icon out at the icon's intrinsic width, so a 24dp mark added eighteen dp to
+     every ticked chip and pushed the weekday row from four chips a line to three — the mark the reader
+     needs had a cost in the layout they did not. 18dp is the Material chip-icon size and still clears the
+     3:1 non-text contrast the mark is checked against. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="?attr/colorControlNormal"
+        android:pathData="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41L9,16.17z" />
+</vector>

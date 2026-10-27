@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The outline of a field, in the four states TextInputLayout asks about.
+
+    The style inherited Material's own `m3_textfield_stroke_color`, whose resting entry is
+    `?attr/colorOutline` — and this design sets colorOutline to `ink_outline`, the 1.35:1 decorative
+    hairline. A form whose every box boundary a low-vision reader cannot find is not a "subtle" form, so the
+    resting and hovered states take `ink_outline_strong` (3.73:1 light, 3.78:1 dark), which spec §3.2 says
+    exists for exactly this: an outline that has to be seen. `ComponentStyleTest` measures it under both
+    themes, because the token table on its own cannot see which outline a component actually resolves to.
+
+    The focused stroke is the accent — the one state where the reader is already looking at the field, and
+    where the design's own rule (§3.1: the accent marks attention, never a resting surface) applies. The
+    disabled field is deliberately the decorative hairline: it is not there to be read.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/ink_outline" android:state_enabled="false" />
+    <item android:color="@color/ink_accent" android:state_focused="true" />
+    <item android:color="@color/ink_outline_strong" android:state_hovered="true" />
+    <item android:color="@color/ink_outline_strong" />
+</selector>
