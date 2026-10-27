@@ -2,6 +2,7 @@ package com.taskplanner.ui.tasks
 
 import android.Manifest
 import android.app.DatePickerDialog
+import android.graphics.Rect
 import android.app.TimePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
@@ -12,8 +13,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.AccessibilityDelegateCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
@@ -27,6 +32,7 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
+import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Task
@@ -40,6 +46,7 @@ import com.taskplanner.ui.util.WorkAdjustmentUi
 import com.taskplanner.ui.util.WorkConflictDialog
 import com.taskplanner.ui.util.WorkTimeFormat
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -82,11 +89,32 @@ class TaskDetailFragment : Fragment() {
      */
     private var carriedCustomOffsets: List<Int> = emptyList()
 
+    /** How a screen reader should introduce a field that opens a picker instead of a keyboard. */
+    private val pickerClassName = "android.widget.Button"
+
+    /**
+     * The last text each picker field was seen to hold.
+     *
+     * Measured on the device while the editor's frames were being taken: dismissing an open
+     * `AutoCompleteTextView` list with the back key leaves the field **blank**. The row in the database
+     * still says "Диссертация"; the field on the screen says nothing. And Save reads the field — so pressing
+     * it after that wrote the blank back: the category became `null`, and a blank priority or status parses
+     * as nothing in particular and lands on `MEDIUM` and `TODO`, which is how a finished task goes back to
+     * being not started. A list closed without a choice has to leave the answer it was opened with.
+     */
+    private val lastPickerText = mutableMapOf<Int, String>()
+
     /**
      * The stored task on screen, kept apart from the fields being edited because the tracking block
      * belongs to the task as saved: a task not yet written to the database has nothing measured on it.
      */
     private var detailTask: Task? = null
+
+    /**
+     * Whether the category the task on screen is filed under has reached the field yet.
+     * See [showStoredCategory] — the task and the categories arrive on two flows, and the field needs both.
+     */
+    private var storedCategoryShown = false
 
     /**
      * Asks for notification permission the first time the user actually ticks a reminder — a task
@@ -123,6 +151,57 @@ class TaskDetailFragment : Fragment() {
         }
     }
 
+    /**
+     * Announce a picker field as the button it is.
+     *
+     * Ten of this screen's fields are chosen rather than typed. Six have `focusable="false"` and raise a
+     * dialog — the two dates, the two times, the plan's start pair — and four open a list to pick from
+     * (priority, status, category, preset). TalkBack reads any of them as "edit box, double tap to edit",
+     * inviting the reader to do the one thing none of them can do. The app already answers this for the
+     * Profile rows, where `ListRowView` reports `android.widget.Button` for exactly the same reason; this is
+     * that answer for fields that are not a custom view of their own.
+     */
+    private fun announceAsPicker(field: View) {
+        ViewCompat.setAccessibilityDelegate(
+            field,
+            object : AccessibilityDelegateCompat() {
+                override fun onInitializeAccessibilityNodeInfo(
+                    host: View,
+                    info: AccessibilityNodeInfoCompat
+                ) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = pickerClassName
+                }
+            }
+        )
+    }
+
+    /**
+     * Keeps a dropdown's answer when its list is dismissed without one: the last non-blank text the field
+     * held is remembered, and a list that closes on an empty field puts it back.
+     *
+     * The other half of the rule is the forgetting — an answer that is never dropped would undo a reader who
+     * deliberately cleared the field, and "no category" is a choice. Say what is measured about that half:
+     * on this widget it cannot be reached. An `AutoCompleteTextView` with `inputType="none"` raises its list
+     * on a change of *typed* text, so a field cleared to nothing has no open list to dismiss, and the
+     * restore below therefore never fires on it — a test written to prove it spent 60 s waiting for a popup
+     * that never came and was deleted rather than left passing on nothing. The removal stays because it
+     * costs nothing and because the list can be raised by other means on other devices; it is recorded here
+     * so nobody later calls it covered.
+     */
+    private fun keepAnswerWhenListDismissed(field: AutoCompleteTextView) {
+        val id = field.id
+        field.doAfterTextChanged { text ->
+            val words = text?.toString().orEmpty()
+            if (words.isNotBlank()) lastPickerText[id] = words else lastPickerText.remove(id)
+        }
+        field.setOnDismissListener {
+            if (field.text.isNullOrBlank()) {
+                lastPickerText[id]?.let { remembered -> field.setText(remembered, false) }
+            }
+        }
+    }
+
     private fun setupUI() {
         setupDatePicker()
         setupTimePicker()
@@ -133,6 +212,19 @@ class TaskDetailFragment : Fragment() {
         setupRepeat()
         setupReminders()
         setupWork()
+        // Four of these fields are pickers whose list can be closed without choosing, and closing one that
+        // way used to empty them; ten of them open a dialog rather than a keyboard, so they are announced
+        // as buttons. Neither is a new behaviour: both are the screen failing to keep what it already had.
+        listOf(
+            binding.taskPriority, binding.taskStatus, binding.taskCategory, binding.repeatPreset
+        ).forEach { field ->
+            keepAnswerWhenListDismissed(field)
+            announceAsPicker(field)
+        }
+        listOf(
+            binding.taskDueDate, binding.taskDueTime, binding.planStartDate, binding.planStartTime,
+            binding.planEndDate, binding.planEndTime
+        ).forEach { announceAsPicker(it) }
     }
 
     private fun setupDatePicker() {
@@ -374,6 +466,9 @@ class TaskDetailFragment : Fragment() {
         val text = binding.planEstimateMinutes.text?.toString()?.trim().orEmpty()
         if (text.isEmpty() || planEstimate() != null) return true
         binding.planEstimateLayout.error = getString(R.string.error_plan_estimate_not_number)
+        // The footer makes the form shorter than it used to be, so a refusal that lands on a field outside
+        // the viewport is a screen that says nothing: the reader sees the same form and presses Save again.
+        bringFieldIntoView(binding.planEstimateLayout)
         return false
     }
 
@@ -397,8 +492,37 @@ class TaskDetailFragment : Fragment() {
                 val categoryNames = categories.map { it.name }
                 val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, categoryNames)
                 binding.taskCategory.setAdapter(adapter)
+                // And the name is tried again from this side. The task and its categories arrive on two
+                // separate Room flows with nothing ordering them, so the one place that used to write the
+                // field — `observeCurrentTask` — read a list that might still be empty and drew nothing at
+                // all. A reader then saw a task they had filed as "Диссертация" come back with no category,
+                // and pressing Save wrote that blank back as "unfiled".
+                showStoredCategory(categories)
             }
         }
+    }
+
+    /**
+     * Puts the category the task on screen is filed under onto the picker, when both halves are known.
+     *
+     * Called from the task and from the categories, whichever arrives second — that is the whole of the fix,
+     * and [categoryMayBeRestored] is the whole of the guard. The function is a rule about the field, not a
+     * flag about this fragment: a categories emission that lands after the reader has begun choosing must not
+     * overwrite what they typed, and a late emission that lands on an empty field must still fill it.
+     */
+    private fun showStoredCategory(categories: List<Category>) {
+        val categoryId = detailTask?.categoryId ?: return
+        val category = categories.find { it.id == categoryId } ?: return
+        if (!categoryMayBeRestored(
+                binding.taskCategory.text?.toString(),
+                category.name,
+                storedCategoryShown
+            )
+        ) {
+            return
+        }
+        binding.taskCategory.setText(category.name, false)
+        storedCategoryShown = true
     }
 
     private fun setupRepeat() {
@@ -444,6 +568,9 @@ class TaskDetailFragment : Fragment() {
         binding.repeatDayOfMonth.isEnabled = patternEnabled
         weekdayChips().forEach { (chip, _) -> chip.isEnabled = patternEnabled }
         binding.repeatScopeGroup.isVisible = rule != null
+        // The question goes with its answers or it is a question about nothing, which is what it was for
+        // every plain task until `TaskDetailLayoutTest` caught it: "Apply the change to" over a hidden pair.
+        binding.repeatScopeLabel.isVisible = rule != null
         binding.seriesStatus.isVisible = rule != null
         binding.seriesControls.isVisible = rule != null
         binding.repeatScopeHint.text = getString(scopeHintRes(rule, onlyThisInstance))
@@ -627,6 +754,8 @@ class TaskDetailFragment : Fragment() {
         if (!binding.reminderCustom.isChecked) return true
         if (binding.reminderCustomMinutes.text.toString().toIntOrNull() != null) return true
         binding.reminderCustomLayout.error = getString(R.string.error_reminder_custom_minutes)
+        // Same reason as the estimate's: a refusal below the footer's line is not a refusal the reader sees.
+        bringFieldIntoView(binding.reminderCustomLayout)
         return false
     }
 
@@ -887,6 +1016,10 @@ class TaskDetailFragment : Fragment() {
                 taskTitleLayout.error = null
                 if (title.isBlank()) {
                     taskTitleLayout.error = getString(R.string.error_title_required)
+                    // The buttons are pinned to the bottom of the window now and the title is at the top of
+                    // a form that does not fit: setting the error alone leaves the reader standing on the
+                    // footer, with the words that explain what went wrong somewhere above their head.
+                    bringFieldIntoView(taskTitleLayout)
                     return@setOnClickListener
                 }
                 if (!notificationPlanValid() || !planValid()) return@setOnClickListener
@@ -902,6 +1035,11 @@ class TaskDetailFragment : Fragment() {
                     priority = priority,
                     status = status,
                     categoryId = categoryId,
+                    // Group membership is not this screen's to change — it is the list's drag-and-drop — and
+                    // `saveTask` defaults this argument to null, so leaving it out meant that every save
+                    // from the editor detached the task from its group. Handing back the stored value keeps
+                    // an action the reader never took from being taken for them.
+                    groupId = detailTask?.groupId,
                     repeat = repeatPlan(),
                     // Always sent, so unchecking the last chip removes the reminder it stood for.
                     reminders = selectedReminderOffsets(),
@@ -920,6 +1058,11 @@ class TaskDetailFragment : Fragment() {
     private fun observeTaskSaveState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.taskSaveState.collect { state ->
+                // The figure is put away with `INVISIBLE`, never `GONE`: its slot in the weighted row is what
+                // keeps Cancel and Save exactly where the reader's finger already is. `View.INVISIBLE` here
+                // also has to match the layout's default, or the first frame and every later one disagree —
+                // and `assertFooterIsAFloorOfItsOwn` measures the slot's width on the device to keep the two
+                // from drifting apart again.
                 when (state) {
                     is TaskSaveState.Loading -> {
                         binding.saveTask.isEnabled = false
@@ -928,44 +1071,44 @@ class TaskDetailFragment : Fragment() {
                     }
                     is TaskSaveState.Success -> {
                         binding.saveTask.isEnabled = true
-                        binding.progressBar.isVisible = false
+                        binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
                         showSnackbar(saveConfirmationMessage())
                         findNavController().navigateUp()
                     }
                     is TaskSaveState.ScheduleConflict -> {
                         binding.saveTask.isEnabled = true
-                        binding.progressBar.isVisible = false
+                        binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
                         showSnackbar(getString(R.string.error_schedule_conflict))
                     }
                     is TaskSaveState.ReminderNeedsDeadline -> {
                         binding.saveTask.isEnabled = true
-                        binding.progressBar.isVisible = false
+                        binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
                         showSnackbar(getString(R.string.error_reminders_need_deadline))
                     }
                     is TaskSaveState.PlanConflict -> {
                         binding.saveTask.isEnabled = true
-                        binding.progressBar.isVisible = false
+                        binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
                         showSnackbar(getString(R.string.error_plan_conflict))
                     }
                     is TaskSaveState.PlanNeedsInstant -> {
                         binding.saveTask.isEnabled = true
-                        binding.progressBar.isVisible = false
+                        binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
                         showSnackbar(getString(R.string.error_plan_needs_instant))
                     }
                     is TaskSaveState.Error -> {
                         binding.saveTask.isEnabled = true
-                        binding.progressBar.isVisible = false
+                        binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
                         showSnackbar(state.message)
                     }
                     is TaskSaveState.Initial -> {
                         binding.saveTask.isEnabled = true
-                        binding.progressBar.isVisible = false
+                        binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
                     }
                 }
@@ -975,10 +1118,14 @@ class TaskDetailFragment : Fragment() {
 
     private fun observeCurrentTask() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.currentTask.collect { task ->
+            // One fill per task. The view model re-sets the current task after a series action, and
+            // collecting the raw flow re-ran the whole fill over whatever the reader had just typed or
+            // chosen — the same class of mistake as the blanked picker, in the other direction.
+            viewModel.currentTask.distinctUntilChangedBy { it?.id }.collect { task ->
                 detailTask = task
                 renderWork()
                 task?.let {
+                    storedCategoryShown = false
                     binding.apply {
                         taskTitle.setText(it.title)
                         taskDescription.setText(it.description)
@@ -986,12 +1133,8 @@ class TaskDetailFragment : Fragment() {
                         loadPlan(it)
                         taskPriority.setText(getString(getPriorityStringRes(it.priority)), false)
                         taskStatus.setText(getString(getStatusStringRes(it.status)), false)
-                        it.categoryId?.let { categoryId ->
-                            viewModel.categories.value.find { category -> category.id == categoryId }?.let { category ->
-                                taskCategory.setText(category.name, false)
-                            }
-                        }
                     }
+                    showStoredCategory(viewModel.categories.value)
                 }
             }
         }
@@ -1083,6 +1226,17 @@ class TaskDetailFragment : Fragment() {
         refreshReminderUi()
     }
 
+    /**
+     * Scrolls the form until this field is in the space the form has — not behind the footer.
+     *
+     * The sticky footer made this its own step: `requestFocus()` alone can leave a field under the band,
+     * because the scroll now ends above the window's bottom edge. `requestRectangleOnScreen` is aimed at the
+     * field's own rectangle, which is what a reader needs to be looking at when a form says no.
+     */
+    private fun bringFieldIntoView(field: View) {
+        field.requestRectangleOnScreen(Rect(0, 0, field.width, field.height), /* immediate = */ false)
+    }
+
     private fun showSnackbar(message: String) {
         Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
     }
@@ -1094,3 +1248,18 @@ class TaskDetailFragment : Fragment() {
         _binding = null
     }
 }
+
+/**
+ * Whether the stored category may still be written into the picker.
+ *
+ * Three answers, and the second is the one the screen got wrong first. Nothing has been shown yet and the
+ * field is empty — write it. Nothing has been shown yet and the field already holds a word the *reader* chose
+ * — leave it alone: a categories emission that arrives late is not entitled to undo a choice made seconds
+ * ago, which is what a flag-only rule did. And once the name is on the field, this task owns that write, so a
+ * later emission changes nothing.
+ *
+ * A top-level function of the field's three inputs rather than a private method of the fragment, because that
+ * is what makes it testable without a Hilt graph — `TaskEditorCategoryRestoreTest` is the proof.
+ */
+internal fun categoryMayBeRestored(onField: String?, storedName: String, alreadyShown: Boolean): Boolean =
+    !alreadyShown && (onField.isNullOrBlank() || onField == storedName)
