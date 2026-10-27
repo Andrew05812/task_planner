@@ -291,6 +291,59 @@ now dispatches gestures at the row (not at the card, which would bypass the rout
 all four outcomes: a drag reveals, a tap opens, a tap does not select, a held press selects without opening.
 The reveal photograph this section said could not be taken is `after/s2-row-swiped.png`.
 
+### 4.11 The editor is one long scroll with no floor, and half of its groups are anonymous — `before/06-task-editor.png`, `before/20-editor-320.png`, `before/26-editor-font13.png`
+
+The screen the app is used most, measured at the baseline rather than described. `fragment_task_detail.xml`
+at `3ce8ecd` is a `NestedScrollView` whose single child is a `ConstraintLayout` of 93 view tags, and
+`button_container` — Cancel and Save — is the *last* item inside it (`:764`). The root assertion
+`TaskDetailLayoutTest` was built on says the same thing back: `index(button_container) == content.childCount
+- 1`. So the primary action of a form with sixteen fields sits below its own fold at every width this audit
+photographs, and it moves further away when the keyboard opens, because the window's default soft-input mode
+was never declared and the scroll view owns the whole screen.
+
+Grouping is half-done. Three of the six groups carry a title (`plan_section_title`, `work_section_title`,
+`reminder_section_title`), and the other three — the date and time fields, the priority/status/category
+choices, the whole repeat block — are anonymous runs of boxes. Where a title does exist it is
+`android:textAppearance="?attr/textAppearanceSubtitle2"`, one of the Material 2 attributes §4.5 counts, and
+no heading semantics: a screen-reader user hears a long column of fields with no sections. Ordering is the
+other half of the problem — the fields sit in the order they were added rather than the order they are
+filled in: `plan_section` sits before `work_section`, and both the category field and the work block are
+constrained to
+the same anchor below it, which is why `TaskDetailLayoutTest` could assert `work_section < task_priority_layout`
+as a fact about the screen.
+
+State is carried by colour alone in two places. The reminder and weekday chips are bare
+`com.google.android.material.chip.Chip` elements with no `checkedIcon`, so a ticked lead time differs from an
+unticked one only in fill; the measured difference between the two fills is small enough that a reader with a
+colour vision deficiency has to remember which side was which. `work_state_dot` is a 10 dp view whose
+background drawable is 8 dp, and it is the only thing between "running" and "not running" — the row's own
+text is the elapsed counter, which also reads as a number when the stretch is paused.
+
+**Resolved in Stage 6.** The form now scrolls and the footer does not: `editor_scroll` is a weighted child of
+a vertical screen, `button_container` is its sibling, and `TaskDetailLayoutTest` asserts that relationship
+rather than the old index (`scroll.bottom == footer.top`, `footer.bottom == window`). The manifest declares
+`adjustResize` for the activity's soft-input mode, so the claim does not rest on an undocumented
+default, and `theFooterStaysOnTheWindowWithTheKeyboardUp` measures the visible frame on the device. Six
+sections in the order the reader fills them in — Task, When, How, Repeat, Reminders, Measured work — each
+opened by `Widget.TaskPlanner.SectionHeader` with `android:accessibilityHeading="true"`, which the platform
+honours from API 28: the app's minSdk is 24, and on 24 to 27 that attribute is dropped when the layout
+inflates, so heading navigation is claimed for API 28+ and not for the whole supported range. The three
+deliberate inversions of the old order are named in the commit message. Ticked chips carry a check icon
+(`Widget.TaskPlanner.Chip.State`), and the work dot is drawn at `@dimen/dot_state` with
+`importantForAccessibility="no"`, because the words beside it already say what it means. Six of the lines
+the editor rewrites while the reader is somewhere else are `accessibilityLiveRegion="polite"`, and the two
+chip groups that had no name now have one (`labelFor`). Frames: the twelve the editor's frames class writes in
+each configuration — `after/s6-editor-top.png`, `s6-editor-how.png`, `s6-editor-reminders.png`,
+`s6-editor-reminders-ticked.png`, `s6-editor-bottom.png`, `s6-editor-work-running.png`,
+`s6-editor-date-picker.png`, `s6-editor-time-picker.png`, `s6-editor-category-picker.png`,
+`s6-editor-repeat.png`, `s6-editor-new-empty.png`, `s6-editor-error.png` — all of them from 393 dp, light,
+font scale 1.0 — plus four frames taken in another configuration: `s6-editor-320.png` and
+`s6-editor-360.png` (the running commands, wrapped at the narrow widths), `s6-editor-font13.png` (the bottom
+of the form at font scale 1.3) and `s6-editor-dark.png` (the top of the form at night). The class wrote
+twelve frames in each of the twelve configurations — 144 photographs, every one measured before it was
+allowed to become a file. §20o of the plan lists the configurations, what each run cost, and the frames the
+rules refused before they were fixed.
+
 ## 5. What this evidence cannot show
 
 Stated plainly, because a limitation nobody writes down becomes a claim nobody checks.

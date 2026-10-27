@@ -5,7 +5,7 @@ Branch: `feat/global-ui-redesign` (one branch, one PR, staged commits)
 Baseline: `master` = `origin/master` = `c2c767d1b80db756c1a3517eecc083de598ff7af` (merge of PR #21)
 Direction approved by the user: **Ink & Accent**.
 
-Revision 9. The header names this document's newest table row: revisions 4 through 7 each landed with their
+Revision 10. The header names this document's newest table row: revisions 4 through 7 each landed with their
 own correction notes in place while this line still read "revision 3", which is what an audit of the
 downloaded copy caught, and the rule since then is that a header must name its own newest row.
 The history, in order:
@@ -20,7 +20,8 @@ The history, in order:
 | 6 | five errors two reviews found: the budget, the `letterSpacing` unit, the pill allowance, five distinct text styles, the ramp staged twice, `@dimen/text_caption`'s reader | `422d7cd` |
 | 7 | the budget meets font scale 1.3 and loses: the card grows rather than the type shrinking, plus four arithmetic and count corrections | `ee75e61` |
 | 8 | §5 motion rewritten around the item animator after the plan's version proved non-overridable; the rail split into a scrolling category row and a fixed status row; the chart ramp given its own base token so stage 1 cannot move it by aliasing | `d1839a8` + this commit |
-| 9 | §2.1's inset written as two margins rather than `layout_marginVertical`, because API 26 attributes are dropped silently on this app's API 24 floor — the same reason the plan's 2.3a sweeps nine more layouts | this commit |
+| 9 | §2.1's inset written as two margins rather than `layout_marginVertical`, because API 26 attributes are dropped silently on this app's API 24 floor — the same reason the plan's 2.3a sweeps nine more layouts | `3ce8ecd` |
+| 10 | Stage 6's two component styles named (`SectionHeader`, `Chip.State`); the resting outline of a field is a component decision, not a token one, and the token table could not see it | this commit |
 
 Revision 3's own note, kept because it explains why §3.2 is generated: an independent review of revision 1
 falsified six of its claims against the source, and revision 2's contrast section then proved to carry two
@@ -388,6 +389,29 @@ hairlines, not shadows.
 `.Button.Outlined`, `.Button.Text`, `.Button.Destructive`, `.Chip.Filter`, `.Chip.Category`, `.Field`,
 `.BottomBar`, `.Dialog`, `.MetaText`, `.SectionLabel`.
 
+> Revision 10, from Stage 6. Two styles the editor needed are not in revision 1's list, and one colour in
+> §3.1 turned out to be a component decision the token table cannot see.
+>
+> `.SectionHeader` — the heading that opens each of the editor's six blocks: `Title` role, `ink_text`, no
+> bottom margin, and `android:accessibilityHeading="true"` at the use site. It is `.SectionLabel` plus the
+> weight and the colour a heading needs, and it is a separate style rather than a bigger label because the
+> reader scans the six words first and everything else second.
+>
+> `.Chip.State` — a filter chip whose *ticked* state carries a check icon as well as a fill, for the fields
+> where a tick is an answer the reader chose (lead times, weekdays). §6 of the stage's acceptance forbids
+> colour as the only indicator of a state; `.Chip.Filter` keeps no icon because a category filter's state is
+> already told by which chips are present.
+>
+> The resting outline of a `Field`. `Widget.Material3.TextInputLayout.OutlinedBox` leaves `boxStrokeColor`
+> alone, which resolves through `m3_textfield_stroke_color` to `?attr/colorOutline` — and this design sets
+> `colorOutline` to `ink_outline`, the 1.35:1 decorative hairline §3.1 declares is not there to be read.
+> Sixteen fields of the editor therefore rested on a boundary no low-vision reader could find, while
+> `docs/design/contrast-report.md` happily reported `ink_outline_strong` at 3.73:1 and pointed at exactly
+> this use. `res/color/field_stroke_ink.xml` is now named in both field styles (resting and hovered
+> `ink_outline_strong`, focused `ink_accent`, disabled `ink_outline`), and `ComponentStyleTest` measures the
+> resolved colour of the *component* against the page — because a token table can only say what a colour is
+> worth, never which colour a widget actually draws.
+
 **Layout includes** (multi-view, reused with `<include>`): `.ListRow` (icon container + title + optional
 value + chevron), `.EmptyState`, `.LoadingState`, `.ErrorState`, `.SelectionBar`, `.GroupHeader`.
 
@@ -594,6 +618,20 @@ preserved or migrated in the same commit as the tests, never silently.
 > camelCase and they live one file over; a plan that preserved the wrong ids would have "passed" while
 > breaking the dialog.
 
+> Revision 10, from the four reviews of Stage 6. Three things the paragraph above did not say, and the screen
+> got wrong anyway:
+>
+>  * A section heading is not the same object as the question that labels a pair of controls. "Apply the
+>     change to" belongs to the two radio buttons under it and must be shown or hidden *with* them; drawn on
+>     its own it asks a reader which instance of a series to change when the task is not in one.
+>  * A sticky footer shortens the form, so a validation message is only half the job — the field carrying it
+>     has to be moved into what is left of the viewport, or the reader is told nothing they can see.
+>  * The lines under the fields that change while the reader is elsewhere ("2 reminders set", "the series is
+>     paused") are spoken, not just drawn: each is a `polite` live region. Same rule as the chips, same reason.
+>
+> The footer's progress figure holds a reserved slot (`invisible`, not `gone`): a spinner that appears out of
+> nothing takes 40dp from a weighted row and slides both buttons away from the finger that pressed Save.
+
 ### 4.4 Navigation and the remaining screens
 
 Bottom bar: all five labels always visible, active item marked by a pill behind the icon and by
@@ -646,6 +684,18 @@ pixel+density pair for each width is recorded in the review document; font scale
 `settings put system font_scale`; theme via `cmd uimode night`. No fixed height on any text-bearing row.
 Screenshots of every combination are kept, not asserted.
 
+> Revision 10, from the accessibility review of Stage 6. Two rules the paragraph above states only in part,
+> and one limitation this design does not remove:
+>
+>  * A group of choices is named, not merely present. A `ChipGroup` or `RadioGroup` whose meaning lives in the
+>     line above it ties the two together with `android:labelFor` at the use site; without it a reader hears
+>     "Monday, checked" with nothing to say what Monday is a choice *of*. This applies to every grouped
+>     control the later stages draw, not only to the editor's.
+>  * `android:accessibilityHeading` exists from API 28. The app's minSdk is 24, so on 24 to 27 the attribute
+>     is dropped when a layout inflates and heading navigation is not available — silently, without a crash.
+>     The claim in §3.5 and §4.3 is therefore scoped to API 28+; the section's own words remain the fallback
+>     on the older releases, and raising minSdk is out of scope for this redesign.
+
 ## 7. Performance
 
 No new dependency. `RecyclerView` keeps its adapter and diffing; the card layout is flattened from today's
@@ -660,6 +710,16 @@ The acceptance evidence is screenshots, not a build log.
 For every main screen: same emulator (1080×2280, 440dpi), same seeded account, same theme, same font
 scale, before and after, in `docs/images/ui-redesign/before/` and `.../after/`. Tasks, Profile and the
 task editor additionally get dark-theme, 320dp and font-scale-1.3 pairs.
+
+> Revision 10, from Stage 6's frames. A frame is measured on the view its file name claims.
+> `07-time-picker` began as a photograph of the deadline *field* behind an open clock; in light theme the
+> strip passed the contrast bar, and in dark theme — in all six dark configurations, at exactly 89 levels
+> against a bar of 90 — it did not. Neither answer was about the screen: at that moment the field is a
+> dimmed band under a dialog sheet, which is the least informative thing in the picture. The frame now
+> measures the picker itself, which is what a reader looks at and what the name says, and the bar did not
+> move. When a frame fails narrowly, the region being measured is questioned before the threshold is.
+> A dialog also sits in its own window, so the geometry rule that clips the form at the sticky footer does
+> not apply to it — the footer is the form's neighbour, not the screen's.
 
 `docs/UI_UX_AUDIT.md` records the starting problems with the before images; `docs/DESIGN_SYSTEM.md`
 records the tokens and components; `docs/UI_REDESIGN_REVIEW.md` goes screen by screen — what changed,

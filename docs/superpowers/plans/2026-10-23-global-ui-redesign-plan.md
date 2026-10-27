@@ -2890,7 +2890,7 @@ tests for the first time; the delete flow behaves as it did at the baseline; no 
 
 Purpose: regroup the same fields. Depends on: S1. Tools: `frontend-design`.
 
-- [ ] **6.1 Read the current assertions first** — `TaskDetailLayoutTest` asserts child *order* inside the
+- [x] **6.1 Read the current assertions first** — `TaskDetailLayoutTest` asserts child *order* inside the
   editor's content container, and the full list is longer than it looks. Every one of these must be
   re-derived from the new section order, not assumed:
 
@@ -2908,7 +2908,7 @@ Purpose: regroup the same fields. Depends on: S1. Tools: `frontend-design`.
   commit, and put the three inversions in the commit message so a reader can see they were decided rather
   than discovered by a red build.
 
-- [ ] **6.2 Preserve the ids** the tests and the fragment bind to: `repeat_preset`,
+- [x] **6.2 Preserve the ids** the tests and the fragment bind to: `repeat_preset`,
   `repeat_interval_layout`, `repeat_interval`, `task_title`, `task_category_layout`, `plan_section`,
   `work_section`, `repeat_section`, `reminder_section`, `button_container` and every section id named above.
   The adjustment dialog's inputs are `workStartInput`, `workEndInput`, `workReasonInput` and `workPrevious`
@@ -2918,17 +2918,18 @@ Purpose: regroup the same fields. Depends on: S1. Tools: `frontend-design`.
   `intervalHint(::getString)` line must survive untouched — PR #21's fix and its eight unit tests plus four
   instrumented tests are the regression gate here.
 
-- [ ] **6.3 Rebuild the layout** into labelled sections — Task (title, description), When (due date, time,
+- [x] **6.3 Rebuild the layout** into labelled sections — Task (title, description), When (due date, time,
   plan), How (priority, status, category), Repeat (collapsed until opened), Reminders, Measured work — with
   inline errors on the offending field and Save/Cancel in a sticky footer outside the scroll view.
 
-- [ ] **6.4 Tests:** update `TaskDetailLayoutTest`'s order assertions to the new truth; keep
+- [x] **6.4 Tests:** update `TaskDetailLayoutTest`'s order assertions to the new truth; keep
   `WorkAdjustmentUiTest`'s behaviour assertions; extend the editor's instrumented class with "the editor
   opens, validates and saves" if the existing four do not already cover a save.
 
-- [ ] **6.5 Gates, device evidence** (editor opened from `+`, from a task with no series, from a task in a
+- [x] **6.5 Gates, device evidence** (editor opened from `+`, from a task with no series, from a task in a
   series; each repeat preset rendered; validation error shown; sticky footer at 320dp and at font 1.3),
-  then commit.
+  then commit. Done — the numbers, the twelve configurations, the frames and the review disposition are in
+  §20o of this plan.
 
 **Acceptance:** no field lost; validation still inline; the repeat section still renders all eleven presets
 without crashing; the sticky footer is visible at 320dp with the keyboard up; `TaskEditorInstrumentedTest`
@@ -4491,3 +4492,173 @@ behaviour changed. Regression: `TaskCardStatesInstrumentedTest` 12, `TaskCardWid
 `TaskCardSwipeInstrumentedTest` 2, `TaskEditorInstrumentedTest` 4, `TasksHeaderInstrumentedTest` 5 and
 `TasksScreenInstrumentedTest` 4 — 34 runs, all green, against the installed `base.apk` whose sha256 equals the
 built `app-debug.apk` (`314bba85c0ade69b7b3f1c8154deafa7f589661401770442fbdf2b0968de55eb`).
+
+## 20o — Stage 6 executed: the editor as six answers, and what four reviewers found against it
+
+Executed on `taskplanner_avd` / `emulator-5584` (API 35, 540 × 1140 px at 220 dpi = 393 dp; the other widths
+are reached by `wm density` alone — 270 dpi is 320 dp, 240 dpi is 360 dp). No other device, emulator or
+physical handset was used, and every `adb` call carried `-s emulator-5584`.
+
+**The gates, on the binaries that ran.** `testDebugUnitTest`: **107 suites, 1475 tests, 0 failures, 0 errors,
+0 skipped**. `lintDebug`: **0 errors, 175 warnings** (176 before this stage; `TooManyViews` on the editor
+layout is pre-existing and unchanged at 93 view tags). `assembleDebug` → `app-debug.apk`
+`28d03f87e8249956e4bffd4e1774e034ebfe3f6ef6070367979f4385b0d0fe30`, and the file the device reported at
+`/data/app/~~dfNqWe2kGuw24Tft8ksIsA==/com.taskplanner-ytpJrle4YvIsB2SwQKqe1A==/base.apk` carries the same
+digest; the instrumented APK `245ad0e3fc1edbb038e5fb6cec179849505fd96b1e0f7affdcfa22ad02428bc9` likewise
+matches what is installed under `com.taskplanner.test`. **166 instrumented runs, 0 failures**: the frames
+class 11 tests × 12 configurations = 132, and at 393 dp and at 320 dp the fixture's 3, the editor's
+behaviour's 7, the FAB's 3 and the Tasks screen's 4 — 34 more. 144 frames were written and pulled, twelve
+per configuration, and the matrix script now ends non-zero unless every run answers `OK (`; this run's exit
+code was 0.
+
+**What the screen is now.** The form is six blocks in the order a reader answers them — Task, When, How,
+Repeat, Reminders, Measured work — inside `editor_scroll`, with `button_container` as the scroll view's
+sibling rather than its last child, so Save and Cancel are on the window whether or not the bottom of the
+fields has been reached. Three ordering decisions were inverted deliberately against the old screen and are
+named in the commit message: the classification block (How) moved in front of Repeat because a series is a
+property of a task the reader has already classified; the plan sub-block moved inside When because it is the
+same question about a span of time; Reminders moved after Repeat because a lead time counts back from a
+deadline that repetition decides. All 68 ids the old layout carried are still there — the two id sets,
+`git show 3ce8ecd` against the working file, differ by nine additions and nothing removed — and every one of
+them that Kotlin touches is pinned by ViewBinding: an id that vanishes stops the fragment *or* the test from
+compiling. An id only XML references is not pinned that way, which is why the six section ids are named again
+in `TaskDetailLayoutTest`; a snapshot list of all 68 names would add nothing the compiler does not already
+enforce, and would rot the first time a stage renamed one on purpose.
+
+**Seven things only this stage's evidence could tell.**
+
+* **A frame of a footer is not a frame of the view it is named for.** The class measured the region inside
+  the bitmap and passed `11-running-commands` while the command row sat under Save. The rule became three
+  ordered claims on the *visible* slice — horizontal containment, then at least half the view above the
+  footer's top, then at least 80 dp of it — and `shot()` now scrolls the view it is about to photograph.
+  Three frames failed before that existed, and they failed with their own numbers, which is why the
+  threshold is stated in pixels the device reported rather than in an opinion: `11-running-commands` had
+  14 px of 138 above the floor, `02-how-block` 131 of 333, `09-series-repeat` 407 of 907.
+* **Asking for the top-left corner is not asking for the view.** The first fix for the commands row was
+  `requestRectangleOnScreen(Rect(0, 0, 1, 1))`. The corner was already on screen by 14 px, so the platform
+  correctly did nothing and the row stayed where it was. The scroll now requests the whole rectangle, which
+  is what the app's own `bringFieldIntoView` does for an inline error.
+* **A frame named for a picker measures the picker.** `06-date-picker` and `07-time-picker` photographed the
+  deadline *field* the dialog had been opened from. In light theme that strip passed the contrast bar; in
+  dark theme it failed in all six dark configurations at exactly 89 levels against a bar of 90, because at
+  that moment the field is a dimmed band behind a dialog sheet — the least informative thing in the picture.
+  Neither answer was about the screen, and the bar was not moved: the two frames now capture the
+  `DatePicker`/`TimePicker` the dialog drew (Espresso hands the view over; `activity.findViewById` cannot see
+  into another window), and a dialog is exempt from the footer's floor because the footer is the *form's*
+  neighbour, not the screen's. The form's integrity, which the old subject pretended to prove, is asserted
+  instead: the title, date and time are read again after both pickers are backed out of.
+* **A spinner that appears moves the button you just pressed.** `progressBar` was GONE between saves, so
+  Cancel and Save re-measured when a save started — the layout's own comment said they do not move. The slot
+  is reserved (`INVISIBLE`, `@dimen/progress_indicator`) and the device asserts the view has width and
+  height while the footer is checked as a floor.
+* **Three data defects surfaced from a styling stage, and they are documented rather than hidden.** The
+  stored category could overwrite a choice the reader made seconds earlier (the guard was a flag; the rule
+  is now about the field — `categoryMayBeRestored`, four JVM cases); backing out of a dismissed picker could
+  undo a deliberate clearing, because the remembered answer was never removed; and saving a task in a group
+  dropped its `groupId`, because `saveTask` passed `null` where the existing row had a value. These change
+  what Save writes, so they were kept in their own commits and are called out here, as §7 of the brief
+  requires of a visual stage that turns up real logic.
+* **Deleting a profile does not delete their tasks, and asking SQLite proved it.** `PRAGMA foreign_key_list`
+  over schema 16 shows thirteen tables cascading from `users` and exactly three that carry `user_id` with no
+  foreign key to it: `tasks`, `categories`, `reminders`. `SeededProfileCleanupTest` asks that question in
+  both directions, so the fixture's cleanup can name the tables it must clear by hand; `SeededProfile`
+  sweeps leftover `@example.test` profiles before seeding, restores the displaced current user *first*, and
+  closes the database in a `finally`.
+* **A test for a gesture the widget cannot perform is not a test.** `clearingAPickerAndBackingOutOfTheList`
+  was written to prove that clearing a category sticks. The popup never opened: the field is
+  `inputType="none"` and blank, and 60 s of waiting per attempt showed no list at all. The test was deleted
+  with its helper, and the behaviour it aimed at is covered by the unit cases above; the unreachable branch
+  is recorded in the KDoc of `keepAnswerWhenListDismissed` instead of being pretended away by a green suite.
+
+**`adjustResize`, the experiment and its measurement.** The keyboard claim was first tried at runtime with
+`setSoftInputMode` in `onResume`. It was measured, and it failed: the visible frame shrank to 728 px while
+Save's bottom stayed at 986 px — the window resized and the button did not move with it. The manifest
+attribute was restored for the activity, which is app-wide rather than editor-only, and that consequence is
+covered where it belongs: `TasksScreenInstrumentedTest` and `TasksFabClearanceInstrumentedTest` run after it.
+
+**Independent review: four agents, and the disposition of every finding.** Each reviewer read the working
+tree and the sources; nothing below was accepted on its wording alone — the "verified against" column is the
+file or run that settled it. Five BLOCKER and nineteen MAJOR findings came out of the four reports; every
+one was then checked, and the row says what happened.
+
+| # | source | finding | severity | verified against | disposition |
+|---|---|---|---|---|---|
+| 1 | ux | `repeat_scope_label` was never hidden, so every plain task showed "Apply the change to" above nothing | BLOCKER | `fragment_task_detail.xml` (no `visibility`), `refreshRepeatUi` toggled only the group and the hint | fixed: `visibility="gone"` + `isVisible = rule != null`; frame `09-series-repeat` |
+| 2 | a11y | every field's resting 1 dp box stroke resolved to `colorOutline` → `ink_outline`, 1.35:1 light / 1.30:1 dark | BLOCKER | `component_styles.xml` set no `boxStrokeColor`; the AAR default is `?attr/colorOutline`; measured ratio 1.28:1 before the change | fixed: `@color/field_stroke_ink` (resting `ink_outline_strong`, focus `ink_accent`, disabled `ink_outline`), pinned by `ComponentStyleTest` at ≥ 3.0:1 |
+| 3 | test | the fixture's cleanup left 11 tasks and 31 categories behind while its comment claimed they went with the profile | BLOCKER | `PRAGMA foreign_key_list` / `table_info` over schema 16; row counts after `deleteUser` | fixed: `SeededProfile.takeAway` deletes by `user_id` from `tasks`/`categories`/`reminders` and the test that asks SQLite is `SeededProfileCleanupTest` (3) |
+| 4 | test | a process killed mid-run left the fake profile signed in; `database.close()` was not in a `finally`; a throw in cleanup skipped the restore | BLOCKER | `setCurrentUser` clears the flag on every other row; JUnit 4 runs `@AfterClass` only for a `@BeforeClass` that threw | fixed: pre-seed sweep, restore-before-delete, `try/finally` with `close()` |
+| 5 | arch | three data-loss fixes were made inside a visual stage | BLOCKER (process) | the diffs themselves: `groupId`, picker memory, category guard | kept, disclosed here and in the audit, and split into their own commits so a reviewer can read them apart from the styling |
+| 6 | arch | the category guard still overwrote an in-progress pick when categories arrived late | MAJOR | reading `showStoredCategory` and the collector that re-calls it | fixed: `categoryMayBeRestored` keys on the field's own text; `TaskEditorCategoryRestoreTest` (4) |
+| 7 | arch | a remembered picker answer was never forgotten, so deliberate clearing was silently reverted | MAJOR | `keepAnswerWhenListDismissed` only ever added to the map | fixed: blank text removes the entry; the path where the dismissal cannot happen is documented instead of tested |
+| 8 | arch | `adjustResize` on the activity is an app-wide IME change riding in a visual stage | MAJOR (scope) | the runtime alternative was measured failing (728 px frame, Save at 986 px) | accepted and documented: the editor's own keyboard claim is measured, and the manifest comment now says plainly that no test raises a keyboard on the list screen — that gap is open, not covered |
+| 9 | arch | both instrumented classes open the app's production database rather than an isolated one | MAJOR | `AppDatabase` opened by name, `setCurrentUser` on the real table | reduced, not removed: the fixture now sweeps, restores and always closes; full isolation rejected because the cascade semantics that make the residue real are SQLite's, and the brief forbids mocking them |
+| 10 | ux | inline errors on the estimate and the custom lead time could land outside the shortened viewport | MAJOR | only the title called `bringFieldIntoView` | fixed: `planValid()` and `notificationPlanValid()` scroll their field first |
+| 11 | ux | the footer spinner moved Cancel and Save when it appeared | MAJOR | screenshot of `11-running-commands`, then the `isVisible=false` sites | fixed: reserved slot with `INVISIBLE` at `@dimen/progress_indicator`, and a device claim that the view has size |
+| 12 | a11y | no `accessibilityLiveRegion` anywhere, so six lines that change under the reader are silent (WCAG 4.1.3) | MAJOR | `grep -c` was 0; the six are `plan_hint`, `repeat_scope_hint`, `series_status`, `reminder_hint`, `reminder_status`, `work_state_hint` | fixed: all six are `polite`, pinned by `a line that changes while the reader is on the screen is a live region` |
+| 13 | a11y | the two chip groups had no name, so a reader hears "Monday, checked" without a question (WCAG 1.3.1) | MAJOR | only `repeat_scope_label` carried `labelFor` | fixed: `reminder_title` → `reminder_chips`, `repeat_week_days_label` → `repeat_week_days`; RED measured with both absent, GREEN with both present |
+| 14 | a11y | the 48 dp floor was asserted for a handful of controls; nothing pinned the configuration matrix | MAJOR | counted the assertions in the two test classes; `grep -rn "\-e tag" ` found no caller | fixed: a tree walk requires every drawn control to reach the floor (height 48 dp, chip width 48 dp, ≥ 20 drawn), and `scripts/capture-ui-matrix.py --editor-matrix` now owns the twelve configurations and passes the tag |
+| 15 | test | three assertions could not fail: width/height compared against the `EXACTLY` specs that handed them out | MAJOR | `TaskDetailLayoutTest` lines quoted by the reviewer | fixed: `UNSPECIFIED` height where a claim is made about the measured result, and the tautologies deleted rather than dressed up |
+| 16 | test | the order test could pass vacuously when the earlier view sat under a GONE ancestor | MAJOR | a hidden view keeps `top = 0` | fixed: both sides are required to be drawn and non-empty before the comparison |
+| 17 | test | the pixel checks clamped the region into the bitmap, so a view at negative x was measured from its neighbour | MAJOR | `luminanceSpread` before/after | fixed: horizontal containment is asserted first; the vertical rule is the visible-slice one described above |
+| 18 | test | the keyboard claim mixed `getLocationInWindow` with a display-absolute frame, and a missing Save measured as reachable | MAJOR | `getWindowVisibleDisplayFrame` is display-absolute | fixed: `getLocationOnScreen` + `requireView`, and the height is taken from the view that must exist |
+| 19 | test | "sticky footer at 320 dp with the keyboard up" was never proved jointly, and nothing in the repo passed `-e tag` | MAJOR | the class only validated the tag it was handed | fixed: the script runs the editor classes at 393 and 320 dp; the frames class runs in all twelve |
+| 20 | test | `TaskEditorCommandBudgetTest` proved a `Flow` child existed, not that it was told to wrap | MAJOR | `getWrapMode()`/`getReferencedIds()` are not public in constraintlayout 2.1.4 | fixed: the compiled resource is read for `flow_wrapMode` == `Flow.WRAP_CHAIN` and the five named ids, and the wrap itself is measured on the device — the test says which half it can see |
+| 21 | ux | the `Label` role puts all-caps on every button, including Save and Cancel | MAJOR | `component_styles.xml`, `type.xml` | deferred: it is a theme-wide role shared with Stage 7's navigation; changing it here would move every screen's buttons in a stage whose frames are the editor's |
+| 22 | a11y | `Chip.Filter` is the theme-wide `chipStyle` with `checkedIconVisible=false`, so chips that name no style remain colour-only | MAJOR | `themes.xml` / `values-night/themes.xml` | deferred with the same reasoning as 21; recorded as open below |
+| 23 | a11y | `android:accessibilityHeading` does not exist below API 28, and the app's minSdk is 24 | MAJOR | the attribute id is absent from the 24–27 resource tables; Robolectric runs at 34 | limitation stated in the test's own comment and in the audit, and the heading claim is scoped to API 28+; the section's words remain the fallback |
+| 24 | a11y | the six `focusable="false"` picker fields leave the D-pad/external-keyboard focus order | MAJOR | count is identical before (6) and after (6) — pre-existing, not introduced | open, recorded below: fixing it means re-deciding what a tap-only field is, which is Stage 10's accessibility pass |
+
+MINOR and NIT findings were dispositioned the same way but in bulk: the touch-target, ellipsize, `SectionLabel`
+role, `@dimen` for the spinner, footer-hairline and duplicated-helper notes are in the commits; the four
+`LabelFor` lint warnings were rejected as the reviewer had already shown them to be false positives in
+material 1.11.0 (`TextInputLayout`'s delegate sets the label on the child node); `MIN_FRAME_SPREAD` stays as
+the backstop it is, with its comment corrected to stop describing it as a defence against a half-closed
+dialog; and the proposal to pin the id list in a test was answered by the compiler rather than by a list —
+every id Kotlin names is already pinned, and the XML-only ones are named in the layout test, as above.
+
+**A fifth reviewer, read against the remediation itself.** The fixes were not taken on trust: a fresh agent
+re-read the whole working tree against the same brief and returned three BLOCKER, seven MAJOR and a batch of
+MINOR findings. Each was checked against the file it names before being accepted, and one turned out not to
+be a defect at all. The table carries the twelve that changed something; the two save-side MAJORs are set out
+after it, because they are the ones this stage did not fix.
+
+| # | finding | verified against | disposition |
+|---|---|---|---|
+| 1 | the manifest comment claims `TasksScreenInstrumentedTest` and `TasksFabClearanceInstrumentedTest` cover the keyboard over the list; neither raises a keyboard | grep of both classes for `Ime`, `SOFT_INPUT`, `getWindowVisibleDisplayFrame`: nothing | fixed by deleting the claim: the comment now says the editor's keyboard claim is measured and the list's is not, and names the gap as open |
+| 2 | `isInFront()` cannot catch a refused save that navigated up, because the activity stays RESUMED either way | read of the assertion and of `openTheEditor` | fixed: `stillOnTheEditor()` requires the title field *and* the navigation destination |
+| 3 | `--editor-matrix` exits 0 whatever the runs report, and pulls the frames only after every later run | `instrument()` returns a code nobody reads; `clearPackageData=true` in `app/build.gradle.kts` makes the question real even though measurement showed the frames surviving between runs | fixed: every run must answer `OK (` or the script ends non-zero naming the runs; each configuration's frames are pulled straight after its own run; the device is left back at 393 dp, font 1.0, light |
+| 4 | nothing pins the *top* of the form's viewport, and `bringAboveTheFloor` never checked whether it had succeeded | geometry of `scrollOfTheForm()` | fixed: the region's head is required inside the viewport, and the scroll helper fails after its attempts rather than returning quietly |
+| 5 | `08-category-picker` could photograph a picker the scroll had just dismissed | `ListPopupWindow` is dismissed by a scroll of its anchor | fixed: that frame is shot without scrolling, with the popup asserted on both sides of the shutter |
+| 6 | a comment says the footer is drawn *over* the form; the layout and `footer.top == scroll.bottom` say it takes its own band | both statements were in the same file | fixed: one description, and the viewport argument now runs from both edges |
+| 7 | "every stored field is compared" in the round-trip test, while reminder rows are never seeded | the seed list and `ReminderRepository`'s wholesale rewrite | fixed by narrowing the sentence to what is compared and naming what is not |
+| 8 | the device is left in the last configuration the script used | the walkthrough path restores, the editor path did not | fixed as in 3 |
+| 9 | the checked mark on a state chip is unasserted, because Material supplies a default icon | `Chip`'s style chain | fixed: the style's `checkedIcon` name, its visibility and the drawable's 18 dp are pinned in `ComponentStyleTest` |
+| 10 | the failure message of the flow-child test says the opposite of what it asserts | the assertion is `any { is Flow }` | fixed |
+| 11 | the When-section comment claims every value on the screen is chosen rather than typed | the title, description, estimate and custom minutes are typed | fixed: the sentence names the ten picker fields and excludes the four written ones |
+| 12 | an unused `WindowManager` import; the class KDoc still said "four configurations" | grep | fixed |
+
+**Two defects found and deliberately not fixed here.** Both are on the *save* side of the same coin the
+category guard was turned over on, and both are business logic rather than styling, so §7 of the brief says
+document and separate rather than repair in the dark:
+
+* If Save is pressed before the categories flow has emitted, the picker is still blank and
+  `categoryId = null` is written — the task loses its filing without the reader touching it. The one-line
+  remedy is to fall back to `detailTask?.categoryId` while the field has never been filled. No test catches
+  it today: `savingATaskTheReaderNeverTouchedLeavesEveryStoredFieldWhereItWas` waits for the title, arrives
+  after the categories have landed, and so wins the race it would need to lose.
+* A blank or unrecognised priority/status string parses to `MEDIUM`/`TODO` at save, so a stored COMPLETED
+  task becomes TODO if the field is empty when Save is pressed. The dismiss path is covered by the
+  remembered-answer fix; the cold-start window is not.
+
+Both belong with the reminder and plan semantics rather than with a screen pass, and both are recorded in the
+stage's report as open.
+
+**One failure that was the emulator's, not the screen's.** `theFooterStaysOnTheWindowWithTheKeyboardUp`
+began failing in every configuration with "the window to shrink did not happen within 60000 ms". It was
+reproduced in isolation, then photographed while it waited: `dumpsys input_method` said `mInputShown=true`,
+and the picture showed Gboard's *floating* widget — a small toolbar at the left edge, not a keyboard. A
+floating input method does not resize the window, so the test's own premise ("the keyboard really took part of
+the window") was false and the assertion was right to fail. Dragging the floating bar to the bottom edge
+docked it and the test passed in 26 s. The claim was not softened; the failure message now names the floating
+mode and what to do about it, because a footer measured against a keyboard that never pressed on it is a
+footer measured against nothing.
