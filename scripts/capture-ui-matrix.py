@@ -18,6 +18,7 @@ Usage:
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -373,17 +374,206 @@ EXTRA = [
 ]
 
 
+# ---------------------------------------------------------------- the editor's frames (Stage 6)
+# The editor's frames are not screencaps this script takes. They are photographs the instrumented class
+# writes from inside the app, because only the test knows which view is on the screen at the moment the
+# shutter opens, and the class refuses to write a file whose name it cannot prove: `-e tag 320-light-10`
+# is checked against the device's own `displayMetrics`, font scale and night mode, and a mismatch fails
+# the test rather than the file name. What this script owns is the other half — applying the configuration,
+# reading it back, and running the classes that read it. Without the command in the repository the matrix
+# is something a person typed into a shell once, which is not a thing the next stage can repeat.
+EDITOR_MATRIX = [
+    # (tag, width dp, font scale, night) — the tag is what the class is handed, the rest is what the
+    # device is set to. The three widths are reached by density alone on this 540 px panel: 540 px at
+    # 270 dpi is 320 dp, at 240 dpi 360 dp, at 220 dpi 393 dp. Twelve configurations, not a sample: the
+    # brief's matrix is widths x font x theme, and a frame refused at 320dp/1.3/dark is a defect this
+    # stage owns, so leaving one of the twelve unphotographed would be leaving it unmeasured.
+    ("320-light-10", 320, "1.0", False),
+    ("320-light-13", 320, "1.3", False),
+    ("320-dark-10", 320, "1.0", True),
+    ("320-dark-13", 320, "1.3", True),
+    ("360-light-10", 360, "1.0", False),
+    ("360-light-13", 360, "1.3", False),
+    ("360-dark-10", 360, "1.0", True),
+    ("360-dark-13", 360, "1.3", True),
+    ("393-light-10", 393, "1.0", False),
+    ("393-light-13", 393, "1.3", False),
+    ("393-dark-10", 393, "1.0", True),
+    ("393-dark-13", 393, "1.3", True),
+]
+# The classes that measure the screen rather than photograph it need the reference and the narrow screen:
+# "the footer is a floor" is only interesting where the room is smallest, and the keyboard claim is the one
+# a width can break. Repeating them at every theme would re-run identical geometry under a different paint.
+EDITOR_BEHAVIOUR_TAGS = ["393-light-10", "320-light-10"]
+FRAMES_CLASS = "com.taskplanner.ui.tasks.TaskEditorFramesInstrumentedTest"
+EDITOR_CLASSES = [
+    "com.taskplanner.testing.SeededProfileCleanupTest",
+    FRAMES_CLASS,
+    "com.taskplanner.ui.tasks.TaskEditorInstrumentedTest",
+    "com.taskplanner.ui.tasks.TasksFabClearanceInstrumentedTest",
+    "com.taskplanner.ui.TasksScreenInstrumentedTest",
+]
+INSTRUMENT_TARGET = "com.taskplanner.test/androidx.test.runner.AndroidJUnitRunner"
+SHOTS_DIR = "/storage/emulated/0/Android/data/com.taskplanner/files"
+
+
+def instrument(serial, cls, tag=None, raw_to=None):
+    """One class in one invocation. Returns (exit code, every line worth quoting).
+
+    `am instrument -w` prints the result and leaves the shell with a nonzero code only for a malformed
+    run, so a failing test arrives as text, not as an error this function could otherwise swallow. The
+    quoted lines are what the manifest can carry; the whole output goes to `raw_to` when a caller wants
+    to read a failure message rather than guess it from a stack trace in logcat.
+    """
+    cmd = ["adb"] + (["-s", serial] if serial else []) + [
+        "shell", "am", "instrument", "-w", "-e", "class", cls]
+    if tag:
+        cmd += ["-e", "tag", tag]
+    cmd += [INSTRUMENT_TARGET]
+    result = subprocess.run(cmd, capture_output=True)
+    text = result.stdout.decode("utf-8", "replace")
+    if raw_to:
+        with open(raw_to, "w", encoding="utf-8") as handle:
+            handle.write("$ %s\n\n%s" % (" ".join(cmd), text))
+            if result.stderr:
+                handle.write("\n--- stderr ---\n%s" % result.stderr.decode("utf-8", "replace"))
+    quoted = [line for line in text.splitlines() if line.startswith(
+        ("OK (", "Tests run", "FAILURES!!", "There were", "INSTRUMENTATION_RESULT", "Error in", "Exception in"))]
+    return result.returncode, quoted
+
+
+def start_clean(serial, device):
+    """Put the device in a known state before one instrumented class, and say who had focus.
+
+    Two ways this matrix lied without meaning to, both measured on `emulator-5584`: a notification shade
+    left open (every Espresso call then waits ten seconds for a focus that is not coming, and a whole class
+    errors while the screen behind the shade is healthy), and an app process left alive by a killed run —
+    which keeps the profile it read at start-up, so the next class seeds a profile the running app cannot
+    see and photographs an empty form. Both are device state, not app behaviour, and both are cleared here
+    rather than worked around in a test.
+    """
+    for pkg in (device, device + ".test"):
+        adb(serial, "shell", "am force-stop %s" % pkg)
+    adb(serial, "shell", "cmd statusbar collapse")
+    focus = adb(serial, "shell", "dumpsys window | grep -m1 mCurrentFocus").strip()
+    return focus.split("u0 ")[-1] if focus else "focus unknown"
+
+
+def readback_configuration(serial):
+    """What the device says it is, after a configuration was asked for: the same three numbers the
+    frames class reads, from outside, so the script's log and the test's failure agree."""
+    density = adb(serial, "shell", "wm density")
+    font = adb(serial, "shell", "settings get system font_scale")
+    night = adb(serial, "shell", "dumpsys uimode | grep -o mComputedNightMode=[a-z]*")
+    return "%s | font=%s | %s" % (density.strip(), font.strip(), night.strip())
+
+
+def editor_matrix(serial, out, device="com.taskplanner"):
+    manifest = os.path.join(out, "editor-matrix.md")
+    logs = os.path.join(out, "runs")
+    os.makedirs(logs, exist_ok=True)
+    by_tag = {tag: (dp, font, night) for tag, dp, font, night in EDITOR_MATRIX}
+    # Every run is checked for `OK (`; the list is what the script fails with at the end. A matrix
+    # that prints FAILURES!! and exits 0 is a manifest nobody can trust.
+    refused = []
+    with open(manifest, "w", encoding="utf-8") as log:
+        log.write("| configuration | readback | class | result |\n|---|---|---|---|\n")
+        for tag, dp, font, night in EDITOR_MATRIX:
+            set_dp(serial, dp)
+            set_font(serial, font)
+            set_night(serial, night)
+            time.sleep(6)
+            seen = readback_configuration(serial)
+            focus = start_clean(serial, device)
+            print("%s: %s (focus %s)" % (tag, seen, focus))
+            code, quoted = instrument(
+                serial, FRAMES_CLASS, tag=tag,
+                raw_to=os.path.join(logs, "frames-%s.txt" % tag))
+            summary = " ".join(quoted) or "code %d" % code
+            log.write("| %s | %s | %s | %s |\n" % (tag, seen + " | focus `" + focus + "`", FRAMES_CLASS, summary))
+            if not summary.startswith("OK ("):
+                refused.append("%s frames: %s" % (tag, summary))
+            log.flush()
+            print("   %s" % summary)
+            # Pulled here, before the next configuration's run, rather than at the end. The app's data
+            # directory is cleared between instrumentations by `clearPackageData`, and measured on this
+            # device the frames did survive — but a picture that has to outlive the run that wrote it is a
+            # picture whose safety depends on something the script does not control.
+            written = pull_frames(serial, out, tag)
+            log.write("| %s | %s | frames on disk | %d |\n" % (tag, seen, written))
+            log.flush()
+            print("   frames pulled: %d" % written)
+        # The classes that photograph nothing, at the reference width and at the narrow one.
+        for tag in EDITOR_BEHAVIOUR_TAGS:
+            dp, font, night = by_tag[tag]
+            set_dp(serial, dp)
+            set_font(serial, font)
+            set_night(serial, night)
+            time.sleep(6)
+            seen = readback_configuration(serial)
+            start_clean(serial, device)
+            for cls in EDITOR_CLASSES:
+                if cls == FRAMES_CLASS:
+                    continue
+                code, quoted = instrument(
+                    serial, cls, tag=tag,
+                    raw_to=os.path.join(logs, "%s-%s.txt" % (cls.split(".")[-1], tag)))
+                summary = " ".join(quoted) or "code %d" % code
+                log.write("| %s | %s | %s | %s |\n" % (tag, seen, cls, summary))
+                if not summary.startswith("OK ("):
+                    refused.append("%s @ %s: %s" % (cls.split(".")[-1], tag, summary))
+                log.flush()
+                print("   %s @ %s -> %s" % (cls.split(".")[-1], tag, summary))
+        # The next stage reads the panel the way this one left it, and the frames class defaults to
+        # `393-light-10` when no tag is passed: leaving 270 dpi and night mode behind would make the next
+        # run's default configuration a lie.
+        set_dp(serial, 393)
+        set_font(serial, "1.0")
+        set_night(serial, False)
+        log.write("\nEvery frame here was written by the class that checked it: the configuration its tag "
+                  "names was read back off the device before the shutter opened, the region photographed was "
+                  "measured for luminance spread inside the form's viewport, and a refusal fails the run "
+                  "rather than filing a smaller picture. The raw `am instrument` output for every run is "
+                  "under `runs/`, and the frames under `frames/<configuration>/`.\n")
+        print("manifest: %s" % manifest)
+    if refused:
+        raise SystemExit(
+            "the editor matrix did not pass. %d run(s) came back without `OK (`:\n  %s"
+            % (len(refused), "\n  ".join(refused))
+        )
+
+
+def pull_frames(serial, out, tag):
+    """Copy one configuration's frames off the device. Returns how many landed."""
+    parent = os.path.join(out, "frames")
+    local = os.path.join(parent, tag)
+    if os.path.isdir(local):
+        shutil.rmtree(local)
+    os.makedirs(parent, exist_ok=True)
+    # adb is asked to pull the directory itself into `frames`, so it recreates `<tag>` there. The trailing
+    # slash was tried first and produced `frames/<tag>/<tag>/*.png` on this host, which the count below then
+    # read as "no frames" — a manifest that says nothing was photographed when nine pictures were on disk.
+    adb(serial, "pull", "%s/shots/%s" % (SHOTS_DIR, tag), parent)
+    return len([n for n in os.listdir(local) if n.endswith(".png")]) if os.path.isdir(local) else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True)
     parser.add_argument("--only", default="")
     parser.add_argument("-s", "--serial", default=os.environ.get("ANDROID_SERIAL", ""))
+    parser.add_argument("--editor-matrix", action="store_true",
+                        help="run the editor's instrumented frames instead of the screen walkthrough")
     args = parser.parse_args()
     serial = args.serial or None
     os.makedirs(args.out, exist_ok=True)
     # A screenshot of a dimmed screen is not evidence, and the panel sleeps mid-run otherwise.
     adb(serial, "shell", "svc power stayon true")
     adb(serial, "shell", "input keyevent KEYCODE_WAKEUP")
+
+    if args.editor_matrix:
+        editor_matrix(serial, args.out)
+        return
 
     wanted = {w.strip() for w in args.only.split(",") if w.strip()}
     manifest = os.path.join(args.out, "manifest.md")
