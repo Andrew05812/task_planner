@@ -402,6 +402,14 @@ S0 evidence ─┬─► S1 tokens ─┬─► S2 swipe geometry ─► S3 Task
                                                                           S10 a11y matrix ─┤
                                                                           S11 docs+evidence┤
                                                                           S12 review→PR ───┘
+
+ the redesign ends at S12; the product continues, and the six stages that follow are numbered, mandatory and
+ specified in docs/PRODUCT_ROADMAP.md:
+
+ S13 Google Sign-In ─┬─► S14 Russian ─┬─► S16 hierarchy ───► S15 Keep import (nesting phase)
+                     │                │        │
+                     ├────────────────┼────────┴─► S18 bulk selection (subtree + sync_state)
+                     └─► S17 drag vs pull-to-refresh (refresh = sync only after S13)
 ```
 
 Hard rules the graph encodes:
@@ -426,6 +434,11 @@ Hard rules the graph encodes:
   the bottom-bar style (S7), so running 8a before S5 would invent a second row layout. The graph edge in §7
   is drawn from S1 only because the diagram is read left to right; this is the accurate statement, and the
   precondition line of Stage 8 is the one a worker follows.
+- **S13–S18 are stages, not backlog**, and they are ordered by two constraints the diagram shows: S16's
+  parent-key decision comes before S15's nesting phase (a four-level Keep import has nowhere to land until it
+  exists), and S14 comes before the strings of S15–S18 are final, because it is the only stage whose row in
+  `docs/PRODUCT_ROADMAP.md`'s cross-impact matrix touches every screen. Each gets its own spec, plan, stage
+  report and commit sequence under the same gates this plan uses throughout.
 
 ## 8. File inventory
 
@@ -3016,7 +3029,8 @@ The substitution table every sub-stage applies. Left is what the layouts contain
 |---|---|
 | `android:textColor="?android:attr/textColorSecondary"` | `android:textColor="?attr/colorOnSurfaceVariant"` |
 | `android:textAppearance="?attr/textAppearanceCaption"` | `?attr/textAppearanceBodySmall` |
-| `…"?attr/textAppearanceBody2"` | `?attr/textAppearanceBodyMedium` |
+| `…"?attr/textAppearanceBody2"` | `?attr/textAppearanceBodySmall` |
+| `…"?attr/textAppearanceBody1"` | `?attr/textAppearanceBodyMedium` |
 | `…"?attr/textAppearanceSubtitle1"` | `?attr/textAppearanceTitleMedium` |
 | `…"?attr/textAppearanceSubtitle2"` | `?attr/textAppearanceLabelLarge` |
 | `…"?attr/textAppearanceHeadline6"` | `?attr/textAppearanceTitleLarge` |
@@ -3030,6 +3044,20 @@ The substitution table every sub-stage applies. Left is what the layouts contain
 | `app:chipBackgroundColor="@color/chip_background_color"` | the new `ink` chip CSLs |
 | literal `16dp` / `8dp` / `12dp` / `20dp` paddings and margins | the `spacing_*` / `screen_margin` dimens |
 | `@dimen/text_*` | the type role, or delete if unused |
+
+> Correction made in 8a, because the table as written would have moved type rather than naming it. The theme
+> is what decides these substitutions — `values/themes.xml:55-70` maps each attribute onto a role — and the
+> table had `Body2` going to `textAppearanceBodyMedium`, which the theme maps to the **Body** role (15sp,
+> `colorOnSurface`), while `Body2` itself is mapped to **Meta** (13sp, `colorOnSurfaceVariant`). Following the
+> table would have enlarged and darkened five secondary lines on three screens. `Body2` now maps to
+> `BodySmall`, the same attribute `Caption` was already sent to, and the `Body1` row that the table never had
+> is written down: `BodyMedium`, which is the **Body** role `Body1` already resolves to. Two other findings
+> travel with this: `?attr/textAppearanceBodyLarge` is *not* mapped by either theme file, so reaching for the
+> M3 spelling of `Body1` silently hands the view Material's own default — `Stage8aTokenSweepTest` now refuses
+> any text appearance the theme does not answer — and every `Caption` user became a `Meta` user, which leaves
+> `TextAppearance.TaskPlanner.Caption` (12sp) with no reader on these five screens. Whether the two dense
+> interval lines in Work history want 12sp back is a design question 8b and Stage 10 should settle, not one
+> 8a decided alone.
 
 After each sub-stage, grep the touched files for what must be gone:
 
@@ -3571,6 +3599,54 @@ unset TOKEN
 
 - [ ] **12.9** Merge only after CI is green on the final head, then verify `master` moved and the branch's
   commits are on it.
+
+---
+
+## Stages 13 to 18 — the product roadmap, as numbered mandatory stages
+
+These six stages are **not a backlog and not optional**. They are the reason the redesign exists in a product
+that people will keep using, and they were being carried as conversation memory, which is how a planned
+feature gets re-invented later as an implemented one. Each has a full specification in
+[`docs/PRODUCT_ROADMAP.md`](../../PRODUCT_ROADMAP.md) — user problem, target UX, what already exists with
+`file:line` evidence, modules, data changes, risks, dependencies, phases, acceptance criteria, tests,
+migrations, documentation and a definition of done. This section is the plan's hook into that document, not a
+summary of it: the roadmap file is the authority on scope, and a stage is executed from its own spec plus its
+own written plan, the way Stages 0–12 were.
+
+**Status, stated plainly, on 2026-10-28: none of the six is implemented.** Google Sign-In is written and
+unreachable; Russian does not exist as a locale; Keep import does not exist; the hierarchy is one level; the
+drag and the pull-to-refresh have no agreement; bulk selection can delete and nothing else. No commit, README
+line or report on this branch may say otherwise until the stage's own acceptance criteria have been met with
+quoted output.
+
+| stage | one line | depends on | roadmap section |
+|---|---|---|---|
+| **13** | Google Sign-In a user can actually reach, with absolute preservation of local data | nothing in code; needs a real Firebase project outside the repo | PRODUCT_ROADMAP §Stage 13 |
+| **14** | Russian: a language toggle, and the whole app behind it (47 plurals need `one`/`few`/`many`) | 13 for the account strings; before 15–18 so their strings land in both files | PRODUCT_ROADMAP §Stage 14 |
+| **15** | Import from Google Keep — the known corpus of 382 checkbox lines in 37 groups, nesting to 4 levels | 16 for the nesting phase; 14 for strings | PRODUCT_ROADMAP §Stage 15 |
+| **16** | A real topic and task hierarchy, with left/right indenting and a bounded depth | 14; fixes the filtered-reorder defect it inherits | PRODUCT_ROADMAP §Stage 16 |
+| **17** | Drag and drop that coexists with pull-to-refresh, and a refresh that visibly does something | 13 if refresh is to mean sync | PRODUCT_ROADMAP §Stage 17 |
+| **18** | Smart bulk selection: a select-all that means what it says, a scope dropdown, operations beyond delete | 16 for subtree selection, 13 for `sync_state` on every bulk write | PRODUCT_ROADMAP §Stage 18 |
+
+Ordering rules that are not obvious from the table:
+
+- **16 before 15's nesting phase.** A four-level import has nowhere to land until the parent key exists. 15
+  may ship a flat phase first, provided the preview reports the depth it dropped — silently flattening is the
+  defect this ordering exists to prevent.
+- **14 before the strings of 15–18 are final.** 14 is the only stage whose row in the cross-impact matrix
+  touches every screen; adding new English-only strings after it means re-opening it.
+- **16's key decision is made first and written down.** `tasks.group_id` stores a uuid string while
+  `category_id` stores a numeric id (`Task.kt:100-103`), and 16 and 18 both re-open sync and the backup format
+  from opposite directions. The roadmap's matrix names this as the one decision to settle before either.
+- **Each of 13–18 gets its own spec, its own plan, its own stage report and its own commit sequence**, under
+  the same gates this plan uses throughout: tests written first and seen failing, the five independent
+  reviews, the device proof on `taskplanner_avd` / `emulator-5584` with the installed APK pair's sha256
+  matching the built one, and no claim of a passing test without the command output.
+
+The subsystem cross-impact matrix lives in `docs/PRODUCT_ROADMAP.md` under "Subsystem cross-impact matrix"
+and is the checklist a stage runs before it calls itself done: it names which of Room, Firestore/sync, the
+backup JSON, the report export, the Tasks renderer, Settings, strings, tokens and device proof each stage
+re-opens.
 
 ---
 
