@@ -23,6 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import org.xmlpull.v1.XmlPullParser
 
 /**
@@ -242,28 +243,46 @@ class BottomNavigationStyleTest {
      */
     @Test
     fun `the plate under the chosen tab is visible against the bar and under the ink`() {
-        for (qualifier in listOf("notnight", "night")) {
-            val c = context(qualifier)
-            val surface = attr(c, MaterialR.attr.colorSurfaceContainer)
-            val plate = ContextCompat.getColor(c, R.color.ink_nav_plate)
-            val ink = attr(c, MaterialR.attr.colorOnSurface)
-            assertTrue(
-                "$qualifier: the plate ${hex(plate)} is ${contrast(plate, surface).format()} from the bar's " +
-                    "surface ${hex(surface)}; 1.4.11 asks 3:1 of a state marker",
-                contrast(plate, surface) >= 3.0
-            )
-            assertTrue(
-                "$qualifier: the chosen word ${hex(ink)} on the plate ${hex(plate)} measures " +
-                    "${contrast(ink, plate).format()}; 1.4.3 asks 4.5:1",
-                contrast(ink, plate) >= 4.5
-            )
-            val bar = barAt(393, qualifier)
-            assertTrue(
-                "$qualifier: the bar has no active indicator at all, so the plate is not a cue the reader " +
-                    "can be given",
-                bar.isItemActiveIndicatorEnabled
-            )
-        }
+        assertPlateIsAStateMarker("notnight")
+    }
+
+    /**
+     * The same three claims read from the night palette, as its own method.
+     *
+     * Both themes used to be two turns of one loop, and that is not free: `setQualifiers` rebuilds what the
+     * theme resolves, while a colour-state list the widget loaded on the first turn stays loaded. CI found the
+     * asymmetry in `the icon override earns its place …`, where the night turn compared a freshly resolved
+     * night token against a tint list still holding the light value — `expected:<#FFF2EDE7> but was:<#FF1A1614>`
+     * on a Linux runner, green on Windows. A verdict that depends on which configuration a resource cache saw
+     * first is not a verdict, so each configuration now gets its own method and its own cold environment.
+     */
+    @Config(qualifiers = "night")
+    @Test
+    fun `the plate under the chosen tab is visible against the bar and under the ink, at night`() {
+        assertPlateIsAStateMarker("night")
+    }
+
+    private fun assertPlateIsAStateMarker(qualifier: String) {
+        val c = context(qualifier)
+        val surface = attr(c, MaterialR.attr.colorSurfaceContainer)
+        val plate = ContextCompat.getColor(c, R.color.ink_nav_plate)
+        val ink = attr(c, MaterialR.attr.colorOnSurface)
+        assertTrue(
+            "$qualifier: the plate ${hex(plate)} is ${contrast(plate, surface).format()} from the bar's " +
+                "surface ${hex(surface)}; 1.4.11 asks 3:1 of a state marker",
+            contrast(plate, surface) >= 3.0
+        )
+        assertTrue(
+            "$qualifier: the chosen word ${hex(ink)} on the plate ${hex(plate)} measures " +
+                "${contrast(ink, plate).format()}; 1.4.3 asks 4.5:1",
+            contrast(ink, plate) >= 4.5
+        )
+        val bar = barAt(393, qualifier)
+        assertTrue(
+            "$qualifier: the bar has no active indicator at all, so the plate is not a cue the reader " +
+                "can be given",
+            bar.isItemActiveIndicatorEnabled
+        )
     }
 
     /**
@@ -341,29 +360,37 @@ class BottomNavigationStyleTest {
      */
     @Test
     fun `the bar's surface tint is not a boundary and the drawn rule is`() {
-        for (qualifier in listOf("notnight", "night")) {
-            val c = context(qualifier)
-            val surface = attr(c, MaterialR.attr.colorSurfaceContainer)
-            val page = attr(c, android.R.attr.colorBackground)
-            val rule = ContextCompat.getColor(c, R.color.ink_outline_strong)
-            val tint = contrast(surface, page)
-            assertTrue(
-                "$qualifier: the bar's surface and the page now measure ${tint.format()} apart, which is the " +
-                    "1.3:1 the brief asks of the tint alone. The assertion below the bar's background is now " +
-                    "redundant: delete the rule from `bg_bottom_bar` and let the tint do the work, and update " +
-                    "docs/UI_UX_AUDIT.md and the plan's Stage 7 deviation note.",
-                tint < 1.3
-            )
-            assertTrue(
-                "$qualifier: the rule ${hex(rule)} is ${contrast(rule, page).format()} from the page it ends " +
-                    "against; a 1dp line a reader must find needs 3:1 (1.4.11)",
-                contrast(rule, page) >= 3.0
-            )
-            assertTrue(
-                "$qualifier: the rule is ${contrast(rule, surface).format()} from the bar it sits in",
-                contrast(rule, surface) >= 3.0
-            )
-        }
+        assertTintIsNotTheBoundaryAndTheRuleIs("notnight")
+    }
+
+    @Config(qualifiers = "night")
+    @Test
+    fun `the bar's surface tint is not a boundary and the drawn rule is, at night`() {
+        assertTintIsNotTheBoundaryAndTheRuleIs("night")
+    }
+
+    private fun assertTintIsNotTheBoundaryAndTheRuleIs(qualifier: String) {
+        val c = context(qualifier)
+        val surface = attr(c, MaterialR.attr.colorSurfaceContainer)
+        val page = attr(c, android.R.attr.colorBackground)
+        val rule = ContextCompat.getColor(c, R.color.ink_outline_strong)
+        val tint = contrast(surface, page)
+        assertTrue(
+            "$qualifier: the bar's surface and the page now measure ${tint.format()} apart, which is the " +
+                "1.3:1 the brief asks of the tint alone. The assertion below the bar's background is now " +
+                "redundant: delete the rule from `bg_bottom_bar` and let the tint do the work, and update " +
+                "docs/UI_UX_AUDIT.md and the plan's Stage 7 deviation note.",
+            tint < 1.3
+        )
+        assertTrue(
+            "$qualifier: the rule ${hex(rule)} is ${contrast(rule, page).format()} from the page it ends " +
+                "against; a 1dp line a reader must find needs 3:1 (1.4.11)",
+            contrast(rule, page) >= 3.0
+        )
+        assertTrue(
+            "$qualifier: the rule is ${contrast(rule, surface).format()} from the bar it sits in",
+            contrast(rule, surface) >= 3.0
+        )
     }
 
     /**
@@ -461,6 +488,15 @@ class BottomNavigationStyleTest {
         }
     }
 
+    /**
+     * The night bar wears the night pair.
+     *
+     * Declared with `@Config(qualifiers = "night")` rather than switched to inside the method: the widget's
+     * colour-state lists are loaded once and cached, so a method that builds a light bar earlier in the same
+     * JVM — and several do — can hand this one a tint list from the other palette. That is how CI caught
+     * `the icon override earns its place …` failing on Linux while passing on Windows.
+     */
+    @Config(qualifiers = "night")
     @Test
     fun `the night bar keeps the same tint pair and the same plate`() {
         val c = context("night")
@@ -503,33 +539,41 @@ class BottomNavigationStyleTest {
      */
     @Test
     fun `the icon override earns its place by differing from the library's own active colour`() {
-        for (qualifier in listOf("notnight", "night")) {
-            val c = context(qualifier)
-            val bar = barAt(393, qualifier)
-            val ink = attr(c, MaterialR.attr.colorOnSurface)
-            val secondary = attr(c, MaterialR.attr.colorOnSurfaceVariant)
-            val libraryActiveIcon = attr(c, MaterialR.attr.colorOnSecondaryContainer)
-            val iconTint = bar.itemIconTintList ?: throw AssertionError("$qualifier: the bar applies no icon tint")
-            val checked = intArrayOf(android.R.attr.state_checked)
+        assertIconOverrideDiffersFromTheLibraryDefault("notnight")
+    }
 
-            assertNotEquals(
-                "$qualifier: the chosen icon answers with the library's `colorOnSecondaryContainer` " +
-                    "(${hex(libraryActiveIcon)}), so `nav_item_icon_ink.xml` is either gone or not applied to " +
-                    "this widget",
-                libraryActiveIcon,
-                iconTint.getColorForState(checked, 0)
-            )
-            assertEquals("$qualifier: the chosen icon is not the foreground ink", ink, iconTint.getColorForState(checked, 0))
-            // And the two states must not both be the accent either: a chosen and an unchosen icon in the same
-            // accent is the flat bar the audit started from.
-            assertNotEquals(
-                "$qualifier: both icon states resolve to the same colour, so the icons cannot tell the tabs " +
-                    "apart",
-                iconTint.getColorForState(checked, 0),
-                iconTint.getColorForState(EMPTY, 0)
-            )
-            assertEquals("$qualifier: an unchosen icon is not the secondary ink", secondary, iconTint.getColorForState(EMPTY, 0))
-        }
+    @Config(qualifiers = "night")
+    @Test
+    fun `the icon override earns its place by differing from the library's own active colour, at night`() {
+        assertIconOverrideDiffersFromTheLibraryDefault("night")
+    }
+
+    private fun assertIconOverrideDiffersFromTheLibraryDefault(qualifier: String) {
+        val c = context(qualifier)
+        val bar = barAt(393, qualifier)
+        val ink = attr(c, MaterialR.attr.colorOnSurface)
+        val secondary = attr(c, MaterialR.attr.colorOnSurfaceVariant)
+        val libraryActiveIcon = attr(c, MaterialR.attr.colorOnSecondaryContainer)
+        val iconTint = bar.itemIconTintList ?: throw AssertionError("$qualifier: the bar applies no icon tint")
+        val checked = intArrayOf(android.R.attr.state_checked)
+
+        assertNotEquals(
+            "$qualifier: the chosen icon answers with the library's `colorOnSecondaryContainer` " +
+                "(${hex(libraryActiveIcon)}), so `nav_item_icon_ink.xml` is either gone or not applied to " +
+                "this widget",
+            libraryActiveIcon,
+            iconTint.getColorForState(checked, 0)
+        )
+        assertEquals("$qualifier: the chosen icon is not the foreground ink", ink, iconTint.getColorForState(checked, 0))
+        // And the two states must not both be the accent either: a chosen and an unchosen icon in the same
+        // accent is the flat bar the audit started from.
+        assertNotEquals(
+            "$qualifier: both icon states resolve to the same colour, so the icons cannot tell the tabs " +
+                "apart",
+            iconTint.getColorForState(checked, 0),
+            iconTint.getColorForState(EMPTY, 0)
+        )
+        assertEquals("$qualifier: an unchosen icon is not the secondary ink", secondary, iconTint.getColorForState(EMPTY, 0))
     }
 
     /**
