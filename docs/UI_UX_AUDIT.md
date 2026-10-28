@@ -166,6 +166,60 @@ labels are `INVISIBLE` for all five. That is `labelVisibilityMode`'s default (`a
 items, and it means the bar reads as five unexplained glyphs — including two that are geometric shapes.
 Stage 7 labels all five permanently.
 
+> **Resolved in Stage 7** — `after/s7-nav-tasks.png`, `after/s7-nav-calendar.png`,
+> `after/s7-nav-categories.png`, `after/s7-nav-statistics.png`, `after/s7-nav-profile.png`,
+> `after/s7-nav-320.png`, `after/s7-nav-dark.png`, and the pair `after/s7-nav-labels-10.png` /
+> `after/s7-nav-labels-13.png` that carries the font-scale finding below.
+>
+>  * Five labels at once: `app:labelVisibilityMode="labeled"` on the view, and the widget's own
+>    `labelVisibilityMode` read back from the running screen. `uiautomator dump` on the Tasks screen now
+>    reports 28 nodes inside `com.taskplanner:id/bottom_navigation`, and the five words — Tasks, Calendar,
+>    Categories, Statistics, Profile — appear in it as both `text` and `content-desc`, because Material marks
+>    the label views `importantForAccessibility=no` and carries the name on the item node. So the requirement
+>    "five text nodes under `bottom_navigation`" is met in the sense that matters: a screen reader is offered
+>    five names, one of which answers `selected`.
+>  * The caps problem the first Stage 7 frame exposed: `?attr/textAppearanceLabelMedium` resolves in this
+>    theme to the all-caps `Label` role, and five capitals do not fit 320dp — the device spelled `CATEGOR…` and
+>    `STATISTI…`. The bar now uses `TextAppearance.TaskPlanner.NavLabel`, sentence case at the same 11sp. The
+>    layout test refuses a label whose `Layout` reports dropped characters, at 1.0 in every width and at the
+>    dark theme.
+>  * The bar is a panel now rather than part of the page: its background is the drawable
+>    `bg_bottom_bar`, whose base is `?attr/colorSurfaceContainer` and whose first pixel row is 1dp of
+>    `ink_outline_strong`. The surface tint alone is not the separation — the pair measures **1.05:1** in
+>    light and **1.07:1** in night, which is what the plan's §20g finding g4 recorded when the stage's own
+>    acceptance asked for 1.3:1 of it — while the drawn line measures **3.73:1** against the bar and
+>    **3.55:1** against the page in light, and **3.78:1** / **4.06:1** in night.
+>  * Chosen and unchosen tabs differ by more than colour. The plate the chosen icon sits on is a new role,
+>    `ink_nav_plate` (#5D9284 / #407067), because the pill the chips use is 1.12:1 and 1.33:1 from the bar — a
+>    state marker nobody can see. The plate is 3.55:1 and 3.14:1 from the bar, and `ink_text` on it is
+>    5.06:1 and 4.84:1, so WCAG 1.4.11 and 1.4.3 both hold; `docs/design/contrast-report.md` carries those
+>    figures from the shipped hexes.
+>
+> Left open by this stage, and owned by the later one: keyboard and D-pad **focus is still told by the same
+> ink as selection** — Material's `inactive_focus` entry resolves to `colorOnSurface`, which in this theme is
+> `ink_text`, the chosen tab's own colour — so a focused tab looks selected until a focus-visible ring exists.
+> The plate makes the *selection* visible, which is what §4.3 of the plan asked of Stage 7; the ring is
+> Stage 10's listed item. The adaptivity finding this stage ends on is not the one it went looking for, and
+> it is the opposite of what an earlier draft of this section claimed: **the bar's labels do not grow when the
+> reader asks for larger text.** `after/s7-nav-labels-10.png` and `after/s7-nav-labels-13.png` are the same
+> screen photographed at font scale 1.0 and at 1.3 on the final binaries; compared row by row, 38,219 pixels
+> differ, 2,547 of them in the status bar's clock and icons (rows 56–90) and 35,672 in the page's own text
+> (rows 91–745), while the bar's 110 rows (997 to 1106, the rect the harness records as
+> `bar (0, 997, 540, 1107)`) contain none — the words sit in rows 1074–1087 in both frames.
+> So `label-budget.txt` recording 0 characters dropped from all five labels at 1.0 *and* at 1.3 in
+> 320dp, 360dp and 393dp proves nothing about 1.3: the layout was never asked to hold a larger font, and the
+> two samples are the same pixels twice. The cause is in the library and not in this app's styles:
+> `NavigationBarItemView.setTextAppearanceActive`/`Inactive` both route through a private
+> `setTextAppearanceWithoutFontScaling`, which re-reads the appearance with
+> `MaterialResources.getUnscaledTextSize` — converting an `sp` `android:textSize` by `DisplayMetrics.density`
+> alone, never by `scaledDensity` — and hands the result to `TextView.setTextSize(COMPLEX_UNIT_PX, …)`.
+> `TextAppearance.TaskPlanner.NavLabel` therefore gets its case, family, letter spacing and caps from this
+> design system and its size from the density bucket. That is WCAG 1.4.4's business, and Stage 10 owns it.
+> Retracted with it: the claim that the plate drifts from the glyph at a large font. `onMeasure`'s
+> `itemPaddingTop` clamp does move when a label grows, but with an unscaled label nothing grows, and the
+> matrix measures the same room at 1.0 and at 1.3 in all three widths — 393dp 5px above the glyph and
+> 6px below, 360dp 6px and 6px, 320dp 6px and 7px.
+
 ### 4.5 Material 2 widgets inside a Material 3 theme — counts, not taste
 
 The single largest reason the app reads as stock rather than as designed: the theme is M3

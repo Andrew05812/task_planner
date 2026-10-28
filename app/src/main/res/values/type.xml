@@ -59,6 +59,19 @@
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:letterSpacing">0.045</item>
     </style>
+    <!-- The word under a bottom-bar icon. Five of them share 320dp, so this is the one place the caps the
+         `Label` role carries cannot be afforded: Material's nav label inherits `?attr/textAppearanceLabelMedium`,
+         which this theme maps to `TextAppearance.TaskPlanner.Label` — 11sp, sans-serif-medium, 0.045em and
+         all-caps — and measured on the device at 320dp that spelled "CATEGOR…" and "STATISTI…". Sentence case
+         at the same size with the tracking of running text fits all five inside their 64dp slots, which is the
+         whole point of `labelVisibilityMode="labeled"`: a truncated label is not a label. -->
+    <style name="TextAppearance.TaskPlanner.NavLabel" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">@dimen/type_pill</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
     <style name="TextAppearance.TaskPlanner.Label" parent="TextAppearance.Material3.LabelLarge">
         <item name="android:textSize">@dimen/type_label</item>
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>

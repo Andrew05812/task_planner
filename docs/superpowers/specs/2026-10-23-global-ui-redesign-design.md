@@ -638,6 +638,41 @@ Bottom bar: all five labels always visible, active item marked by a pill behind 
 `ink_text` against `ink_text_secondary`, background from a surface role instead of
 `?android:attr/windowBackground` (today the bar merges into the screen).
 
+> Revision 11, from Stage 7. Four things this paragraph left undecided, and one thing it asked for that the
+> design system cannot give:
+>
+>  * The pill behind the active icon has to be a mark a reader can see. `pill_accent` — the container the
+>     chips use — measures **1.12:1** against the bar in light and **1.33:1** in night, which is a tint and not
+>     a state marker under WCAG 1.4.11; a bar whose only difference between chosen and unchosen is text colour
+>     is the pattern §6 forbids. A seventh surface role, `ink_nav_plate`, carries it: **3.55:1** (light) and
+>     **3.14:1** (night) against the bar, with `ink_text` on it at **5.06:1** and **4.84:1**, so 1.4.11 and
+>     1.4.3 hold at the same time. It is a nav-bar role and not a general one: `pill_accent` stays on the chips,
+>     sheets and `TextInputLayout` error states, where it is a fill rather than a state marker.
+>  * The plate keeps the library's own 64dp × 32dp stadium. It does not take `icon_container` × `spacing_large`
+>     (40dp × 24dp): a stadium's ends are semicircles of radius height/2, so a plate the height of the glyph has
+>     no plate left at the icon's own edges, and a squared-off icon is cut by the curve. The device test measures
+>     the drawn plate against the drawn glyph.
+>  * The hairline that separates the bar from the screen is drawn inside the bar's own background, not as a
+>     sibling `View` above it. A sibling takes no space in the constraint chain and therefore paints over the
+>     last pixel row of whatever screen the navigation host is showing — a list scrolled to its end loses its
+>     final row to a line that was never its own.
+>  * "Background from a surface role" and "differs from `android:colorBackground` by at least 1.3:1" are the
+>     same two sentences of §4.4, and they contradict each other. This theme's `colorSurfaceContainer` is
+>     `ink_surface` — #FFFFFF on #FBF9F6, #1A1817 on #12100F — which measures **1.05:1** and **1.07:1**; the best
+>     surface token in §3.1 is `ink_surface_variant` at **1.11:1** in light and **1.21:1** in night, the figure
+>     §20g's g4 recomputed and the plan's Stage 7 acceptance repeats. No surface role in this system reaches
+>     1.3:1 against the page, so the stage keeps the role the paragraph names and lets the hairline do the
+>     separation, and the ratio is reported as a measurement instead of being met by editing a token that every
+>     other surface shares.
+>  * The bar's labels are sentence case at 11sp (`TextAppearance.TaskPlanner.NavLabel`) rather than the all-caps
+>     `Label` role that `?attr/textAppearanceLabelMedium` resolves to in this theme. Five caps words do not fit
+>     320dp: the baseline drew `CATEGOR…` and `STATISTI…` on the device, and a truncated name is not a label.
+>     What the appearance does not buy is size: `NavigationBarItemView` applies a label appearance through a
+>     private `setTextAppearanceWithoutFontScaling`, which converts `sp` by `DisplayMetrics.density` alone and
+>     sets the result with `setTextSize(COMPLEX_UNIT_PX, …)`, so these five words measure the same at font
+>     scale 1.3 as at 1.0 while the page beneath them grows. That is a WCAG 1.4.4 defect in the library's
+>     treatment, not a size this design picked; §20p records the frame comparison, and Stage 10 owns the fix.
+
 > Correction from review: revision 1 asked for "correct system-window insets so it never sits under the
 > gesture bar". The app is not edge-to-edge and does not become so in this stage — that would be new
 > window-flag work in `MainActivity` and out of scope. The bar keeps its current placement; only its

@@ -14,8 +14,10 @@
          files StatusPill and PriorityRule under "drawables plus bind-time code" rather than here, and why
          `Card.Completed` below carries no colour: a style cannot know the task is finished.
 
-         Nothing here changes a layout's structure or a screen's behaviour: `labelVisibilityMode`, the
-         header, the swipe panel and the pill colours all belong to the stages that name them (§18). -->
+         Nothing here changes a layout's structure or a screen's behaviour: `labelVisibilityMode` stays on the
+         bar in `activity_main` because it is a decision about that screen's five destinations rather than a
+         property of the widget, and the header, the swipe panel and the pill colours belong to the stages
+         that name them (§18). -->
 
     <style name="Widget.TaskPlanner.Card" parent="Widget.Material3.CardView.Filled">
         <item name="cardCornerRadius">@dimen/radius_card</item>
@@ -156,23 +158,57 @@
     <style name="Widget.TaskPlanner.BottomBar" parent="Widget.Material3.BottomNavigationView">
         <item name="itemActiveIndicatorStyle">@style/Widget.TaskPlanner.BottomBar.Indicator</item>
         <item name="elevation">0dp</item>
-        <item name="itemTextColor">@color/ink_text_secondary</item>
-        <item name="itemIconTint">@color/ink_text_secondary</item>
+        <!-- The word and the icon above it, in the design's two text roles rather than one flat colour:
+             the audit's baseline pinned both to `ink_text_secondary`, so the chosen tab was told by the plate
+             alone. The text needs no override — Material's own pair is `colorOnSurface` when checked and
+             `colorOnSurfaceVariant` otherwise, which this theme maps to `ink_text` (17.97:1 on the bar in
+             light, 15.20:1 in night) and `ink_text_secondary` (5.89:1 / 6.45:1), and its selector also keeps
+             the eight pressed/focused/hovered entries a two-state list would drop. The icon does need one:
+             the library's active icon is `colorOnSecondaryContainer`, which here is `ink_accent`, and §4.4
+             asks for `ink_text` — so `nav_item_icon_ink.xml` is the library's own selector with that one
+             entry re-pointed, not a shorter list.
+
+             What neither override does is mark keyboard/D-pad focus as *focus*: in the library, as in this
+             mirror, a focused unchosen tab takes `colorOnSurface` and so wears the chosen tab's colour. The
+             plate now makes the choice itself visible, which is what §4.3 asks of this stage; a focus-visible
+             ring is Stage 10's item, already listed in the plan. -->
+        <item name="itemIconTint">@color/nav_item_icon_ink</item>
+        <!-- Five labels share 320dp. Material's nav label inherits `?attr/textAppearanceLabelMedium`, which
+             this theme maps to the all-caps `Label` role, and on the device that spelled "CATEGOR…" and
+             "STATISTI…"; the nav role is sentence case at the same size. `BottomNavigationInstrumentedTest`
+             refuses a label whose layout reports an ellipsis (`getEllipsisCount`), so this claim is measured
+             on the rendered bar and not assumed from the style. -->
+        <item name="itemTextAppearanceActive">@style/TextAppearance.TaskPlanner.NavLabel</item>
+        <item name="itemTextAppearanceInactive">@style/TextAppearance.TaskPlanner.NavLabel</item>
     </style>
 
-    <!-- The pill the selected tab sits in, at the card radius rather than fully round: the bar's own
-         height is 56dp and a 100dp radius on it would be a circle the label does not fit. -->
+    <!-- The plate the selected tab's icon sits in.
+
+         Size and shape are the library's own and deliberately not re-declared: `Widget.Material3
+         .BottomNavigationView.ActiveIndicator` is 64dp x 32dp with `marginHorizontal` 4dp and
+         `ShapeAppearance.M3.Comp.NavigationBar.ActiveIndicator.Shape`, which is
+         `ShapeAppearance.M3.Sys.Shape.Corner.Full` — a fully round stadium. An earlier draft of this stage
+         narrowed it to `icon_container` x `spacing_large` (40dp x 24dp) for tidiness, and that is the size
+         that clips a 24dp glyph: the stadium's ends are semicircles of radius 12dp, so at the icon's own left
+         and right edges the plate has no height left, and the corners of a squared-off icon such as
+         `ic_task` sit outside it. 64x32 is the only size here that puts the platform's 24dp icon inside the
+         plate with room on every side — 20dp left and right, 4dp above and below.
+         `BottomNavigationInstrumentedTest` measures the drawn plate against the drawn glyph and refuses the
+         pair when the glyph is not contained, so this is a claim with a check behind it rather than a
+         comment with a memory.
+
+         The colour is the design's own contribution, and it is not the chips' pill: WCAG 1.4.11 asks 3:1 of
+         the visual that tells a component's state, and `pill_accent` measures 1.12:1 against the bar in light
+         and 1.33:1 in night, which is a tint no reader can find — the selection would then be carried by the
+         ink pair alone, the one cue the design spec forbids. `ink_nav_plate` is 3.55:1 (light) and 3.14:1
+         (night) against the bar's own surface, and `ink_text` — the word and glyph drawn on it — measures
+         5.06:1 (light) and 4.84:1 (night) against the plate, so 1.4.11 and 1.4.3 both hold at once.
+         `scripts/contrast_report.py`, reading the pairs declared in `docs/design/tokens.json` — where
+         `ink_nav_plate` sits on `ink_surface` as a state-bearing graphic and `ink_text` sits on it as text —
+         is what computes those four numbers from the hexes that ship, and `BottomNavigationStyleTest` asserts
+         the same two pairs from the colours this widget's theme resolves. -->
     <style name="Widget.TaskPlanner.BottomBar.Indicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">@color/pill_accent</item>
-        <item name="android:width">@dimen/icon_container</item>
-        <item name="android:height">@dimen/spacing_large</item>
-        <item name="marginHorizontal">@dimen/spacing_xs</item>
-        <item name="shapeAppearance">@style/ShapeAppearance.TaskPlanner.BottomBar.Indicator</item>
-    </style>
-
-    <style name="ShapeAppearance.TaskPlanner.BottomBar.Indicator" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">50%</item>
+        <item name="android:color">@color/ink_nav_plate</item>
     </style>
 
     <!-- A dialog is a theme overlay, not a widget style: there is no `Widget.Material3.Dialog` to inherit,

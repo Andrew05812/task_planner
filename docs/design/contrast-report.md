@@ -1,6 +1,6 @@
 ## dark theme
 
-Tokens: `dark` — 20 declared.
+Tokens: `dark` — 36 declared.
 
 | pair | foreground | background | ratio | bar | verdict |
 |---|---|---|---|---|---|
@@ -10,10 +10,12 @@ Tokens: `dark` — 20 declared.
 | graphic on a variant surface | ink_outline_strong #7A736A | ink_surface_variant #26231F | 3.34 | 3.0 | pass |
 | state-bearing graphic | ink_accent #6FD3B8 | ink_surface #1A1817 | 9.85 | 3.0 | pass |
 | state-bearing graphic | ink_error #F0836F | ink_surface #1A1817 | 6.89 | 3.0 | pass |
+| state-bearing graphic | ink_nav_plate #407067 | ink_surface #1A1817 | 3.14 | 3.0 | pass |
 | state-bearing graphic | ink_outline_strong #7A736A | ink_surface #1A1817 | 3.78 | 3.0 | pass |
 | state-bearing graphic | ink_warning #E0A95F | ink_surface #1A1817 | 8.43 | 3.0 | pass |
 | text on a filled control | ink_on_accent #0E201B | ink_accent #6FD3B8 | 9.42 | 4.5 | pass |
 | text on a filled control | ink_on_error #2B0F0A | ink_error #F0836F | 6.96 | 4.5 | pass |
+| text on a filled control | ink_text #F2EDE7 | ink_nav_plate #407067 | 4.84 | 4.5 | pass |
 | text on a surface | ink_accent #6FD3B8 | ink_background #12100F | 10.56 | 4.5 | pass |
 | text on a surface | ink_accent #6FD3B8 | ink_surface #1A1817 | 9.85 | 4.5 | pass |
 | text on a surface | ink_accent #6FD3B8 | ink_surface_raised #221F1D | 9.12 | 4.5 | pass |
@@ -72,7 +74,7 @@ Not gated (dark) — decorative, outside WCAG 1.4.11:
 
 ## light theme
 
-Tokens: `light` — 20 declared.
+Tokens: `light` — 68 declared.
 
 | pair | foreground | background | ratio | bar | verdict |
 |---|---|---|---|---|---|
@@ -82,10 +84,12 @@ Tokens: `light` — 20 declared.
 | graphic on a variant surface | ink_outline_strong #8C8378 | ink_surface_variant #F1EDE7 | 3.20 | 3.0 | pass |
 | state-bearing graphic | ink_accent #2F6F5E | ink_surface #FFFFFF | 5.91 | 3.0 | pass |
 | state-bearing graphic | ink_error #C0402F | ink_surface #FFFFFF | 5.23 | 3.0 | pass |
+| state-bearing graphic | ink_nav_plate #5D9284 | ink_surface #FFFFFF | 3.55 | 3.0 | pass |
 | state-bearing graphic | ink_outline_strong #8C8378 | ink_surface #FFFFFF | 3.73 | 3.0 | pass |
 | state-bearing graphic | ink_warning #8F5B18 | ink_surface #FFFFFF | 5.71 | 3.0 | pass |
 | text on a filled control | ink_on_accent #FFFFFF | ink_accent #2F6F5E | 5.91 | 4.5 | pass |
 | text on a filled control | ink_on_error #FFFFFF | ink_error #C0402F | 5.23 | 4.5 | pass |
+| text on a filled control | ink_text #1A1614 | ink_nav_plate #5D9284 | 5.06 | 4.5 | pass |
 | text on a surface | ink_accent #2F6F5E | ink_background #FBF9F6 | 5.62 | 4.5 | pass |
 | text on a surface | ink_accent #2F6F5E | ink_surface #FFFFFF | 5.91 | 4.5 | pass |
 | text on a surface | ink_accent #2F6F5E | ink_surface_raised #FFFDFB | 5.82 | 4.5 | pass |

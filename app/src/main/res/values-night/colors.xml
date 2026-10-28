@@ -27,6 +27,11 @@
     <color name="pill_error">#382723</color>
     <color name="pill_neutral">#26231F</color>
 
+    <!-- The dark column of the chosen-tab plate: 3.14:1 against this theme's bar surface (#1A1817) and
+         4.84:1 under `ink_text`. The light column names the same hue at the step a near-black bar needs;
+         `pill_accent` here is 1.33:1, which is a tint and not a boundary. -->
+    <color name="ink_nav_plate">#407067</color>
+
     <!-- Dashboard charts, dark. -->
     <!-- The light theme's grey tracks would be invisible on a near-black card and its deepest shade would
          read as background rather than as a quiet day, so the same ramp is anchored on the lighter accent

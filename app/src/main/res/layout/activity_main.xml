@@ -67,13 +67,21 @@
         app:layout_constraintTop_toBottomOf="@id/workStatusBar"
         app:navGraph="@navigation/nav_graph" />
 
+    <!-- Three things, all of them the bar's own: a surface with a drawn rule across its top edge
+         (`bg_bottom_bar`, the same recipe the editor's sticky footer uses — the surface role alone is
+         1.05:1 from the page in light and 1.07:1 in night, which no reader sees), the five labels always
+         shown (`labelVisibilityMode`, which with the default `AUTO` and five destinations means "label the
+         chosen one"), and the sentence-case label appearance the component style now carries. The rule is
+         inside the background rather than a sibling View above it because a sibling takes no space and
+         would paint over the last row of whatever screen the host is showing. -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_navigation"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="0dp"
         android:layout_marginEnd="0dp"
-        android:background="?android:attr/windowBackground"
+        android:background="@drawable/bg_bottom_bar"
+        app:labelVisibilityMode="labeled"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"

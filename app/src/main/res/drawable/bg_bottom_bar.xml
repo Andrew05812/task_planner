@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The surface the bottom bar paints, with the line that separates it from whatever screen is above it.
+
+     Same recipe as `bg_footer`, which the editor's sticky footer uses: the surface role alone is not a
+     boundary — `colorSurfaceContainer` (#FFFFFF light, #1A1817 night) measures 1.05:1 against the page in
+     light and 1.07:1 in night, which is a difference no reader can see — so the separation is drawn: 1dp of
+     `ink_outline_strong`, 3.73:1 against the bar's own surface in light and 3.78:1 in night, above the 3:1
+     the design asks of a boundary a reader has to find.
+
+     The line lives inside the bar's background rather than in a sibling View above it, because a sibling
+     takes no space: it paints over the last pixel row of whatever screen the navigation host is showing,
+     and a list scrolled to its end loses its final row to a line that was never its own.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="?attr/colorSurfaceContainer" />
+    </item>
+    <item
+        android:gravity="top|fill_horizontal"
+        android:height="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/ink_outline_strong" />
+        </shape>
+    </item>
+</layer-list>

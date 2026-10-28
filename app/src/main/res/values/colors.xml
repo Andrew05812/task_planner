@@ -25,6 +25,17 @@
     <color name="pill_error">#FAF0EE</color>
     <color name="pill_neutral">#F1EDE7</color>
 
+    <!-- The plate the chosen bottom-bar tab sits on. It is its own role because the pill colours are not:
+         `pill_accent` measures 1.12:1 against the bar's surface, and a state marker a reader cannot see is
+         not a state marker (WCAG 1.4.11 asks 3:1 of the visual that tells a component's state). Computed
+         from the accent's hue so the bar still reads as the design's green; at #5D9284 the plate is 3.55:1
+         against `ink_surface` and the chosen word on it is 5.06:1, which is the pair the two thresholds
+         need together. `scripts/contrast_report.py` measures both from this table and `docs/design/tokens.json`, where the
+         plate is gated as `ink_nav_plate` on `ink_surface` (graphic, 3.0) and `ink_text` on `ink_nav_plate`
+         (text, 4.5); `BottomNavigationStyleTest` fails
+         if either moves. -->
+    <color name="ink_nav_plate">#5D9284</color>
+
     <!-- The names the app still carries. Each one points at a role, so the screens not yet migrated move
          with the system instead of against it, and a test that reads getColor(R.color.on_surface) keeps
          measuring the colour a user actually sees. Deleted screen by screen in stage 8. -->

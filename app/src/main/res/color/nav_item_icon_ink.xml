@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The icon above a bottom-bar label, in the same two roles as the word beneath it.
+
+  A tint that matches the text is what makes the tab read as one object rather than as a plate with two
+  unrelated pieces on it; the audit's baseline had `itemIconTint` fixed at `ink_text_secondary` for every
+  state, so the chosen icon and the unchosen icons were the same colour and only the plate behind them moved.
+
+  This is `m3_navigation_bar_item_with_indicator_icon_tint.xml` from Material 1.11.0 with one entry
+  re-pointed, not a shorter list. The library's eight entries are active-pressed / active-focused /
+  active-hovered / active / inactive-pressed / inactive-focused / inactive-hovered / inactive, and every one
+  of them resolves to `?attr/colorOnSecondaryContainer` except: the active one, which this theme answers with
+  `ink_accent` while §4.4 asks for `ink_text`, and the last, which is `colorOnSurfaceVariant` (= the
+  `ink_text_secondary` this selector names). A two-state list would have been four fewer colours on paper and
+  four lost states on a device — a D-pad or trackpad user would see no reaction at all — so the six state
+  entries are kept even though they land on the same ink as the chosen tab.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The chosen tab, and any tab the reader is acting on. -->
+    <item
+        android:color="@color/ink_text"
+        android:state_checked="true"
+        android:state_pressed="true" />
+    <item
+        android:color="@color/ink_text"
+        android:state_checked="true"
+        android:state_focused="true" />
+    <item
+        android:color="@color/ink_text"
+        android:state_checked="true"
+        android:state_hovered="true" />
+    <item
+        android:color="@color/ink_text"
+        android:state_checked="true" />
+
+    <!-- An unchosen tab that is being pressed, focused or hovered: the library marks all three by taking the
+         foreground ink. It does not distinguish them from the chosen tab, and it is not this stage's fix —
+         Stage 10 owns a focus-visible ring. What this file refuses to do is be quieter than the library. -->
+    <item
+        android:color="@color/ink_text"
+        android:state_pressed="true" />
+    <item
+        android:color="@color/ink_text"
+        android:state_focused="true" />
+    <item
+        android:color="@color/ink_text"
+        android:state_hovered="true" />
+
+    <!-- An unchosen tab at rest. -->
+    <item android:color="@color/ink_text_secondary" />
+</selector>

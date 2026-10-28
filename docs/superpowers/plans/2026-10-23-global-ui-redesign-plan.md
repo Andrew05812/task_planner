@@ -2943,16 +2943,44 @@ green on device. **Screenshots:** `s6-editor-top.png`, `s6-editor-repeat.png`, `
 Purpose: the bar stops merging into the screen and all five labels appear. Depends on: S1.
 Tools: `design-review:responsive-design`.
 
-- [ ] **7.1** `activity_main.xml`: `bottom_navigation` background → `?attr/colorSurfaceContainer` (it is
+- [x] **7.1** `activity_main.xml`: `bottom_navigation` background → `?attr/colorSurfaceContainer` (it is
   `?android:attr/windowBackground` today, which is why it disappears into the page), add
   `app:labelVisibilityMode="labeled"`, `app:itemActiveIndicatorStyle` → a pill behind the icon, and a
   hairline above the bar.
-- [ ] **7.2** `Widget.TaskPlanner.BottomBar` in `component_styles.xml`: `itemIconTint` and `itemTextColor`
+  **Done, with one change of mechanism:** the hairline is not a sibling `View`. It is the first 1dp of the bar's
+  own background, `drawable/bg_bottom_bar.xml` — a layer-list whose base layer is `?attr/colorSurfaceContainer`
+  and whose top layer is 1dp of `ink_outline_strong`. A sibling takes no space in the constraint chain, so it
+  paints over the last pixel row of whatever screen the host is showing; that is the Stage 6 footer's recipe,
+  and the device test now checks the host's bottom edge stops at the bar's top edge.
+- [x] **7.2** `Widget.TaskPlanner.BottomBar` in `component_styles.xml`: `itemIconTint` and `itemTextColor`
   as colour-state-lists over `ink_text` / `ink_text_secondary`.
-- [ ] **7.3** A JVM test asserting all five labels are visible at once — the baseline shows only "Tasks" —
+  **Done, and the text half is deliberately not a file.** Material's own `itemTextColor` selector already
+  answers `colorOnSurface` when checked and `colorOnSurfaceVariant` otherwise, and this theme maps those two
+  roles to `ink_text` and `ink_text_secondary` (`themes.xml:23-24`); a second colour-state list naming the same
+  pair would have dropped the library's pressed, focused and hovered entries for no gain, so the draft's
+  `color/nav_item_text_ink.xml` is deleted and `BottomNavigationStyleTest` refuses it coming back. The icon
+  keeps an override, because the library paints a checked icon with `colorOnSecondaryContainer` (= `ink_accent`)
+  where §4.4 asks for `ink_text` — and that override is the library's eight entries with one re-pointed, not a
+  two-state list.
+- [x] **7.3** A JVM test asserting all five labels are visible at once — the baseline shows only "Tasks" —
   and that the bar's top edge carries the hairline view 7.1 adds (`bg_hairline`, 1dp, `ink_outline_strong`),
   which is the separation the acceptance above actually measures.
-- [ ] **7.4** Gates; screenshots of all five tabs at 393dp and 320dp, light and dark; commit.
+  **Split between the two files, because `activity_main` cannot be inflated under Robolectric** (its
+  `FragmentContainerView` carries `app:navGraph`, and building a navigation host needs an activity).
+  `BottomNavigationStyleTest` builds the bar the theme builds — `bottomNavigationStyle` points every
+  `BottomNavigationView` at `Widget.TaskPlanner.BottomBar` — and asserts five items, the tint pair, the plate's
+  colour and geometry, and the compiled `activity_main.xml`'s own `labelVisibilityMode="labeled"` and
+  `@drawable/bg_bottom_bar`. `BottomNavigationInstrumentedTest` asserts what only pixels can: five labels shown
+  at once with `getEllipsisCount == 0`, a drawn rule at the bar's first pixel row, a drawn plate behind the
+  chosen glyph and nowhere else, the measured luminance ratios, and each tab arriving at the destination it
+  names. The hairline is `bg_bottom_bar`'s top layer rather than a `bg_hairline` view for the reason in 7.1.
+- [x] **7.4** Gates; screenshots of all five tabs at 393dp and 320dp, light and dark; commit.
+  **Done in §20p.** The gates are 108 suites / 1490 JVM tests / 0 failures, `lintDebug` 0 errors and 175
+  warnings, both APKs assembled, installed on `emulator-5584` and sha256-matched against `/data/app`; the
+  instrumented class ran nine methods in each of the four gated configurations (393/360/320 light at font
+  1.0, 393 night at 1.0) and two more in three configurations at font 1.3, all on the same pair of binaries
+  the repository now builds. Nine frames are published: the five tabs at 393dp, the same screen at 320dp, the
+  night bar, and the bar photographed at font 1.0 and 1.3 for the finding §4.4 of the audit carries.
 
 **Acceptance, each one checkable:** `uiautomator dump` after the change lists five `text` nodes under
 `bottom_navigation` where today it lists one; the active item's `contentDescription`-adjacent state carries
@@ -3428,6 +3456,24 @@ Tools: `design-review:accessibility-review`, `design-review:responsive-design`,
   background honestly — a drawable with no solid colour, a state list — the test records the view in a
   named exception list rather than skipping it silently, and the exception list is reviewed in stage 12.
 
+- [ ] **10.1b The bottom bar's two carried-forward defects, from Stage 7.** Both are measured and neither is
+  fixed, because Stage 7's scope was the bar's surface, its labels and its state marker.
+  *The labels do not respond to font scale.* At 1.0 and 1.3 the bar's pixels are identical — 38,219 differing
+  pixels between the two frames, none of them in the bar's own 110 rows — because
+  Material applies a nav label's size through `setTextAppearanceWithoutFontScaling`, which converts `sp` by
+  `DisplayMetrics.density` alone and calls `TextView.setTextSize(COMPLEX_UNIT_PX, …)`. That is WCAG 1.4.4, and
+  the acceptance line below ("no clipped or truncated text at font 1.3") cannot catch it, because nothing is
+  clipped. The route to fix it is to re-assert the size in scaled pixels after the library has applied its
+  appearance — a `NavigationBarView` subclass that walks its item views' label `TextView`s and sets
+  `COMPLEX_UNIT_SP` itself, or the same correction applied once the menu is built — and the risk to test is
+  that the library re-applies its unscaled size whenever the label mode or the menu changes, so the fix needs
+  a device test at 1.3 that measures the words rather than the style file.
+  *Focus is told by the same ink as selection.* Material's `inactive_focus` entry resolves to
+  `colorOnSurface`, which in this theme is `ink_text` — the chosen tab's own colour — so a tab that merely
+  has D-pad focus looks selected. Stage 7 made the *selection* visible with `ink_nav_plate`; the ring is this
+  stage's, and it has to be visible against both the bar surface and the plate (3.55:1 and 3.14:1
+  respectively, so a ring needs its own measured pair).
+
 - [ ] **10.1 Automated sweeps.**
 
 ```bash
@@ -3474,7 +3520,9 @@ tests keep, not to accept.
 - [ ] **10.6 Commit** the photographs and `docs/UI_REDESIGN_REVIEW.md`'s configuration section.
 
 **Acceptance:** every matrix cell has a file; no finding above 4.5:1 text / 3:1 graphics anywhere; no
-control under 48dp; no clipped or truncated text at font 1.3 at 320dp; frame stats no worse than baseline.
+control under 48dp; no clipped or truncated text at font 1.3 at 320dp, and the bottom bar's five words are
+measurably larger at 1.3 than at 1.0 rather than pixel-identical as they are today (10.1b); frame stats no
+worse than baseline.
 
 ---
 
@@ -4662,3 +4710,235 @@ the window") was false and the assertion was right to fail. Dragging the floatin
 docked it and the test passed in 26 s. The claim was not softened; the failure message now names the floating
 mode and what to do about it, because a footer measured against a keyboard that never pressed on it is a
 footer measured against nothing.
+
+## 20p — Stage 7 executed: the bar as its own panel, and what five reviewers found against it
+
+Executed on `taskplanner_avd` / `emulator-5584` (API 35, 540 × 1140 px; 220 dpi = 393 dp, 240 = 360 dp,
+270 = 320 dp). No other device was touched; every `adb` call carried `-s emulator-5584`, and `befos_avd` on
+`emulator-5554` was left running and unmodified.
+
+**Delivery, first.** The branch was local-only when this stage opened: `feat/global-ui-redesign` existed on
+disk with Stage 6's four commits and `origin` had no such ref, because no `git push` had ever run for it —
+not a rejection, not a divergence, just never sent (`git remote -v` named the right URL, `git fetch origin`
+brought nothing back, and `rev-list --left-right --count HEAD...@{upstream}` had no upstream to count
+against). `git push -u origin feat/global-ui-redesign` fixed that before any Stage 7 code was written, and
+the remote's own answer — `git ls-remote origin refs/heads/feat/global-ui-redesign` — was
+`e2914ecbfa09b5ff4aaf165a586b6ee5074f6127`, the commit the local branch held. No force, no history rewrite,
+nothing deleted.
+
+**What the bar is now.** `activity_main.xml` gives it `@drawable/bg_bottom_bar` and
+`app:labelVisibilityMode="labeled"`; the drawable is a layer-list whose base is `?attr/colorSurfaceContainer`
+and whose first pixel row is 1dp of `ink_outline_strong`, the recipe the editor's sticky footer already uses.
+`Widget.TaskPlanner.BottomBar` keeps Material's own text selector (which in this theme already resolves to
+`ink_text` when checked and `ink_text_secondary` otherwise, and carries the pressed, focused and hovered
+entries a two-state list would drop), overrides the icon with the library's eight-state selector re-pointed
+at `ink_text`, and points both label appearances at the new `TextAppearance.TaskPlanner.NavLabel` — sentence
+case at 11sp, because the theme's `Label` role is all-caps and five capitals spelled `CATEGOR…` and
+`STATISTI…` on the device. The plate is the library's own 64dp × 32dp stadium in a new role,
+`ink_nav_plate`.
+
+**RED, including the false start.** The first version of the style test was `BottomNavigationLayoutTest`, and
+its first run failed nine times for a reason that had nothing to do with the bar: every one of them died on
+`InflateException: Binary XML file line #68 in com.taskplanner:layout/activity_main: Error inflating class
+androidx.fragment.app.FragmentContainerView`. A Robolectric test cannot inflate this host at all — the host
+inflates its nav graph into that container, and no `NavController` factory is wired in a JVM test — so nine
+red rows proved only that the test had asked the wrong object. The class was rewritten to ask the two things
+that can be asked on the JVM: the theme, and a `NavigationBarView` built with the app's own style. That run —
+`BottomNavigationStyleTest`, 7 tests, 3 failed — is the real RED, and the three messages are the three
+defects: `a chosen tab's word is not 'ink_text': #FF6B635C expected:<-15067628> but was:<-9739428>`, its
+night twin `night: a chosen tab is not 'ink_text' expected:<-856601> but was:<-6055022>`, and
+`with 'LABEL_VISIBILITY_AUTO' and five tabs the widget shows the chosen label only — which is the audit's
+'only Tasks is readable'; the bar has to be told to label every item expected:<1> but was:<-1>`. The class
+grew to 15 tests and went green on the styles and the drawable described above; the nine instrumented methods
+are the part that cannot be asked on a JVM, and they ran on the device in the four gated configurations,
+while two of them — the label budget and the plate room — ran again in three more at font scale 1.3 as
+measurements rather than as gates.
+
+**The files.** Production: `app/src/main/res/layout/activity_main.xml` (the bar's background and label mode;
+no View is deleted in the diff, because the sibling rule View this stage first wrote was removed before
+anything shipped — `e2914ec` had no rule at all, only `?android:attr/windowBackground`),
+`app/src/main/res/drawable/bg_bottom_bar.xml` (new),
+`app/src/main/res/color/nav_item_icon_ink.xml` (new), `values/colors.xml` and `values-night/colors.xml`
+(`ink_nav_plate`), `values/component_styles.xml` (the bar style, the indicator's colour, and the orphaned
+`ShapeAppearance.TaskPlanner.BottomBar.Indicator` removed — it existed at `e2914ec` and nothing reads it now),
+`values/type.xml` (`TextAppearance.TaskPlanner.NavLabel`). Tests:
+`app/src/test/java/com/taskplanner/ui/BottomNavigationStyleTest.kt` (new, 15) and
+`app/src/androidTest/java/com/taskplanner/ui/BottomNavigationInstrumentedTest.kt` (new, 9). Evidence and
+docs: `scripts/capture-ui-matrix.py` (the `--nav-matrix` harness), `docs/design/tokens.json`,
+`docs/design/contrast-report.md` (rewritten by `scripts/contrast_report.py --resources app/src/main/res
+--format markdown --out …`, with `--check` answering `RESULT: pass` and exit 0), this plan,
+`docs/UI_UX_AUDIT.md` §4.4, the spec's §4.4 revision 11, and nine frames in
+`docs/images/ui-redesign/after/` — the five tabs, 320dp, night, and the two label frames at font 1.0 and 1.3
+that carry the finding below. Two files the stage wrote and removed before committing are worth naming
+because a reader may look for them: a `color/nav_item_text_ink.xml` that turned out to be a copy of
+Material's own selector, and a `scripts/contrast-palette.py` that duplicated the sanctioned
+`scripts/contrast_report.py`. Neither was ever committed, so neither appears in the diff.
+
+**The gates, on the binaries that ran.** `testDebugUnitTest`: **108 suites, 1490 tests, 0 failures, 0 errors,
+0 skipped** — Stage 6 left 107 suites and 1475 tests, so this stage added one suite and 15 tests.
+`lintDebug`: **0 errors, 175 warnings**, the count Stage 6 ended on. `assembleDebug` → `app-debug.apk`
+`9f79219fc90c7de39614800a712dfcc7a759b5fffd39d5d65024b62d0829449f`; `assembleDebugAndroidTest` →
+`app-debug-androidTest.apk` `7bce99c8efa761cece829664202c593e3f9c0fcceead1d1950d6114fe1eb531b`. Both were
+installed on `emulator-5584`, read back out of `/data/app/…/base.apk` with the device's own `sha256sum`, and
+both matched byte for byte — the app at `/data/app/~~xEZSloomM-OHoSj2-VMolw==/com.taskplanner-rEf6_Xh0eeULRnRetrr9lg==/base.apk`,
+versionName 1.0, and the test package at
+`/data/app/~~RHixa5d2EW1DFOb4rPA2Tg==/com.taskplanner.test-1W4beO0oqaiy9JBJHdcKYw==/base.apk`.
+
+That re-install is not a formality, and it is the reason the matrix ran twice. The first matrix ran on an
+instrumented APK built as `b182c0c7…`; two comment-only corrections afterwards — the withdrawn plate-drift
+note and the label-budget note — changed the source, and rebuilding it produced a third hash. A rebuild of
+unchanged source does not reproduce a byte-identical APK on this toolchain, so a hash records one build event
+and not the program: the only way to say "the nine methods ran on what the repository holds" was to install
+the new APK and run them again. The second matrix, on `7bce99c8…`, is the evidence this section quotes, and
+`7bce99c8…` is still what `assembleDebugAndroidTest` answers today (UP-TO-DATE, same file, same hash as the
+device's copy).
+
+**What a hash cannot carry, measured.** The final gate pass ran `assembleDebug` again on a source tree that
+had not changed since the device was loaded, and the app APK came back as
+`20517d3f51c2c86df1522a7faa22b8731352e791263399662f3a7d08ca7f98e1` where the device holds
+`9f79219fc90c7de39614800a712dfcc7a759b5fffd39d5d65024b62d0829449f`. The two files were then opened and
+compared entry by entry: both carry 1,237 entries, none is missing from the other, and **every entry's
+decompressed bytes and CRC are identical** — the difference is where the dex files land in the archive
+(`classes12.dex` and `classes13.dex` swap places at index 4) and how long the compressed container is
+(14,532,028 bytes against 14,196,472). So the packaging is not reproducible while the packaged program is,
+and the honest reading of a SHA in this report is "this is the archive that ran", with the entry comparison as
+the bridge between two archives of the same build. The device was deliberately left holding the archive the
+matrix measured, rather than reloaded with the newer container that would have invalidated nothing and proved
+nothing.
+
+**Ten things only this stage's evidence could tell.**
+
+* **The plate the design first reached for clips the glyph.** `icon_container` × `spacing_large` — 40dp × 24dp,
+  two real tokens of this system — is a stadium whose rounded ends are semicircles of radius 12dp, so at the
+  icon's own left and right edges it has no height left, and `ic_task`, a squared-off glyph, sits with its
+  corners outside the mark meant to hold it. The library's 64dp × 32dp was already right. The device test now
+  measures the drawn plate against the drawn glyph — 18.9 and 19.6dp of plate beside the glyph at 393dp, 15.4
+  and 16.0 at 320dp where the tab clamps the plate narrower, 3.6 to 4.4dp above and below — and refuses the
+  pair when the glyph is not inside it.
+* **The library clamps the plate to the tab, and the clamp is what keeps 320dp honest.** At 320dp the slot is
+  64dp and `marginHorizontal` is 4dp, so the plate is drawn 55.7dp wide — measured, not inferred — and two
+  neighbouring plates cannot touch. They would start to below about 234dp of window width, outside the range
+  this app declares.
+* **A pill colour that passes as a chip fails as a state marker.** `pill_accent` is 1.12:1 from the bar in
+  light and 1.33:1 in night. WCAG 1.4.11 asks 3:1 of the visual that tells a component's state, and with the
+  plate invisible the chosen tab was told by ink colour alone — the one cue the spec forbids. `ink_nav_plate`
+  (#5D9284 / #407067) is 3.55:1 and 3.14:1 from the bar with `ink_text` on it at 5.06:1 and 4.84:1, so 1.4.11
+  and 1.4.3 hold together; `scripts/contrast_report.py` gates both pairs from `docs/design/tokens.json`, so
+  the token cannot drift without the design system's own gate failing.
+* **The tint between the bar and the page is not a boundary and never was.** `colorSurfaceContainer` is
+  `ink_surface`, and `ink_surface` against `ink_background` measures **1.05:1** in light and **1.07:1** in
+  night. §20g's finding g4 recorded that no surface role reaches the 1.3:1 this stage's brief asks for, and
+  the same brief asks the background to *be* that role; the two sentences cannot both hold. The stage kept
+  the role, let the drawn 1dp rule do the separation (3.55:1 against the page and 3.73:1 against the bar in
+  light, 4.06:1 and 3.78:1 in night), and wrote the tint ratio into the evidence file as the number it is.
+* **`getGlobalVisibleRect` is the wrong geometry under a recording canvas.** Every pixel claim in this stage
+  takes `getLocationOnScreen` plus the view's own `width` and `height`; the visible-rect call answers with
+  the *content* bounds, so a region built from it is smaller than the view being asserted — the same trap
+  that made Stage 6's footer and field measurements weaker than they looked.
+* **A screenshot is not evidence of an animation until a second frame disagrees with it.** The pressed-state
+  test injects a touch, holds it and photographs. The first version held once, at 180ms, and in the night
+  theme that frame came back identical to the resting one — an observation made while the test was being
+  written, not a line in the evidence, which records only the sample the test kept. Held for 420ms at 393dp
+  the note reads `held 420ms: 3314 of 108x110 = 11880 pixels of the chosen tab moved, and 4226 pixels moved
+  elsewhere on the screen; the pixel under the finger is #FF57877A; the view answered isPressed=true` in
+  light, and the same 3314 tab pixels and the same 4226 elsewhere with `#FF4F7B72` under the finger in night.
+  So the test takes both holds, [180, 420], and names in its note which one it judged, and it sets
+  `SOURCE_TOUCHSCREEN` on the event because `MotionEvent.obtain` otherwise describes a mouse, and a mouse
+  hovers over a tab instead of pressing it. What the note does not promise is the *elsewhere* figure: at 360dp
+  the fresh run counted 81 pixels moving outside the tab where the earlier run counted 5,092, because that
+  number belongs to whatever the page is animating, and only the tab's own count is a claim about the bar.
+* **The accessibility tree is not the view tree, and the dump is not available after the test.** Material
+  marks the label views `importantForAccessibility=no` and puts the tab's name on the item node as a content
+  description, and `View.createAccessibilityNodeInfo()` is unsealed — `getChild` throws on it. So the claim is
+  made against `uiAutomation.rootInActiveWindow` while the window is up: that walk counts 32 nodes in and
+  under the bar, offers the five names, and shows one tab answering `selected`. The outside `uiautomator
+  dump` — taken from a fresh start of the same configuration, because `ActivityScenario.close()` means the
+  window the test owned is gone by the time the run answers and a dump taken then is a picture of the
+  launcher — reports 28 nodes inside the bar's rect, with each of the five words appearing as both `text` and
+  `content-desc`. The two counts are different traversals of the same bar, and the documents name which is
+  which rather than quoting one number for both.
+* **Robolectric reads resources the way AAPT2 wrote them.** `app:labelVisibilityMode="labeled"` arrives as
+  `@1` and `@drawable/bg_bottom_bar` as `$2131234567`; a test that compares against the source text passes on
+  the day it is written and fails on the day the file is rebuilt. And `android.nonTransitiveRClass=true`
+  means `com.taskplanner.R.attr.colorSurfaceContainer` is not a thing at all — Material's roles have to be
+  asked of `com.google.android.material.R`, through the *activity's* theme, because the application context
+  carries the manifest's `<application>` theme and answers with nothing.
+* **A configuration has to be warmed before an instrumented run enters it.** The first full matrix — kept
+  outside the repo at `/c/tmp/s7_nav_matrix_final.log` — answered `INSTRUMENTATION_RESULT: shortMsg=Process
+  crashed.` in four of its seven configurations (360-light-10, 393-dark-10 and both 1.3 measurement rows),
+  while 393-light-10 and 320-light-10 came back `OK (9 tests)` in the same minute. The system log calls that
+  `bg anr`. The app is now opened once in the new configuration, waited for (`bottom_navigation` in the dump)
+  and stopped again before the run; that is also the preflight the stage's own brief asks for, that the
+  application does not crash when it is opened. Nine methods in one process is still more than this machine
+  gives the emulator while a second emulator and the build hold the rest of the memory — in the run this
+  section quotes, three of the four gated configurations needed a retry on the first method that entered the
+  new configuration (320-light-10 after three attempts, 360-light-10 after two, 393-dark-10 after three), and
+  one measurement run did too — so a gated row is nine runs, the configuration is judged on the union of what
+  those nine left on disk, and only a run whose own log says `Process crashed` is retried.
+* **A published frame can carry a window the stage did not build.** Two of the nine photographs — tab 0 at
+  393dp and at 320dp — show a small dark box reading `Tasks` over the page. It is Material's tooltip:
+  `NavigationBarItemView` calls `TooltipCompat.setTooltipText` with `MenuItemImpl.getTooltipText`, which falls
+  back to the item's title, so every tab carries a tooltip naming itself, and the first tap Espresso sends
+  into a freshly focused window is sometimes read as a long press. It is not a Stage 7 surface and not a
+  regression — the attribute is set by the library on every build of this widget — and the frames stay
+  published because they are what the device showed. What makes them usable as evidence is the check: the
+  tooltip's pixels are all in rows 900–990 (4,226 of them at 393dp, 2,666 at 320dp), and the bar's own 110
+  rows in the tooltip frame are byte-identical to the clean frame of the same screen taken seconds apart. A
+  frame whose subject changed would have shown it.
+
+**What the five reviews found, and where each one went.** Twenty-one findings are listed here, by group, and
+every one was reproduced against the files or the device before it was acted on. The total is given by group
+rather than as one number across the five reports, because a grand total counts the same defect as often as
+reviewers happened to agree about it. Six production findings are fixed: the caps labels, the clipping plate,
+the invisible plate, the sibling rule View that would have painted over the last row of whatever the host was
+showing, the duplicate text selector and the dropped focus states. Eleven test findings are fixed: the rule
+sampled at the wrong edge after the line moved inside the background, `getGlobalVisibleRect`, the label found
+by "first visible TextView" rather than by the tab's own word, `dp()` applied twice to a `getDimension` that
+already answers in pixels, the tautological bar-width assertion, the inverted night message, the missing
+ellipsis check, the Statistics anchor that does not exist in that layout, the badge-shaped `firstImageView`,
+the flat-fill ±6 window, and the matrix's `elif` chain that reported one reason and hid the rest. Four are
+documented rather than fixed, each with its measurement: the 1.3:1 criterion this palette cannot satisfy
+without repainting every surface in the app, the focus-visible ring (Stage 10's listed item), the bar's labels
+not responding to font scale at all (Stage 10's second listed item, and the paragraph below this one carries
+its numbers), and the `pill_accent`/`ink_accent` coupling the chips still share. A sixth pass over the
+documents after those fixes found four more things worth calling out — a ratio in the spec that did not match
+the token it named, a node count attributed to the wrong traversal, a frame count in this section that
+predated the rebuild, and a withdrawn claim still standing in a test comment — and all four are corrected
+above rather than left in the earlier prose.
+
+**Three claims this stage first wrote and then measured away.** The plan's 7.3 names a `bg_hairline` *view*
+above the bar; what shipped is the line inside the bar's own background, because a sibling View takes no
+space and paints over the last row of whatever screen the host is showing. Second, the hand arithmetic in
+review predicted that "Categories" and "Statistics" would lose characters at font scale 1.3; `label-budget.txt`
+records **0 characters dropped from all five labels at 1.0 and at 1.3, at 320dp, 360dp and 393dp** — but that
+sentence, written as a pass, is the third correction: the two samples are the *same pixels*.
+`after/s7-nav-labels-10.png` and `after/s7-nav-labels-13.png` are the same screen at the two scales, and
+compared row by row 38,219 pixels differ: 2,547 of them in the status bar's clock and icons (rows 56–90),
+35,672 in the page's own text (rows 91–745), and none in the bar's 110 rows (997 to 1106), the words sitting
+in rows 1074–1087 in both. The budget test
+could not have failed at 1.3 because the label was never resized at 1.3:
+`NavigationBarItemView.setTextAppearanceActive`/`Inactive` go through a private
+`setTextAppearanceWithoutFontScaling`, which re-reads the appearance with
+`MaterialResources.getUnscaledTextSize` — `sp` × `DisplayMetrics.density`, never `scaledDensity` — and applies
+it with `setTextSize(COMPLEX_UNIT_PX, …)`. So `TextAppearance.TaskPlanner.NavLabel` buys sentence case,
+family, spacing and caps, and not size, and WCAG 1.4.4 on the navigation bar is now an item of Stage 10's own
+list, with these numbers and this code reference. The plate-drift figure this section first quoted from the
+same configuration (−4dp above the glyph, +12dp below at 393dp/1.3) is withdrawn with it: `onMeasure`'s
+`itemPaddingTop` clamp moves only when a label grows, and the matrix measures identical room at 1.0 and 1.3 in
+all three widths — 393dp 5px/6px, 360dp 6px/6px, 320dp 6px/7px. All three corrections are carried into the
+plan's Stage 7 acceptance, the audit's §4.4 and the spec's revision 11 rather than left standing in the
+earlier prose.
+
+**What Stage 7 leaves standing.** The brief for this stage listed Stage 6's open findings and asked for them
+to be carried, not quietly closed; none of them touches the navigation bar, so none was fixed here, and each
+keeps the home §20o gave it: the two save-side defects (Save before the categories flow has emitted writes
+`categoryId = null`; a blank priority or status parses to MEDIUM and TODO rather than refusing), the
+theme-wide `Chip.Filter` with `checkedIconVisible=false`, the `Label` role's all-caps on every button,
+`accessibilityHeading` being dead below API 28 while minSdk is 24, the six `focusable="false"` picker fields
+that leave the D-pad order, the untested keyboard over the Tasks list, and the report screen's
+`reportZoneButton` sitting under Espresso's 90%-visible bar on the second AVD — that last one belongs to
+Stage 8d, which owns the report screen. The all-caps `Label` role is the one item Stage 7 had to answer:
+the bar's labels inherited it and spelled `CATEGOR…`, and the stage gave the nav its own appearance rather
+than move every button in the app inside a navigation stage, so the role itself is still open and still
+everywhere else. Stage 7 adds two of its own to the list, both measured and both Stage 10's: the focus-visible
+ring, and the five words that do not grow with the reader's font scale.
