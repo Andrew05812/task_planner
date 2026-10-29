@@ -40,6 +40,13 @@ jobs:
       - name: Make the Gradle wrapper runnable
         run: chmod +x gradlew
 
+      # The cheapest gate runs first: a missing Russian translation is a content defect, and the runner does not
+      # need a JDK, an SDK or a Gradle daemon to say so. The same rules are enforced by the JVM contracts in
+      # `com.taskplanner.res` and by lint's MissingTranslation; this step exists so the pull request says which
+      # resource is missing, in one block of output, before a 40-minute build.
+      - name: Localization completeness (values/ vs values-ru/)
+        run: python3 scripts/check-localization.py
+
       - name: Assemble debug APK
         run: ./gradlew --no-daemon --console=plain assembleDebug
 
