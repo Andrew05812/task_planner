@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Task Planner</string>
+    <!-- The product's own name. A reader looking for the app in a Russian launcher types these two words, and a
+         Cyrillic label would make the app harder to find rather than easier to use. The Russian set therefore has
+         no `app_name` at all, and the completeness gate skips it for the same reason it skips a joiner. -->
+    <string name="app_name" translatable="false">Task Planner</string>
 
     <string name="title_tasks">Tasks</string>
     <string name="title_categories">Categories</string>
@@ -902,7 +905,10 @@
     <string name="insight_heavy_day_title">%1$s looks heavy</string>
     <string name="insight_heavy_day_body">%1$s planned across %2$d tasks, against %3$s on a usual working day.</string>
     <string name="insight_heavy_day_basis">That day is %1$s of the daily average, counted %2$s.</string>
-    <string name="insight_approximate_note"> Its lengths come from estimates, so the hours are approximate.</string>
+    <!-- The leading space is part of the sentence: `InsightRepository` joins this to the body with nothing
+         between them. Unquoted, AAPT strips it and the two halves collide ("…day.Its lengths…"), so the value is
+         quoted, which is also what the Russian counterpart does. -->
+    <string name="insight_approximate_note">" Its lengths come from estimates, so the hours are approximate."</string>
 
     <string name="insight_percent_format">%1$d%%</string>
     <string name="insight_duration_hours_minutes">%1$d h %2$d min</string>
@@ -1288,8 +1294,10 @@
 
     <string name="report_action_save">Save</string>
     <string name="report_action_share">Share</string>
-    <string name="report_format_pdf">PDF</string>
-    <string name="report_format_csv">CSV</string>
+    <!-- File formats are named by their own letters in both languages: a reader choosing between "PDF" and
+         "CSV" is choosing an extension, and a translated name would not match what the sharesheet shows. -->
+    <string name="report_format_pdf" translatable="false">PDF</string>
+    <string name="report_format_csv" translatable="false">CSV</string>
     <string name="report_zoom_in">Make the pages bigger</string>
     <string name="report_zoom_out">Make the pages smaller</string>
     <string name="report_zone_device_note">%1$s · the device\'s own timezone</string>
@@ -1301,7 +1309,10 @@
         <item quantity="other">%d pages</item>
     </plurals>
     <plurals name="report_csv_all_rows">
-        <item quantity="one">One row, shown here as it stands in the file.</item>
+        <!-- The number is in the `one` form on purpose. Russian `one` covers 1, 21, 31, 41 and 101, so a form that
+             spells the word "One" would be read by 21 rows and say something false; lint's ImpliedQuantity says the
+             same thing, and it is right. -->
+        <item quantity="one">%d row, shown here as it stands in the file.</item>
         <item quantity="other">%d rows, all of them shown here and in the file.</item>
     </plurals>
     <string name="report_csv_shown_format">The first %1$d of %2$d rows are shown. The file holds them all.</string>

@@ -123,6 +123,24 @@ android {
         }
     }
 
+    lint {
+        // A Russian reader who gets an English string is not looking at a fallback — Android hides that case
+        // completely — they are looking at a defect. The three gates now agree on that: the JVM contracts in
+        // `com.taskplanner.res` fail the test task, `scripts/check-localization.py` fails the CI step with a
+        // readable list, and these rules fail the build itself, so a developer who runs neither still cannot ship
+        // an untranslated string. `ExtraTranslation` is here for the mirror case: a Russian key with no English
+        // original is a string no code path can ask for, and it rots in silence.
+        error += listOf(
+            "MissingTranslation",
+            "ExtraTranslation",
+            "MissingQuantity",
+            "ImpliedQuantity",
+            "StringFormatInvalid",
+            "StringFormatMatches",
+            "StringFormatCount"
+        )
+    }
+
     kapt {
         correctErrorTypes = true
         useBuildCache = true
