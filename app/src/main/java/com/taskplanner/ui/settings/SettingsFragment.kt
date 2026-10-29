@@ -76,6 +76,46 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    /**
+     * Marks the row that matches the language the app is actually showing, and applies a new one when the reader
+     * picks it.
+     *
+     * The current choice is read from the framework (`AppCompatDelegate.getApplicationLocales()`) rather than from
+     * a preference of the app's own, because on Android 13+ the reader can change it from the system's App
+     * Languages screen without ever opening this screen. A row that disagreed with the system screen behind it
+     * would be a lie with a radio button on it.
+     *
+     * The listener is detached while the check is set programmatically. `RadioGroup` fires on a `check()` call
+     * just as it fires on a finger, and a render that applied its own current value would restart the activity
+     * every time the state stream emits.
+     */
+    private fun renderLanguage() {
+        val shown = AppLanguage.current()
+        binding.apply {
+            if (languageGroup.checkedRadioButtonId != idOf(shown)) {
+                languageGroup.setOnCheckedChangeListener(null)
+                languageGroup.check(idOf(shown))
+            }
+            languageGroup.setOnCheckedChangeListener { _, checkedId ->
+                if (checkedId != idOf(AppLanguage.current())) {
+                    AppLanguage.apply(languageOf(checkedId))
+                }
+            }
+        }
+    }
+
+    private fun idOf(language: AppLanguage): Int = when (language) {
+        AppLanguage.SystemDefault -> R.id.languageSystemDefault
+        AppLanguage.English -> R.id.languageEnglish
+        AppLanguage.Russian -> R.id.languageRussian
+    }
+
+    private fun languageOf(id: Int): AppLanguage = when (id) {
+        R.id.languageEnglish -> AppLanguage.English
+        R.id.languageRussian -> AppLanguage.Russian
+        else -> AppLanguage.SystemDefault
+    }
+
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -116,6 +156,7 @@ class SettingsFragment : Fragment() {
             importButton.isEnabled = !state.busy
             syncNowButton.isEnabled = !state.busy && state.cloudConfigured
 
+            renderLanguage()
             accountStateText.setText(state.accountState.labelRes)
             // The button is present in every state except "already signed in", and *disabled* rather than
             // hidden when the build cannot use it. Stage 8a hid it, which left a reader unable to tell an

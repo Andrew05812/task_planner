@@ -25,7 +25,28 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TaskPlanner"
+        android:localeConfig="@xml/locales_config"
         tools:targetApi="31">
+
+        <!-- The two languages the app is translated into, advertised to the system so Android 13+ offers them on
+             its own App Languages screen. Hand-written rather than generated, and deliberately only these two:
+             the system must not offer a language the app has no strings for, because choosing one would show the
+             reader an English interface under a Russian label. `values-ru/` is what makes "ru" a promise the app
+             keeps. -->
+
+        <!-- Per-app language on the versions that have no framework support for it (API 24-32): AppCompat keeps
+             the choice itself and restores it before the first activity is created. This declaration is what
+             turns that storage on; without it the reader's pick would last until the process ended. On API 33+
+             the system owns the value and the service is never started. The cost is one small SharedPreferences
+             read on a cold start, which is measured rather than assumed (see the Stage 14 record). -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
         
         <activity
             android:name=".ui.MainActivity"

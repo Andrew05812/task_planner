@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The languages this app is actually written in. Adding a name here without adding `values-<tag>/` would put
+     a language on the system's App Languages screen that the app cannot serve, so the two are changed together.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="ru" />
+</locale-config>

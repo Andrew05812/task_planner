@@ -156,6 +156,77 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- The language the app is written in. Three rows, not a dropdown: a dropdown hides the two answers
+             the reader is not currently using, and on a screen whose whole job is to say what state the app is
+             in, a choice you have to open to see is the wrong control. Nothing here is `android:checked`: the
+             layout must not guess which language this build is showing, which is the rule every other row on
+             this screen follows, and `SettingsFragment.render()` sets it from the framework. -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.TaskPlanner.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/card_padding_horizontal">
+
+                <TextView
+                    style="@style/Widget.TaskPlanner.SectionHeader"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/language_section_title" />
+
+                <RadioGroup
+                    android:id="@+id/languageGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/languageSystemDefault"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/touch_target_min"
+                        android:paddingStart="@dimen/spacing_small"
+                        android:paddingEnd="@dimen/spacing_small"
+                        android:text="@string/language_system_default"
+                        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                    <!-- The two names are deliberately not translated (see `values/strings.xml`): each is
+                         written in the script its own reader recognises. -->
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/languageEnglish"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/touch_target_min"
+                        android:paddingStart="@dimen/spacing_small"
+                        android:paddingEnd="@dimen/spacing_small"
+                        android:text="@string/language_english"
+                        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/languageRussian"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/touch_target_min"
+                        android:paddingStart="@dimen/spacing_small"
+                        android:paddingEnd="@dimen/spacing_small"
+                        android:text="@string/language_russian"
+                        android:textAppearance="?attr/textAppearanceBodyMedium" />
+                </RadioGroup>
+
+                <TextView
+                    android:id="@+id/languageNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/language_change_note"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

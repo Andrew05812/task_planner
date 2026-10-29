@@ -165,6 +165,9 @@
     <string name="settings_sync">Синхронизация</string>
     <string name="settings_data">Данные</string>
     <string name="settings_backup">Резервное копирование</string>
+    <string name="language_section_title">Язык</string>
+    <string name="language_system_default">Как в системе</string>
+    <string name="language_change_note">Применяется сразу и только на этом устройстве. Профили, задачи и история не меняются.</string>
     <string name="export_data">Экспорт данных</string>
     <string name="import_data">Импорт данных</string>
     <string name="sign_in_google">Войти через Google</string>

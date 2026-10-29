@@ -217,6 +217,15 @@
     <string name="settings_sync">Synchronization</string>
     <string name="settings_data">Data</string>
     <string name="settings_backup">Backup</string>
+    <!-- The language row (Stage 14). The two names are written in their own script on purpose: a reader who
+         cannot read this interface is exactly the reader who has to recognise their language by its shape, and
+         "Английский" inside an English screen helps nobody. The system-default row is a sentence about this
+         device, so it is translated like every other one. -->
+    <string name="language_section_title">Language</string>
+    <string name="language_system_default">System default</string>
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_russian" translatable="false">Русский</string>
+    <string name="language_change_note">Applies at once, on this device only. Your profiles, tasks and history are not touched.</string>
     <string name="export_data">Export data</string>
     <string name="import_data">Import data</string>
     <string name="sign_in_google">Sign in with Google</string>
