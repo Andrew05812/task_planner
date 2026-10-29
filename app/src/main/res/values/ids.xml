@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ids the Stage 8a tests name before the layouts carry them.
+
+  The tests were written first, as the plan requires, and a Kotlin test cannot name `R.id.archiveStateMark`
+  while no resource declares it. Declaring the id here rather than as `@+id/` inside a layout is the standard
+  way to say "this name belongs to the app" without saying yet which view wears it.
+
+  What that buys, stated exactly, because a reviewer caught the first version of this comment overstating it:
+  a layout that writes `@id/name` for a name nobody declares fails to link, so a typo is caught. What it does
+  not buy is protection against reuse — resource ids are package-global names, and the same id appearing in
+  two layouts is normal, legal and silent (`profileName` lives in `fragment_profile.xml` and in
+  `item_profile.xml`). The guard against two views sharing a name *inside one layout* is a test, not the
+  compiler: `Stage8aTokenSweepTest.no layout gives the same id to two views`.
+
+  Every entry here is a view Stage 8a adds. If a later stage removes the view, remove its id with it — lint's
+  `UnusedResources` does not report an `<item type="id">`, so nothing else will notice an orphan.
+-->
+<resources>
+    <!-- The word and glyph on an archived row that names the task's own status. It is called a *state* mark
+         rather than an archived mark because `getArchivedTasks` filters on `archived = 1` alone: every row on
+         the screen is archived, and what a row has to say in words is whether it finished. -->
+    <item type="id" name="archiveStateMark" />
+    <!-- The mark on the profile row the app is currently working in. -->
+    <item type="id" name="currentProfileMark" />
+
+    <!-- The four screens that never named themselves. Tasks and Profile have headers; these did not. -->
+    <item type="id" name="categoriesTitleText" />
+    <item type="id" name="archiveTitleText" />
+    <item type="id" name="historyTitleText" />
+    <item type="id" name="profilesTitleText" />
+    <item type="id" name="settingsTitleText" />
+</resources>

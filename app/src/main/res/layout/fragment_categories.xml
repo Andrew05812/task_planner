@@ -9,14 +9,41 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <!-- The screen's name, in the role the Tasks header uses. Categories is a bottom-bar destination
+             like Tasks and Profile, and those two say what they are while this one was identified by an icon
+             alone. The id lives in values/ids.xml so CategoriesLayoutTest could name the title before the
+             screen had one.
+
+             This is a title, not `header_screen.xml` included again: that file is Tasks' header — a title, a
+             count line, three command buttons and a search field — and four of the five screens Stage 8a
+             restyled have none of those. Reviewer 1 asked why the same block is written five times, and the
+             honest answer is that the shared part is two attributes wide (the Headline role and the screen
+             margins), while a `header_title.xml` include would either carry an id every screen shares — which
+             is what makes the per-screen title ids in `values/ids.xml` testable — or need five overrides of one
+             include for two attributes. A title-only include is Stage 11's decision to make with 8b, 8c and 8d's
+             headers in front of it, not one to make here alone. -->
+        <TextView
+            android:id="@id/categoriesTitleText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/screen_margin"
+            android:layout_marginTop="@dimen/spacing_normal"
+            android:layout_marginEnd="@dimen/screen_margin"
+            android:text="@string/title_categories"
+            android:textAppearance="@style/TextAppearance.TaskPlanner.Headline"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerViewCategories"
             android:layout_width="match_parent"
             android:layout_height="0dp"
+            android:layout_marginTop="@dimen/spacing_small"
             android:clipToPadding="false"
-            android:paddingBottom="88dp"
+            android:paddingBottom="@dimen/list_bottom_gutter"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/categoriesTitleText"
             tools:listitem="@layout/item_category" />
 
         <ProgressBar
@@ -35,8 +62,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
+            android:layout_marginStart="@dimen/screen_margin"
+            android:layout_marginEnd="@dimen/screen_margin"
             android:text="@string/empty_categories"
-            android:textAppearance="?attr/textAppearanceBody1"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
@@ -50,7 +79,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/spacing_normal"
         android:contentDescription="@string/add_category"
         app:srcCompat="@drawable/ic_add" />
 

@@ -704,18 +704,24 @@ def wipe_shots(serial, tag):
     return "removed %d (%s)" % (len(names), ", ".join(names) if names else "an empty directory")
 
 
-def open_bar_screen(serial, tag):
+def open_bar_screen(serial, tag, tries=24):
     """Bring the app to the front in the configuration the tag names, and wait for the bar to be on screen.
 
     The dump is evidence about a window that has to exist, so the wait is for `bottom_navigation` itself rather
     than for a fixed sleep. Returns how many tries it took, which is what a reader of the manifest wants when a
     configuration is slow.
+
+    `tries` is a parameter because the budget is the difference between a run and a refusal: a freshly
+    installed debug APK took 1m20s to display on this device (`Displayed com.taskplanner/.ui.MainActivity:
+    +1m20s128ms`, measured 2026-10-28 while the host had 1.3 GB free), and an instrumentation started inside
+    that window answers `am_anr … failed to complete startup` followed by `am_kill … bg anr` — which is the
+    machine, not the screen.
     """
     for pkg in ("com.taskplanner", "com.taskplanner.test"):
         adb(serial, "shell", "am force-stop %s" % pkg)
     adb(serial, "shell", "cmd statusbar collapse")
     adb(serial, "shell", "monkey -p com.taskplanner -c android.intent.category.LAUNCHER 1")
-    for attempt in range(24):
+    for attempt in range(tries):
         time.sleep(2.5)
         if any(n["id"] == "bottom_navigation" for n in nodes(serial)):
             return attempt
@@ -996,6 +1002,224 @@ def resumed_activity(serial):
     return "unknown"
 
 
+S8A_CLASS = "com.taskplanner.ui.Stage8aScreensInstrumentedTest"
+# The five restyled screens in the three configurations the stage's evidence is stated in: the reference
+# width, the same width in the theme that repaints every token under it, and the narrowest width the app
+# budgets. Font scale 1.0, because 1.0 is the scale the layout tests' width budgets are written at.
+S8A_MATRIX = [
+    ("393-light-10", 393, "1.0", False),
+    ("393-dark-10", 393, "1.0", True),
+    ("320-light-10", 320, "1.0", False),
+]
+# Each method is named for the one frame it owes, because a count cannot tell one run's picture from another's.
+# The first version of this table said `1` for all six and compared it against the number of PNGs in the whole
+# tag directory, which every run after the first filled — so five of six frame gates could not have failed, and
+# two methods shared the name `s8a-categories.png`, which meant the published Categories frame belonged to
+# whichever ran last with nothing recording which that was.
+S8A_METHOD_FRAMES = {
+    "categoriesListsTheSeededRowAndNamesItself": "s8a-categories.png",
+    "archiveOpensFromTheKebabAndItsRowsSayWhatTheyAre": "s8a-archive.png",
+    "workHistoryOpensFromTheKebabAndStillComputesItsHeader": "s8a-work-history.png",
+    "settingsKeepsItsControlsAndExplainsTheAbsentSignIn": "s8a-settings.png",
+    "profileSelectionMarksOneProfileInTheWordsTheScreenUses": "s8a-profile-selection.png",
+    "theDensestScreenStillFitsTheNarrowestWidth": "s8a-categories-narrow.png",
+}
+S8A_EXPECT_FILES = sorted(set(S8A_METHOD_FRAMES.values()))
+S8A_RUN_ATTEMPTS = 3
+# The class on disk, so the matrix gates the tests that exist rather than the ones this dict remembers.
+S8A_TEST_SOURCE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "app", "src", "androidTest", "java", "com", "taskplanner", "ui", "Stage8aScreensInstrumentedTest.kt"
+)
+
+
+def s8a_methods_from_source(path=S8A_TEST_SOURCE):
+    """Every `@Test` method name in Stage 8a's instrumented class, read from the file rather than remembered.
+
+    A dictionary of methods is a list that goes stale in silence: add a seventh test, forget the table, and
+    the matrix runs six, prints OK six, and never knows it skipped one. Parsing the source makes the skip a
+    refusal instead.
+    """
+    if not os.path.isfile(path):
+        raise SystemExit("no %s to read the stage 8a test methods from" % path)
+    names = re.findall(r"@Test\s+(?:\([^)]*\)\s+)?fun\s+`?([A-Za-z0-9_]+)`?\s*\(",
+                       open(path, encoding="utf-8").read())
+    if not names:
+        raise SystemExit("%s holds no @Test methods, which cannot be true of the class the matrix runs" % path)
+    return names
+
+
+def s8a_matrix(serial, out, device="com.taskplanner", only=None):
+    """Stage 8a's five screens, each opened and photographed in each configuration it has to be seen in.
+
+    The navigation matrix's contract, unchanged, because every part of it was earned: apply the
+    configuration, sleep through the re-layout, read it back off the device, warm the app in it and stop it
+    again, force the process clean, wipe the tag this run is about to write, run one method per
+    instrumentation, require the exact test count rather than any line beginning `OK (`, pull the frames
+    immediately, compare the number that landed against the number the method owes, and restore the device
+    whether the run passed, failed or took the process down.
+
+    One method per instrumentation for the same reason Stage 7 settled on it: the whole class on this machine
+    is a sequence of six windows each holding a full-screen bitmap, and a `shortMsg=Process crashed` from the
+    system is not a defect in the screen. Retries are for a run the device took down only — a test that
+    asserted and failed is evidence, and running it again to make it go away is the thing a matrix must not
+    do.
+    """
+    N = chr(10)
+    manifest = os.path.join(out, "s8a-matrix.md")
+    logs = os.path.join(out, "runs")
+    os.makedirs(logs, exist_ok=True)
+    refused = []
+    # Which configuration the device is currently warmed for. A failed warm-up clears it, so the next method
+    # asks again rather than inheriting a window the app never reached — measured on the first run of this
+    # matrix, where one refused warm-up left five methods running against the launcher.
+    state = {"warmed_tag": None}
+    WARM_TRIES = 48
+
+    def one_run(tag, dp, font, night, method):
+        changed = state["warmed_tag"] != tag
+        if changed:
+            set_dp(serial, dp)
+            set_font(serial, font)
+            set_night(serial, night)
+            time.sleep(15)
+        seen = readback_configuration(serial)
+        # Wiped before the run, not after it: the device keeps the previous stage's frames under the same tag,
+        # and a pull that finds `s7-nav-*.png` in `shots/393-light-10` would otherwise file Stage 7's
+        # photographs as Stage 8a's evidence.
+        wiped = wipe_shots(serial, tag) if changed else "kept for the next method of this tag"
+        # A generous warm-up budget, for the reason recorded on `open_bar_screen`: this stage's first run on a
+        # freshly installed pair met a `failed to complete startup` ANR at 10 s, on a device whose cold start
+        # the system log measured at 1m20s.
+        warmed_in = open_bar_screen(serial, tag, tries=WARM_TRIES) if changed else "inherited"
+        if warmed_in == -1:
+            state["warmed_tag"] = None
+            summary = ("REFUSED: the app did not reach its bottom bar in this configuration after %d tries "
+                       "(it reached %s)" % (WARM_TRIES, focused_window(serial)))
+            refused.append("%s @ %s: %s" % (tag, method, summary))
+            return {
+                "tag": tag, "seen": seen, "focus": "not reached", "wiped": wiped,
+                "method": method, "summary": summary,
+                "frames": 0, "resumed": resumed_activity(serial), "warmed_in": warmed_in,
+            }
+        focus = start_clean(serial, device)
+        state["warmed_tag"] = tag
+        # Take this method's own frame off the device before the run, so that finding it afterwards means this
+        # run wrote it. `pull_frames` counts the whole tag directory, and a count cannot tell one method's
+        # picture from the five that landed before it.
+        owed = S8A_METHOD_FRAMES[method]
+        adb(serial, "shell", "rm -f %s/shots/%s/%s" % (SHOTS_DIR, tag, owed))
+        raw_to = os.path.join(logs, "s8a-%s-%s.txt" % (method, tag))
+        cls = "%s#%s" % (S8A_CLASS, method)
+        attempts = 0
+        code, quoted, _ = 0, [], ""
+        while attempts < S8A_RUN_ATTEMPTS:
+            attempts += 1
+            code, quoted, _ = instrument(serial, cls, tag=tag, raw_to=raw_to)
+            summary = " ".join(quoted) or "code %d and nothing recognisable in the output" % code
+            if "Process crashed" not in summary and "shortMsg" not in summary:
+                break
+            if attempts < S8A_RUN_ATTEMPTS:
+                print("      %s: the device took the run down (attempt %d), settling and trying again"
+                      % (tag, attempts))
+                time.sleep(20)
+        summary = " ".join(quoted) or "code %d and nothing recognisable in the output" % code
+        if attempts > 1:
+            summary += " [after %d attempts]" % attempts
+        frames, on_device, why = pull_frames(serial, out, tag, merge=True)
+        directory = os.path.join(out, "frames", tag)
+        landed = sorted(n for n in os.listdir(directory) if n.endswith(".png")) if os.path.isdir(directory) else []
+        reasons = []
+        if not summary.startswith("OK ("):
+            reasons.append(summary)
+        if code != 0:
+            reasons.append("am instrument exited %d" % code)
+        ran = re.search(r"OK \((\d+) test", summary)
+        if ran and int(ran.group(1)) != 1:
+            reasons.append("answered %s tests, expected 1, so the method filter did not hold" % ran.group(1))
+        if owed not in landed:
+            reasons.append("this run wrote no %s (%s; on disk: %s)" % (owed, why, ", ".join(landed) or "nothing"))
+        if reasons:
+            summary = "REFUSED: " + "; ".join(reasons)
+            refused.append("%s @ %s: %s" % (tag, method, summary))
+        return {
+            "tag": tag, "seen": seen, "focus": focus, "wiped": wiped, "method": method,
+            "summary": summary, "frames": frames, "frame": owed,
+            "resumed": resumed_activity(serial), "warmed_in": warmed_in,
+        }
+
+    with open(manifest, "w", encoding="utf-8") as log:
+        log.write("| configuration | readback | warm-up | focus before the run | shots wiped | method |"
+                  " result | frames on disk | resumed activity |" + N)
+        log.write("|---|---|---|---|---|---|---|---|---|" + N)
+        try:
+            gated = [row for row in S8A_MATRIX if not only or row[0] in only]
+            if only and not gated:
+                raise SystemExit(
+                    "--s8a-only matched no configuration: %s is not one of %s, so nothing would have been "
+                    "measured" % (sorted(only), [t for t, _, _, _ in S8A_MATRIX])
+                )
+            # The class on disk decides what runs, not this script's memory of it.
+            from_source = s8a_methods_from_source()
+            unknown = [m for m in from_source if m not in S8A_METHOD_FRAMES]
+            forgotten = [m for m in S8A_METHOD_FRAMES if m not in from_source]
+            if unknown or forgotten:
+                raise SystemExit(
+                    "the matrix and the class disagree: %s is in the class but owes no frame, %s is in the "
+                    "table but not in the class" % (unknown or "nothing", forgotten or "nothing")
+                )
+            for tag, dp, font, night in gated:
+                # The local directory for this tag goes before the first run of it, so a configuration that
+                # refuses every method cannot list last run's frames as its own evidence.
+                local = os.path.join(out, "frames", tag)
+                if os.path.isdir(local):
+                    shutil.rmtree(local)
+                rows = []
+                for method in from_source:
+                    row = one_run(tag, dp, font, night, method)
+                    rows.append(row)
+                    log.write(("| %s | %s | %s re-tries | `%s` | wiped: %s | `%s` | %s | %s | `%s` |"
+                               + N) % (
+                        row["tag"], row["seen"], row["warmed_in"], row["focus"], row["wiped"],
+                        method, row["summary"], row.get("frame", "-"), row["resumed"]))
+                    log.flush()
+                    print("%s #%s -> %s" % (tag, method, row["summary"]))
+                directory = os.path.join(out, "frames", tag)
+                landed = sorted(n for n in os.listdir(directory) if n.endswith(".png")) \
+                    if os.path.isdir(directory) else []
+                missing = [f for f in S8A_EXPECT_FILES if f not in landed]
+                if missing:
+                    refused.append("%s: the runs left no %s on disk" % (tag, ", ".join(missing)))
+                passed = len([r for r in rows if r["summary"].startswith("OK (")])
+                if passed != len(S8A_METHOD_FRAMES):
+                    refused.append("%s: %d of %d methods answered OK"
+                                   % (tag, passed, len(S8A_METHOD_FRAMES)))
+                log.write("| %s | configuration verdict | %d of %d runs OK | frames: %s |" % (
+                    tag, passed, len(S8A_METHOD_FRAMES), ", ".join(landed)) + N)
+                log.flush()
+                print("%s -> %d/%d methods OK, %d frames on disk" % (tag, passed, len(S8A_METHOD_FRAMES),
+                                                                     len(landed)))
+            log.write(N + "One method per instrumentation, and the configuration's verdict is the union of"
+                      " what its six runs left on disk. Each run's own frame is deleted from the device before"
+                      " it starts and required by name afterwards, so a row cannot pass on another method's"
+                      " picture; the local directory for a tag is cleared when the tag is entered, so a"
+                      " configuration that refuses every run cannot list last run's frames as its own. Every"
+                      " frame was written by the run that checked it: the test verified the destination id the"
+                      " navigation controller reported and an anchor view only that screen draws before the"
+                      " shutter opened, and refused the file when the device disagreed with the tag the frame"
+                      " was filed under. The list of methods comes from the class on disk, not from this"
+                      " script's table, so a test added without a frame is a refusal. Raw `am instrument`"
+                      " output is under `runs/`." + N)
+        finally:
+            set_dp(serial, 393)
+            set_font(serial, "1.0")
+            set_night(serial, False)
+            print("device restored: %s" % readback_configuration(serial))
+        print("manifest: %s" % manifest)
+    if refused:
+        raise SystemExit("the stage 8a matrix did not pass:" + N + N.join(sorted(set(refused))))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True)
@@ -1008,6 +1232,11 @@ def main():
     parser.add_argument("--nav-only", default="",
                         help="with --nav-matrix: only these configuration tags, comma separated — the way to"
                              " re-run one refused row without re-running the six that answered")
+    parser.add_argument("--s8a-matrix", action="store_true",
+                        help="run Stage 8a's five restyled screens, one method per instrumentation, across the"
+                             " configurations the stage's evidence is stated in")
+    parser.add_argument("--s8a-only", default="",
+                        help="with --s8a-matrix: only these configuration tags, comma separated")
     args = parser.parse_args()
     serial = args.serial or None
     os.makedirs(args.out, exist_ok=True)
@@ -1022,6 +1251,11 @@ def main():
     if args.nav_matrix:
         only = {w.strip() for w in args.nav_only.split(",") if w.strip()}
         nav_matrix(serial, args.out, only=only or None)
+        return
+
+    if args.s8a_matrix:
+        only = {w.strip() for w in args.s8a_only.split(",") if w.strip()}
+        s8a_matrix(serial, args.out, only=only or None)
         return
 
     wanted = {w.strip() for w in args.only.split(",") if w.strip()}

@@ -32,7 +32,23 @@
     <string name="title_category_detail">Category Details</string>
     <string name="hint_category_name">Category Name</string>
     <string name="label_category_color">Color</string>
-    <string name="label_category_icon">Icon</string>
+    <!-- `label_category_icon` ("Icon") was the category glyph's description and is gone: the row already
+         names the category, so the glyph was announcing the screen to itself twice. -->
+    <!-- The nine preset category colours, named. `CategoryDetailFragment` builds these chips with no text of
+         their own — the colour is the whole control — so without a name a screen reader is handed nine
+         anonymous buttons and a choice that cannot be made. `state_selected` is the second half of the same
+         sentence: the chip's selected state is a stroke colour, which is the one signal a reader who cannot
+         see it does not get. -->
+    <string name="color_name_red">Red</string>
+    <string name="color_name_orange">Orange</string>
+    <string name="color_name_yellow">Yellow</string>
+    <string name="color_name_green">Green</string>
+    <string name="color_name_blue">Blue</string>
+    <string name="color_name_purple">Purple</string>
+    <string name="color_name_pink">Pink</string>
+    <string name="color_name_brown">Brown</string>
+    <string name="color_name_gray">Gray</string>
+    <string name="state_selected">Selected</string>
     <string name="label_parent_category">Parent Category</string>
     <string name="label_shared">Shared</string>
     <string name="empty_categories">No categories found\nTap + to create a new category</string>
@@ -46,6 +62,9 @@
 
     <string name="action_save">Save</string>
     <string name="action_delete">Delete</string>
+    <!-- The archive's second command destroys the task and its history rather than moving it, so the label a
+         screen reader is given says which of the two it is about to do. -->
+    <string name="action_delete_forever">Delete forever</string>
     <string name="action_share">Share</string>
     <string name="action_edit">Edit</string>
     <string name="action_add">Add</string>
@@ -100,6 +119,10 @@
     <string name="empty_tasks_message">No tasks found\nTap + to create a new task</string>
     <string name="empty_statistics">No data available yet.\nCreate and complete some tasks to see statistics.</string>
     <string name="empty_profiles">No profiles found\nTap + to create a new profile</string>
+    <!-- The word on the profile the app is working in. Stage 8a added it because the switcher listed the
+         profiles without saying which one was live, and a state told only by a tint is a state a reader
+         cannot read (WCAG 1.4.1). -->
+    <string name="state_current">Current</string>
     <string name="no_tasks_in_category">No tasks in this category</string>
 
     <string name="priority_low">Low</string>
@@ -159,10 +182,16 @@
     <string name="resume_task">Resume task</string>
     <string name="action_archive">Archive</string>
     <string name="title_archive">Archive</string>
-    <string name="empty_archive_message">No completed tasks yet</string>
+    <string name="empty_archive_message">No archived tasks yet</string>
     <string name="action_restore">Restore</string>
     <string name="restore_task">Restore task</string>
-    <string name="archive_completed_at">Completed %1$s</string>
+    <!-- Stage 8a renamed this label and changed its verb. `TaskDao.getArchivedTasks` filters on
+         `archived = 1 AND is_deleted = 0` and on no status, so the timestamp the row prints is when the task
+         left the list, not proof that it finished — and the row was saying "Completed …" over unfinished
+         work. The row's state now lives in its own visible word (the task's status label, bound by
+         `ArchiveAdapter`), which is what WCAG 1.4.1 asks of a state a reader could otherwise take only as
+         ink. -->
+    <string name="archive_archived_at">Archived %1$s</string>
     <string name="no_due_date">No due date</string>
     <string name="no_category">No category</string>
     <string name="filter_all">All</string>
@@ -207,6 +236,9 @@
     <string name="error_backup_unsupported_version">Backup format version %1$s is not supported</string>
     <string name="app_locked_message">Cloud features are disabled until Firebase is configured. All local functions work normally.</string>
     <string name="action_search">Search</string>
+    <!-- The archive's field said only "Search", so a reader was told the action and not the thing it acts on.
+         The Tasks header's field has the same problem and is Stage 3's file, not this one. -->
+    <string name="hint_search_archive">Search archived tasks</string>
     <string name="sort_manual">Manual order</string>
     <string name="group_task_count_format">%1$d</string>
     <string name="drag_to_reorder">Drag to reorder</string>

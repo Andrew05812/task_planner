@@ -14,21 +14,28 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="@dimen/screen_margin"
+            android:paddingEnd="@dimen/screen_margin"
+            android:paddingTop="@dimen/spacing_normal"
+            android:paddingBottom="@dimen/spacing_normal">
 
+            <!-- The same headline role the other screens use; `Headline6` was Material 2's name for it.
+                 The id is new so `ProfileSelectionLayoutTest` can name the title rather than hunt for a
+                 TextView whose text happens to match. -->
             <TextView
+                android:id="@id/profilesTitleText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/spacing_normal"
                 android:text="@string/title_select_profile"
-                android:textAppearance="?attr/textAppearanceHeadline6"
-                android:layout_marginBottom="16dp" />
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Headline" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerViewProfiles"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:paddingBottom="80dp"
+                android:paddingBottom="@dimen/list_bottom_gutter"
                 android:layoutAnimation="@anim/layout_animation_fall_down"
                 tools:listitem="@layout/item_profile" />
 
@@ -41,7 +48,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/spacing_normal"
         android:contentDescription="@string/action_create_profile"
         android:src="@drawable/ic_add" />
 

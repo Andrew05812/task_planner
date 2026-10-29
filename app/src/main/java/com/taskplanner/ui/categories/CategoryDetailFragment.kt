@@ -1,6 +1,8 @@
 package com.taskplanner.ui.categories
 
+import android.content.res.ColorStateList
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.*
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
@@ -38,6 +40,27 @@ class CategoryDetailFragment : Fragment() {
         0xFFD81B60.toInt(), // Pink
         0xFF795548.toInt(), // Brown
         0xFF607D8B.toInt()  // Gray
+    )
+
+    /**
+     * The same nine colours, named, in the same order.
+     *
+     * A preset chip carries no text — the colour is the whole control — so without a name a screen reader is
+     * handed nine anonymous buttons and a choice it cannot make. The list is index-paired with
+     * [presetColors] because that is how the chips are built and re-decorated, and a colour added to one list
+     * without the other would name the wrong chip: `setupUI` requires the two sizes to match before it builds
+     * anything, so the mistake is a message rather than a silent mislabel.
+     */
+    private val presetColorNames = listOf(
+        R.string.color_name_red,
+        R.string.color_name_orange,
+        R.string.color_name_yellow,
+        R.string.color_name_green,
+        R.string.color_name_blue,
+        R.string.color_name_purple,
+        R.string.color_name_pink,
+        R.string.color_name_brown,
+        R.string.color_name_gray
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,18 +130,24 @@ class CategoryDetailFragment : Fragment() {
             }
 
             // Setup preset colors
+            require(presetColors.size == presetColorNames.size) {
+                "the nine preset colours and their nine names have drifted apart: ${presetColors.size} colours, " +
+                    "${presetColorNames.size} names — a chip would be announced by the wrong colour's name"
+            }
             presetColorsGroup.removeAllViews()
-            presetColors.forEach { color ->
+            presetColors.forEachIndexed { index, color ->
+                val selected =
+                    color == (viewModel.categoryDetailState.value as? CategoryDetailState.Success)?.color
                 val chip = com.google.android.material.chip.Chip(requireContext()).apply {
-                    chipBackgroundColor = android.content.res.ColorStateList.valueOf(color)
-                    chipStrokeWidth = 2f
-                    chipStrokeColor = android.content.res.ColorStateList.valueOf(
-                        if (color == (viewModel.categoryDetailState.value as? CategoryDetailState.Success)?.color) {
-                            ContextCompat.getColor(context, R.color.primary)
-                        } else {
-                            ContextCompat.getColor(context, android.R.color.transparent)
-                        }
+                    chipBackgroundColor = ColorStateList.valueOf(color)
+                    // Two *dp*, not two pixels: `chipStrokeWidth` is a raw pixel value, and at this device's
+                    // density 2f measured 0.76dp — a ring only someone with the colour could find.
+                    chipStrokeWidth = 2f * resources.displayMetrics.density
+                    chipStrokeColor = ColorStateList.valueOf(
+                        if (selected) accentColour(requireContext()) else android.graphics.Color.TRANSPARENT
                     )
+                    // The chip has no text of its own, so the name and the state are its only announcement.
+                    contentDescription = chipLabel(index, selected)
                     width = resources.getDimensionPixelSize(R.dimen.color_chip_size)
                     height = resources.getDimensionPixelSize(R.dimen.color_chip_size)
                     setOnClickListener {
@@ -180,6 +209,14 @@ class CategoryDetailFragment : Fragment() {
                                 binding.categoryNameInput.setText(state.name)
                                 binding.categoryNameInput.setSelection(state.name.length)
                             }
+                            // And paint the colour the state actually holds. `setupUI` reads the colour once,
+                            // before `loadCategory` has resolved the stored one, so without this the preview
+                            // drew the default black and no chip looked selected for an existing category —
+                            // a display-only staleness, which is exactly why nothing noticed it: the saved
+                            // value was always right. Stage 8a's tinted swatch made it visible, so the fix
+                            // belongs with it.
+                            updateSelectedColor(state.color)
+                            updateChipsSelection(state.color)
                         }
                         is CategoryDetailState.Saved -> {
                             binding.saveButton.isEnabled = true
@@ -224,20 +261,55 @@ class CategoryDetailFragment : Fragment() {
     }
 
     private fun updateSelectedColor(color: Int) {
-        binding.selectedColorView.setBackgroundColor(color)
+        // Tint the oval rather than replace it. `setBackgroundColor` swapped the drawable for a colour,
+        // which is why the preview lost its circle and its ring as soon as a colour was chosen.
+        binding.selectedColorView.backgroundTintList = ColorStateList.valueOf(color)
+    }
+
+    /**
+     * The colour the theme calls `colorPrimary`, asked of the theme rather than read from `R.color.primary`.
+     *
+     * `values/colors.xml` keeps `primary`, `on_surface` and `error` as shims for code that has not moved to
+     * the design system yet. A rename of a shim would be a compile error, but a *re-point* — which is what a
+     * design system does to its own aliases — would silently move this stroke away from every other accent in
+     * the app, and no XML sweep can see a Kotlin read.
+     */
+    private fun accentColour(context: android.content.Context): Int {
+        val value = TypedValue()
+        val answered = context.theme.resolveAttribute(
+            com.google.android.material.R.attr.colorPrimary, value, true
+        )
+        return if (answered && value.resourceId != 0) {
+            ContextCompat.getColor(context, value.resourceId)
+        } else if (answered) {
+            value.data
+        } else {
+            ContextCompat.getColor(context, R.color.ink_accent)
+        }
     }
 
     private fun updateChipsSelection(selectedColor: Int) {
         for (i in 0 until binding.presetColorsGroup.childCount) {
             val chip = binding.presetColorsGroup.getChildAt(i) as? com.google.android.material.chip.Chip
-            chip?.chipStrokeColor = android.content.res.ColorStateList.valueOf(
-                if (chip?.chipBackgroundColor?.defaultColor == selectedColor) {
-                    ContextCompat.getColor(requireContext(), R.color.primary)
-                } else {
-                    ContextCompat.getColor(requireContext(), android.R.color.transparent)
-                }
+            val selected = chip?.chipBackgroundColor?.defaultColor == selectedColor
+            chip?.chipStrokeColor = ColorStateList.valueOf(
+                if (selected) accentColour(requireContext()) else android.graphics.Color.TRANSPARENT
             )
+            // The stroke is the sighted reader's signal and the description is everyone else's; both are
+            // rewritten here so the two can never disagree after a tap.
+            if (i < presetColorNames.size) chip?.contentDescription = chipLabel(i, selected)
         }
+    }
+
+    /**
+     * What a preset chip is called, and whether it is the chosen one.
+     *
+     * The name comes from the index-paired [presetColorNames], so a colour that is added to [presetColors]
+     * without a name is refused here rather than announced as its neighbour.
+     */
+    private fun chipLabel(index: Int, selected: Boolean): String {
+        val name = getString(presetColorNames[index])
+        return if (selected) "$name, ${getString(R.string.state_selected)}" else name
     }
 
     override fun onDestroyView() {

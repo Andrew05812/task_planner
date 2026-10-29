@@ -9,7 +9,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:padding="8dp" />
+        android:paddingStart="@dimen/card_gap"
+        android:paddingEnd="@dimen/card_gap"
+        android:paddingTop="@dimen/spacing_small"
+        android:paddingBottom="@dimen/list_bottom_gutter" />
 
     <ProgressBar
         android:id="@+id/progressBar"
@@ -25,8 +28,10 @@
         android:id="@+id/emptyView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/screen_margin"
+        android:layout_marginEnd="@dimen/screen_margin"
         android:text="@string/no_tasks_in_category"
-        android:textAppearance="?attr/textAppearanceBody1"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

@@ -5,6 +5,7 @@ import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import android.text.InputType
 import android.util.TypedValue
 import androidx.core.view.isVisible
@@ -15,6 +16,7 @@ import com.taskplanner.databinding.DialogWorkRangeBinding
 import com.taskplanner.databinding.FragmentWorkHistoryBinding
 import com.taskplanner.databinding.ItemHistoryIntervalBinding
 import com.taskplanner.databinding.ItemWorkHistoryBinding
+import com.taskplanner.ui.Stage8aLayoutHarness
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -207,5 +209,88 @@ class WorkHistoryLayoutTest {
             "the label is not a button: tapping the words of a stretch must not correct it",
             stretch.historyIntervalLabel.isClickable
         )
+    }
+
+    /**
+     * Stage 8a: the two commands on a stretch are targets, and the screen says what it is.
+     *
+     * Both are visual properties rather than behaviour, which is why they belong in this file: the stretch
+     * row drew its pencil and its bin at 32dp inside the densest line on the screen — a target the thumb
+     * misses and 1.4.11 refuses — and the screen itself carried no title, so the only thing telling a reader
+     * where they were is the third icon in the bar. The glyph stays 24dp; the box it lives in grows.
+     */
+    @Test
+    fun `the two commands on a stretch are targets a finger can hit`() {
+        val stretch = intervalRow()
+        val density = themed().resources.displayMetrics.density
+        stretch.root.measure(
+            View.MeasureSpec.makeMeasureSpec((320 * density).toInt(), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        stretch.root.layout(0, 0, stretch.root.measuredWidth, stretch.root.measuredHeight)
+        for ((view, name) in listOf(
+            stretch.historyIntervalEdit to "correct",
+            stretch.historyIntervalDelete to "delete"
+        )) {
+            assertTrue(
+                "the $name control measures ${view.width / density}x${view.height / density}dp; 1.4.11 asks " +
+                    "48dp of an interactive target, and this one destroys measured time",
+                view.width / density >= 47.5f && view.height / density >= 47.5f
+            )
+        }
+    }
+
+    /**
+     * The session row's title is the only thing that says what was worked on, so it is given a second line
+     * before it is cut — the policy the task card has had since before this redesign, and which Stage 8a
+     * gave to the category row after reading its own photograph.
+     *
+     * Nothing photographed this case: the stage's 320dp frame of Work history is the empty state, so there is
+     * no row on it. And no JVM test here can ask whether a particular name fits, because Robolectric's LEGACY
+     * graphics measure text as one pixel per character and ignore `textSize` — the same wall
+     * `TaskCardWidthBudgetTest` records from Stage 4. What is measurable, and what broke when the row was
+     * pinned to one line, is the column the row actually gives its title.
+     */
+    @Test
+    fun `a long session title is given a second line before it is cut`() {
+        val binding = row()
+        binding.historyTaskTitle.text =
+            "Quarterly reconciliation of supplier invoices and the receipts filed against them"
+        Stage8aLayoutHarness.laidOut(binding.root, Stage8aLayoutHarness.NARROW_DP)
+        val density = themed().resources.displayMetrics.density
+
+        assertEquals(
+            "the session's title is the only thing that says what was worked on, and the row pins it to " +
+                "${binding.historyTaskTitle.maxLines} line(s)",
+            2, binding.historyTaskTitle.maxLines
+        )
+        assertTrue("and it says when even two lines were not enough",
+            binding.historyTaskTitle.ellipsize != null)
+        assertEquals(
+            "the title is given the row's whole content width: it measures ${binding.historyTaskTitle.width}px " +
+                "of a ${binding.root.width}px row",
+            binding.root.width - (24 * density).toInt(), binding.historyTaskTitle.width
+        )
+    }
+
+    @Test
+    fun `the screen names itself above the period filter`() {
+        val binding = screen()
+        val density = themed().resources.displayMetrics.density
+        binding.root.measure(
+            View.MeasureSpec.makeMeasureSpec((320 * density).toInt(), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        binding.root.layout(0, 0, binding.root.measuredWidth, binding.root.measuredHeight)
+        val header = binding.root.findViewById<TextView>(R.id.historyTitleText)
+            ?: throw AssertionError(
+                "the history screen carries no title, while Tasks and Profile both name themselves"
+            )
+        assertEquals(themed().getString(R.string.history_title), header.text.toString())
+        assertTrue("the title measured nothing, so nothing was laid out to be ordered", header.height > 0)
+        assertTrue("the title has to be above the filter it heads",
+            header.bottom <= binding.historyPeriodScroll.top + 1)
+        assertTrue("and the list has to stay the direct child the layout test above guarantees",
+            binding.historyList.parent === binding.root)
     }
 }

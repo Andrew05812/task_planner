@@ -17,26 +17,24 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textAppearance="?attr/textAppearanceCaption"
+        android:textAppearance="?attr/textAppearanceBodySmall"
         tools:text="09:00 – 09:30, 30 min" />
 
+    <!-- `Widget.TaskPlanner.IconButton` is the 48dp box the rest of the app uses. These two were 32dp
+         inside the densest line on the screen — the row a reader corrects measured time in, and the row
+         whose bin destroys it — and a target the thumb misses on a dense line is worse than on a sparse
+         one. The glyph stays 24dp and centred; the box around it grows. -->
     <ImageButton
         android:id="@+id/historyIntervalEdit"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        style="@style/Widget.TaskPlanner.IconButton"
         android:contentDescription="@string/history_edit_interval"
-        android:scaleType="centerInside"
         android:src="@drawable/ic_edit"
-        app:tint="@color/on_surface" />
+        app:tint="@color/ink_text" />
 
     <ImageButton
         android:id="@+id/historyIntervalDelete"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        style="@style/Widget.TaskPlanner.IconButton"
         android:contentDescription="@string/history_delete_interval"
-        android:scaleType="centerInside"
         android:src="@drawable/ic_delete"
-        app:tint="@color/error" />
+        app:tint="@color/ink_error" />
 </LinearLayout>

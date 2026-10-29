@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  The fill of the category-colour preview. An oval with a solid colour the row tints:
+  `CategoryDetailFragment` sets `backgroundTintList`, which is what a background is for, rather than
+  `setBackgroundColor`, which replaced this whole drawable with a square and turned the round colour preview
+  into a colour chip. Stage 8a split the preview in two: this file is the tinted fill, `bg_color_preview` is
+  the ring that stays the surface ink whatever colour is chosen, and the ring lives in `android:foreground` so
+  a tint cannot reach it.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <!-- White is the tint's multiplicative identity: `backgroundTintList` paints this shape with the chosen
+         colour exactly, and any other base colour would darken it. It is named through the design system
+         rather than as `@android:color/white` because the night theme re-points the same name, which is what
+         keeps the one frame before the first tint lands from showing a bright disc on a dark screen. -->
+    <solid android:color="@color/ink_surface" />
+</shape>

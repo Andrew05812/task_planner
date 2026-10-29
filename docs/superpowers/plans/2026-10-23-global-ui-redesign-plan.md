@@ -3091,6 +3091,16 @@ profile selection lists the same profiles and switches the same way.
 Screenshots: `s8a-categories.png`, `s8a-archive.png`, `s8a-work-history.png`, `s8a-settings.png`,
 `s8a-profile-selection.png`, plus `s8a-archive-dark.png`.
 
+**Done in §20q.** The gates are 113 classes / 1528 JVM tests / 0 failures / 0 skipped, `lintDebug` clean (after
+one `ResourceAsColor` error this stage introduced and lint caught), `RESULT: pass` from the contrast gate, and a
+device matrix of 18 instrumented runs — six screens' methods in three configurations (393dp day, 393dp night,
+320dp day), 18 frames, every one written by the run that checked it, on an APK whose sha256 was read back from
+`/data/app` before the first run. Thirteen frames are in the gallery. Six reviews ran; the sixth reviewed the
+first five's fixes and found two more rows that were cutting their own identifiers short, which is why the last
+two cycles exist. `item_category.xml`, `item_archive.xml` and `item_work_history.xml` are the three layouts that
+changed after their screens had already been approved once, and `docs/UI_UX_AUDIT.md` §4.12 carries each of them
+with the frame that shows it.
+
 ### 8b — Statistics and the dashboard (the only colour-re-anchoring commit)
 
 Files: `fragment_statistics.xml`, `item_dashboard_task.xml`, the chart views' style reads, and the
@@ -5042,3 +5052,372 @@ the bar's labels inherited it and spelled `CATEGOR…`, and the stage gave the n
 than move every button in the app inside a navigation stage, so the role itself is still open and still
 everywhere else. Stage 7 adds two of its own to the list, both measured and both Stage 10's: the focus-visible
 ring, and the five words that do not grow with the reader's font scale.
+
+---
+
+## 20q — Stage 8a executed: five screens onto the system, and what a sixth review found in the fixes
+
+**What was asked.** Categories, Archive, Work history, Settings and the profile switcher onto the design
+system — tokens, typography, components and spacing only. No query, no view model, no calculation, no
+navigation route, no Room, sync, backup or auth change. Archive to carry the Completed treatment rather than
+the Tasks list's; Settings to keep `exportButton`, `importButton`, `signInButton`, `signOutButton` and
+`versionText` with their meanings; the absence of Google Sign-In to be diagnosed, not decorated over; the
+switcher to keep every profile and mark the live one in a way that survives a reader who cannot see colour.
+
+### The map, built before anything was changed
+
+| screen | layout | fragment | adapter / row | tests that existed before this stage |
+|---|---|---|---|---|
+| Categories | `fragment_categories.xml` | `ui/categories/CategoriesFragment` | `CategoryAdapter` + `item_category.xml` | none |
+| Category detail (create/edit) | `fragment_category_detail.xml` | `CategoryDetailFragment` | preset chips built in Kotlin | none |
+| Category tasks | `fragment_category_tasks.xml` | `CategoryTasksFragment` | `CategoryTaskAdapter` | none |
+| Archive | `fragment_archive.xml` | `ui/archive/ArchiveFragment` | the row adapter was a `private class` inside the fragment; `item_archive.xml` | `ArchiveViewModelTest` only |
+| Work history | `fragment_work_history.xml` | `ui/work/WorkHistoryFragment` | `WorkHistoryAdapter` + `item_work_history.xml`, `item_work_interval.xml`, `item_history_interval.xml` | `WorkHistoryLayoutTest` (8 methods), `WorkHistoryViewModelTest` |
+| Settings | `fragment_settings.xml` | `ui/settings/SettingsFragment` | — | none |
+| Profile selection | `fragment_profile_selection.xml` | `ui/profile/ProfileSelectionFragment` | `ProfileAdapter` + `item_profile.xml`, `dialog_profile_edit.xml` | none |
+
+Two facts the map produced changed the stage. The archive's row binder was unreachable from a test because it
+was private inside its fragment, so the Completed treatment the plan asks for could not have been asserted on a
+bound row — it is now `ui/archive/ArchiveAdapter.kt`, constructed by nobody but the fragment and by the tests.
+And `fragment_profile_selection.xml` had no test of any kind, while its row is the only place in the app where
+a reader chooses whose data they are about to write into.
+
+### What moved
+
+Fourteen layouts, three Kotlin files, one new drawable (`bg_color_fill.xml`), one new values file
+(`values/ids.xml`), six new strings and one renamed, `scripts/capture-ui-matrix.py` gained an `--s8a-matrix`
+mode, and six test classes were written — five on the JVM (four screens and the token sweep) plus one
+instrumented class — alongside `Stage8aLayoutHarness`, and `WorkHistoryLayoutTest`, which this stage found at
+eight methods, is left at eleven.
+
+### The gate the stage wrote for itself
+
+`Stage8aTokenSweepTest`, six methods, all source-text: the banned values the substitution table replaced;
+every padding and margin a `spacing_*` token names; every gap that belongs to **no** step of the scale (a
+`10dp` is as off-system as a `16dp` typed instead of a token, and it is the one the first version of the gate
+could not see); every `?attr/textAppearance…` a layout asks of the theme, checked against the mapping the theme
+actually publishes; and no layout giving one id to two views. The sixth method builds the patterns the gate
+forbids and refuses the file if the matchers no longer see them — a sweep whose regular expressions have rotted
+reports a clean screen forever.
+
+### Tests, written first and seen failing
+
+Four of the five REDs below are recorded where they happened, in the order they happened; the fifth is the one
+this stage wrote against its own fixes.
+
+- The text-appearance gate went RED on exactly two lines, `fragment_categories.xml:59` and
+  `fragment_category_tasks.xml:34`, both asking `?attr/textAppearanceBodyLarge` — an attribute neither
+  `values/themes.xml` nor `values-night/themes.xml` maps, so the view falls back to Material's own default and
+  needed a hand-written colour to look right. The substitution table in this plan had sent `Body2` to
+  `textAppearanceBodyMedium`, which the theme maps to the **Body** role while `Body2` itself resolves to
+  **Meta**; following the table would have enlarged and darkened five secondary lines. The table is corrected in
+  the roadmap commit, and the gate refuses any unmapped appearance in either theme file.
+- `ProfileSelectionLayoutTest`'s recycle method was written against `adapter.onBindViewHolder` and would not
+  compile — the override is protected. It now binds the same `ProfileViewHolder` twice through the public
+  `bind`, which is the recycle path itself, and asserts the mark comes off the profile that is no longer
+  current and goes back on the one that is.
+- The instrumented `goToProfile` helper asserted `isDisplayed()` of the Settings row on the account screen and
+  failed on a healthy screen: the row is below the fold, and `isDisplayed` means "in the window right now",
+  which is not the claim anyone wanted. It scrolls first now, and the difference is written into its doc.
+- The archive row's state test was written against a `contentDescription` and passed on a card that showed
+  nothing; rewritten against the visible label it went RED on the unfinished row, which is the defect (§20q's
+  first review finding below).
+- **The stage's own fix, reviewed, produced a fifth RED.** After the categories and archive rows had been
+  changed to stop cutting their identifiers, a fresh review of that delta asked whether the new
+  `CategoriesLayoutTest` method measured anything at all. It did not. Its first draft asserted
+  `lineCount == 2` on text laid out by Robolectric — and Robolectric's LEGACY graphics return
+  **one pixel per character** from `Paint.measureText` and ignore `textSize`. Measured here, not assumed: an
+  81-character string came back as `81.0`, and a name the device cut to "Quarterly reconciliation of supp…"
+  laid out as one un-ellipsized line in the JVM test. So `lineCount == 2` could never have been true, and the
+  test failed on a layout that was already right. The NATIVE graphics mode that would measure text has no
+  binary for this machine (`resource native/windows/x86_64/robolectric-nativeruntime.dll not found`) — the same
+  wall `TaskCardWidthBudgetTest` wrote down in Stage 4, walked into again from the other side. The fix is not a
+  weaker assertion but a different test in a different place: the JVM methods now measure the **column** (the
+  width the constraint chain hands the name, that the count stays inside the card, that the state mark sits
+  under the title rather than across it), and "the seeded name is read in full" is asserted by
+  `Stage8aScreensInstrumentedTest` at 393dp and 320dp, by the renderer that ships. Every RED in this stage's
+  own history that came from a JVM text-metric claim is suspect for the same reason; the archive and profile
+  claims were already on the device, and the two that were not are now.
+
+### The gates, on the tree this commit leaves
+
+`./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest` and
+`python scripts/contrast_report.py --resources app/src/main/res --check`:
+
+- JVM suite: **1528 tests, 0 failures, 0 errors, 0 skipped** across 113 classes — larger than the 1493 Stage 7
+  recorded, and no test was deleted, disabled or weakened.
+- Lint: clean, after one error this stage introduced and lint caught — see below.
+- `RESULT: pass` from the contrast gate, with `ink_success` at 4.49:1 recorded as "kept off that surface".
+- The installed pair's sha256 matched the built pair on `emulator-5584` before every matrix run: the last cycle
+  installed `f75da1cc168e4330…` (app) and `588289c46e4d02dc…` (test) and read both hashes back from
+  `/data/app/~~gYFmEQQU…/com.taskplanner-IVkmk_GH…/base.apk` and `/data/app/~~Az1a9N_P…/com.taskplanner.test-…​/base.apk`.
+
+### The defect the stage introduced, and what caught it
+
+Refactoring the preset chips' stroke to read the theme role, I wrote
+`ColorStateList.valueOf(if (selected) accentColour(...) else android.R.color.transparent)`. That passes a
+*resource id* where a colour is expected: `android.R.color.transparent` is 16711714, not 0, so every unselected
+chip would have been stroked with an opaque pale colour instead of nothing. The previous code was right
+(`ContextCompat.getColor(context, android.R.color.transparent)`), and the mistake was entirely mine.
+`lintDebug` caught it as `ResourceAsColor` on the first run after the change; the fix is
+`android.graphics.Color.TRANSPARENT` at both sites. It is recorded here because the stage's own rule is that a
+refactor is not proven by the tests that still pass — the JVM suite never looked at that expression, and the
+device matrix does not photograph the category editor.
+
+### The device matrix
+
+Five cycles, because the rule is that the frames come from the binary that ships. Each cycle: build, install,
+read both hashes back off `/data/app`, run, then look at the pictures.
+
+| cycle | APK (app) | what it was for | result |
+|---|---|---|---|
+| evidence1 | — | first attempt on the freshly installed pair | refused every method: the guest was thrashing, not the app (§20q's device incident below) |
+| evidence2 | `eea568ca…` | the five screens after the first round of review fixes | 18/18 OK; reading the frames found three defects no test had |
+| evidence3 | `c6461a59…` | those three fixes (night glyph tint, archive title at 393dp, the switcher's mark inside the column) | 18/18 OK; two comment-only edits had forced a rebuild |
+| evidence4 | `8a9c9ce3…` | the category row's name, which the sixth review's sweep found cut at 393dp | 18/18 OK; the same review's 320dp frame showed the archive row cutting its title, so the row was not finished |
+| evidence5 | `f75da1cc…` | the archive row's state mark moved to its own line, and the device-measured name claims | **18/18 OK, 18 frames on disk (6 per configuration), `exit=0`, device restored** |
+
+The final matrix, `build/ui-logs/s8a/s8a-matrix.md`, is one row per instrumentation — 18 runs, each with its
+own configuration readback, warm-up cost, focus state, the frame it owed and the activity it left the device
+in:
+
+| configuration | readback | result |
+|---|---|---|
+| `393-light-10` | `Physical density: 220`, `font=1.0`, `mComputedNightMode=false` | 6 of 6 runs OK — `s8a-categories.png`, `s8a-archive.png`, `s8a-work-history.png`, `s8a-settings.png`, `s8a-profile-selection.png`, `s8a-categories-narrow.png` |
+| `393-dark-10` | same, `mComputedNightMode=true` | 6 of 6 runs OK — the same six frames, at night |
+| `320-light-10` | `Physical density: 220 / Override density: 270`, `mComputedNightMode=false` | 6 of 6 runs OK — the same six frames at the narrowest declared width |
+
+One method per instrumentation, and a configuration's verdict is the union of what its six runs left on disk.
+Each run's own frame is deleted from the device before it starts and required by name afterwards, so a row
+cannot pass on another method's picture; the local directory for a tag is cleared when the tag is entered, so a
+configuration that refuses every run cannot list the previous cycle's frames as its own. Every frame was written
+by the run that checked it: the test verified the destination id the `NavController` reported and an anchor view
+only that screen draws before the shutter opened, and refused the file when the device disagreed with the tag.
+The list of methods comes from the class on disk, not from the script's table, so a test added without a frame
+is a refusal. Thirteen of those frames are in the gallery: five screens by day, the same five at night, the
+archive and two category views at 320dp.
+
+### What looking at the frames caught, that no test had
+
+Five defects were visible only in the photographs, and each is the kind of thing a geometry test cannot see.
+Two of the five were found in a frame that had already been approved once.
+
+- **The archive's state glyph was a black square in the night theme.** `ic_archive.xml` carries
+  `android:fillColor="#FF000000"` — a Stage-0 icon that has never been themed, unlike its sibling `ic_check.xml`
+  which reads `?attr/colorControlNormal`. Placed beside the new state word it painted a solid black box on the
+  `#1E211F` card, which is the one place in the app where that icon carries meaning rather than decoration.
+  Fixed with `app:drawableTint="@color/ink_text_secondary"` on the mark, so the glyph follows the label it
+  stands for instead of the file it came from.
+- **The state word cost the title its second line at 393dp.** The first frame showed
+  "Stage 8a unfinished ar…": the row was ellipsizing a title it used to fit, because the mark took ~90dp of the
+  text column. The title got `maxLines="2"`, which is what the task card's title has had since before this
+  redesign.
+- **The switcher's "CURRENT" mark broke the address into five lines.** Placed between the text column and the
+  two 48dp buttons, it left the column ~90dp wide, and the frame showed
+  `stage8a / -113453 / 48567600 / @example / .test`. The mark moved *inside* the column, under the address: the
+  same word, the same check glyph, the same `isVisible = user.isCurrent` binding, and a column wide enough to
+  show an address in two lines.
+- **The category row cut the one field that tells two categories apart** — and this is the one that had already
+  been looked at and passed. Its frame read "Quarterly reconciliation of supp…" beside a row that also said
+  "0 tasks", so the only distinguishing text on the screen was the only text that was shortened. The row's own
+  comment claimed that was deliberate and that it matched the task card; the claim was checked against
+  `item_task.xml`'s history and is false — `taskTitle` has had two lines since `b367904`, before Stage 4, which
+  kept them. The name now gets the same two lines, and the comment says what is actually measured where.
+- **The archive row's own mark took the room its title needed at 320dp.** The stage's narrow frame read
+  "Stage 8a / unfinished a…" with the timestamp wrapped to three lines under it, because the state word was
+  constrained into the title's path and a mark plus two 48dp commands left the name ~86dp. The row's existing
+  test could not see it: it compared the title with `restoreButton`, which sits on the far side of the mark, so
+  it passed on a row that was cutting the title. The mark is given a line of its own now, under the name — the
+  place the task card gives its state — and the title and the timestamp both reach the commands. Both widths are
+  in the frames above, and the character count is asked on the device.
+
+The lesson is the one Stage 6 and Stage 7 each paid for separately, and Stage 8a paid twice: a test that asserts
+a row's geometry on the JVM and a test that asserts a screen's identity on a device both pass on a layout that
+reads badly, and a frame that has been read once is not a frame that has been read at every width. That is why
+this stage's matrix runs every screen in three configurations rather than one, and why the last two fixes cost
+two more full cycles rather than a note in the margin.
+
+### The six reviews, and what they found
+
+Five reviewed the stage; the sixth reviewed the first stage's fixes and is the reason the last two frames look
+the way they do. Every BLOCKER and MAJOR was either fixed in this commit or answered with a reason and a
+number.
+
+**Reviewer 1 — architecture and remit.** BLOCKER: the `BodyLarge` substitution, described above — fixed, and
+gated. MAJOR: the archive row's "word" was a `contentDescription` on an icon, so the test that asserted it
+passed on text no sighted reader ever sees, while the visible line read "Completed …" over an unfinished task —
+fixed by making the mark a visible label carrying the task's own status word, renaming the timestamp string to
+what it records, and asserting the laid-out words of both rows. MAJOR: the switcher truncated the one field that
+distinguishes two profiles (`s8a-profile-selection.png` showed "stage8a-other-9429194…") — the address wraps now
+and the instrumented test asks the `Layout` whether the last line dropped characters. MAJOR: the matrix's frame
+gate compared a cumulative directory count against `owed = 1`, so five of six runs could not fail it, and two
+methods wrote the same `s8a-categories.png` — both fixed, by name, and each run's own frame is deleted from the
+device before it starts. MAJOR: five hand-rolled title blocks where `header_screen.xml` exists, and a test
+comment claiming an include that does not — the comment is gone, and the decision is written into
+`fragment_categories.xml`: that header is Tasks' title *plus a count, three commands and a search field*, four
+of which these screens do not have; a title-only include is Stage 11's call with 8b–8d's headers in front of it.
+MINORs fixed: `ids.xml`'s comment overstated what a declared id protects (it catches a typo at link time; it
+does not catch reuse across layouts, which is legal and silent — the duplicate-id test is the guard);
+`state_current` was filed in the archive block; the seven "Body size painted with Meta colour" hybrids; two
+headings spelled as a raw attribute where `Widget.TaskPlanner.SectionHeader` is the name of the decision; the
+mis-attributed "44dp is what Stage 4 measured"; the `<=` that a pair of zeros satisfies; `bg_color_fill`'s
+`@android:color/white`; the three misindented `<TextView` lines; the dead tuple element and the English
+"Firebase" literal in the instrumented class; the fixture that seeded profiles with `avatarColor = 0` and so
+published an evidence frame of two rows whose avatars had vanished.
+
+**Reviewer 2 — visual conformance.** Verdict per screen: Categories better, Archive better but the roughest,
+Work history better, Settings better and the strongest of the five, Profile selection better with the most new
+rough edges. Its MAJORs: the 320dp archive title clips mid-word while the meta wraps; list cards sit at two
+gutters inside one stage (8dp on Categories/Archive, 20dp on Settings/switcher); the archive and work-history
+titles do not align with the column beneath them; the switcher's avatar initial is nearly invisible. The gutter
+split and the title/column alignment are **not** fixed here and are recorded below as 8b–8d's to settle
+together, because moving a gutter on one screen of a five-screen stage is how a stage ends up with two of each.
+The avatar is fixed by the fixture. The 320dp clip **was** answered as "the row's designed behaviour" — and that
+answer was wrong, which is the sixth review's first finding.
+
+**Reviewer 3 — accessibility.** BLOCKER: the category editor's nine preset chips were `Chip(context)` with no
+text and no description — nine anonymous buttons, and a selection drawn only as a stroke colour. Fixed: each
+chip is named (Red…Gray), the chosen one says "Selected", the stroke is 2 **dp** rather than the 2 pixels
+`chipStrokeWidth` was being handed, and the two lists' sizes are required to match before any chip is built.
+MAJORs: the strike-through is not announced, which the visible status word answers; the FAB's fill measures
+**1.07:1** by day and **1.43:1** by night against the page — below the 3:1 WCAG 1.4.11 asks of a shape a reader
+has to find, and the same figure the redesign already rejected for the navigation plate. It is
+`Widget.TaskPlanner.Fab`, drawn by Tasks, Profile and Categories, all photographed by earlier stages, so it is
+Stage 10's to settle and it is recorded with the number rather than moved here. The same for unselected chip
+strokes (1.28:1) and the outlined button's rectangle (1.25:1), where `Field` already chose `ink_outline_strong`
+(3.55:1). Its clean measurements are recorded too: every touch target on the five screens is 48dp or larger (the
+two command glyphs sit exactly 48.0dp apart), the archive mark reads 5.47:1 by day and 5.93:1 by night, and the
+disabled "SYNC NOW" at 2.40/3.19 is exempt under 1.4.3's inactive-component rule — stated, not assumed.
+
+**Reviewer 4 — test quality: VOID, and recorded as void.** It returned "no findings" over files and symbols
+that do not exist in this repository (`itemArchiveList.clear()`, `ProfileAdapter.hasProfileType`, ids named
+`item_profile_type_icon`, an `ids.xml` whose entries are not the seven this branch declares). Its report was
+discarded rather than counted, and the review was re-run. A green verdict from a reviewer that read a different
+codebase is the most dangerous kind of pass, and a stage that cites five reviews when four were usable is
+lying about its own evidence.
+
+**Reviewer 5 — silent failures.** MAJORs, all fixed: the instrumented class leaked its second fixture profile
+(`SeededProfile.takeAway` deletes only the signed-in one, and this class is the only one in the suite that seeds
+a second); the matrix's per-run frame gate could not fail; a fully refused configuration still listed the
+previous run's frames as its own evidence; a typo in `--s8a-only` exited 0 having measured nothing; the category
+colour preview painted the *default* colour for every existing category, because `setupUI` reads the state
+before `loadCategory` resolves it and the `Success` branch never re-painted — display-only, which is exactly why
+it survived, and the reason the tinted swatch made it worth fixing. It also found that
+`AuthRepository.linkProfile` inserts with `is_current = true` before the session moves, so a read between the two
+statements sees two current profiles — the flag Stage 8a is the first code to draw. That one is not fixed here
+(it is auth, which this stage may not touch) and is written into `docs/PRODUCT_ROADMAP.md` as Stage 13's, with
+the smallest fix named.
+
+**Reviewer 6 — the delta review of the stage's own fixes, and the most productive of the six.** Asked to
+review one layout change and its test, it returned eight findings. Five were taken, two were checked and
+answered, one was refused with a reason.
+
+- *Taken, MAJOR:* the new `CategoriesLayoutTest` method asserted a `lineCount` that Robolectric cannot measure,
+  and its "measurement" half duplicated an existing assertion. Rewritten as described above, and the same
+  weakness was swept out of the archive and work-history methods.
+- *Taken, MAJOR:* the category row's name is the row's only identifier and it is cut at 393dp — the defect the
+  stage had already been shown and had written off. Fixed, with the false attribution in the file's comment
+  corrected against `git log -S`.
+- *Taken, MAJOR:* **the archive row has the same live defect at 320dp and no test can see it.** Verified against
+  the stage's own `320-light-10` frame before anything was changed, then fixed as described above.
+- *Taken, MAJOR:* the work-history row's session title is pinned to one line. Nothing photographs it (that
+  stage's 320dp frame is the empty state), so it is given the same two-line policy with a JVM measurement of the
+  column and a note saying why it is not a glyph measurement.
+- *Taken, MINORs:* "the icon container every other list in the app uses" — `bg_icon_container` is in exactly two
+  layouts, `item_category.xml` and `row_list.xml`; the comment now names the one it matches. The claim that the
+  archive's meta line dangles its separator "in both frames" was written from the old layout and is re-stated
+  from the final ones.
+- *Checked and answered:* "stage 8a is carrying behaviour, split it into more commits". The three examples are
+  the status word, the "Current" mark and the colour repaint, and each is required by this stage's own
+  acceptance criteria — a state that reads without colour alone, an active profile obvious beyond colour, and a
+  preview that shows the stored colour. The brief asks for one meaningful commit per stage, so they stay one
+  commit, and the deviation is stated in full below rather than left for a reader to infer from a diff.
+- *Checked and refused as factually wrong:* the claim that the fixes left `s8a-categories.png` contradicting the
+  comment that cites it. The frame in the gallery is the fixed one; what the comment describes is the frame the
+  previous cycle produced, and the sentence now says so instead of naming a file that no longer shows it.
+- *Answered, not a defect:* the "BLOCKER" that `ids.xml`, `ArchiveAdapter.kt` and `bg_color_fill.xml` are
+  untracked. They are new files in an uncommitted stage; the commit stages them.
+
+### The Google Sign-In diagnosis, since the brief asked for a diagnosis and not a button
+
+`signInButton` is `GONE` on Settings, `signOutButton` is `GONE`, the notice under the cards is
+`cloudNoticeText` = `app_locked_message`, and `syncNowButton` is disabled. All four are asserted on the device,
+in `settingsKeepsItsControlsAndExplainsTheAbsentSignIn`. The reason is in the build, not in the layout:
+`CloudConfig.isConfigured` is false because all four Firebase Gradle properties default to `NOT_CONFIGURED` and
+there is no `google-services.json` in the repository, so the sign-in path is not hidden by the restyle — it was
+never reachable in this build. No decorative button was added, and the stage's report does not call the existing
+stub a working authorisation flow. Building it is Stage 13's, with the data-preservation rule written down first.
+
+### Deviations from "tokens only", stated plainly
+
+The brief's rule was presentation only. Six changes go beyond a token swap, and each is here because the stage's
+own acceptance asked for the thing it makes possible:
+
+1. `ArchiveAdapter` decides the strike-through from `task.status` — the plan's 8a acceptance is "Archive's rows
+   read their completion without colour alone", and a style cannot see data.
+2. The archive row now shows the task's status **word**, and `archive_completed_at` became
+   `archive_archived_at` = "Archived %1$s". This is copy, not logic: the row no longer claims a completion the
+   query does not filter for. `empty_archive_message` ("No completed tasks yet") became "No archived tasks yet"
+   for the same reason.
+3. `ProfileAdapter` binds `currentProfileMark.isVisible` to `user.isCurrent` — the brief's own requirement.
+4. `CategoryDetailFragment` gained the `Success`-branch repaint, the chip names and the dp stroke. The repaint is
+   a defect fix on a screen this stage restyled; no data path changed.
+5. Two new strings (`action_delete_forever`, `hint_search_archive`) and nine colour names, all in
+   `values/strings.xml`, all reachable only as accessibility labels.
+6. Three rows changed their **line structure** rather than their tokens: the archive row's state mark moved under
+   the title, and the category and session titles were given the second line the task card has. This is layout on
+   the same components, and the reason in every case is the same one the frames gave: the row was shortening the
+   text that identifies it.
+
+Nothing in the diff touches a DAO, a repository, a query, a sync or backup path, a navigation graph, or an auth
+call site.
+
+### Open after Stage 8a
+
+- The card gutter split (8dp vs 20dp) and the title/column inset split — one decision for 8b–8d.
+- `Widget.TaskPlanner.Fab` at 1.07:1 / 1.43:1, unselected chip strokes at 1.28:1, outlined-button strokes at
+  1.25:1 — Stage 10's, with the numbers in `docs/UI_UX_AUDIT.md` §4.12.
+- `scripts/contrast_report.py` scores text against the untinted `ink_surface` while the rendered card carries
+  Material's elevation tint; the true figures are ~0.4–0.5 lower. Everything still passes; Stage 11's evidence
+  should read the tinted surface.
+- `archiveCategoryChips` is dead interface: the container is in the layout, `setCategoryFilter` waits in the view
+  model, nothing populates it. Asserted as empty rather than deleted.
+- The archive row's meta line ends its first line with the "·" separator at both 393dp and 320dp, because the
+  timestamp and the category are one `TextView`. The fix is the same decision as the dead filter row above —
+  whether the category gets a line of its own — so it is recorded with it, not fixed apart from it.
+- At 320dp the category row still shortens a 45-character name, over two lines. That is the declared bargain for
+  the narrowest width the app supports — the name gives way visibly, in front of the reader, and the count stays
+  on the card — and it is now asserted as such on the device rather than left as an untested claim.
+- The work-history row's new second line is unexercised by any frame: this stage's 320dp photograph of that
+  screen is its empty state. A seeded session with a long name belongs to the stage that photographs populated
+  history.
+- `Caption` (12sp) has no user on these five screens; the two dense interval lines are where it belongs.
+- The five titles are hand-rolled where `header_screen.xml` exists.
+- `R.color.primary` survives in Kotlin (`AvatarView`, `CalendarCellAdapter`, `CalendarViewController`) — the
+  sweep sees XML only, and a Kotlin-scoped sweep is a later stage's.
+- The archive's row and the Tasks card both re-declare the status→label `when`; this is the fourth copy, and the
+  shared helper belongs to a stage allowed to change the other three.
+- **A tooling limit worth carrying forward:** no JVM test in this repository can ask whether a string fits its
+  box, and the reason is now measured rather than remembered (LEGACY `measureText` = 1px/char, no NATIVE binary).
+  Every stage that restyles text has to answer that question on a device. A future stage that adds the native
+  Robolectric runtime would move a whole class of claims off the emulator and back into a 5-minute suite.
+
+### What Stage 8a leaves standing from Stage 6 and Stage 7
+
+All eight of Stage 6's open items and all of Stage 7's remain open and untouched: the nav labels still do not
+respond to font scale (WCAG 1.4.4, Stage 10), the focus-visible ring is still Stage 10's, `reportZoneButton` is
+still Stage 8d's, and no Stage 6 or 7 file was edited except where Stage 8a's own screens meet them.
+
+### The device incident, because it changed the schedule and belongs in the record
+
+The first matrix attempt on the freshly installed pair refused every method. The system log said why:
+`Displayed com.taskplanner/.ui.MainActivity: +1m20s128ms`, then `am_anr … failed to complete startup` and
+`am_kill … bg anr`, with `system_server` spending 10.2s and SystemUI 81.8s in GC on a host with 1.35 GB free of
+16. The emulator's guest was thrashing, not the app. `adb emu kill` plus a cold restart of the same AVD took the
+same cold start from 80 s to 4 s, and every run after that answered `OK (1 test)`. The warm-up budget in
+`open_bar_screen` was raised from 24 to 48 tries for the reason this measurement gives, and a refused warm-up
+now clears the tag so the next method re-warms instead of inheriting a launcher. The condition came back once
+more, in a different shape: after a 10-minute Gradle invocation finished with the daemon still resident, the
+host was at 87 % memory and `adb` answered `device not found` for a live emulator. `--stop`, twenty seconds, and
+the install went through. The rule this stage learned is that the matrix and the build are never in flight at
+the same time on this machine.

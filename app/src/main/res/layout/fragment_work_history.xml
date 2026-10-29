@@ -8,19 +8,39 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- The screen's name. Tasks, Profile and the editor each carry one; this screen and the three it sits
+         beside in Stage 8a were identified only by the bar's icon, which answers "where am I" with a glyph.
+         `historyTitleText` is declared in `values/ids.xml` so the layout test can name it before the screen
+         had one, and the list below keeps its place as a direct child of the root — `WorkHistoryLayoutTest`
+         asserts exactly that, and a header that pushed the list into a container would fail a test about
+         growth rather than about type. -->
+    <TextView
+        android:id="@id/historyTitleText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/screen_margin"
+        android:layout_marginTop="@dimen/spacing_normal"
+        android:layout_marginEnd="@dimen/screen_margin"
+        android:text="@string/history_title"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Headline"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <HorizontalScrollView
         android:id="@+id/historyPeriodScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_small"
         android:scrollbars="none"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/historyTitleText">
 
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/historyPeriodChips"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingStart="@dimen/spacing_medium"
+            android:paddingEnd="@dimen/spacing_medium"
             app:singleLine="true"
             app:singleSelection="true" />
     </HorizontalScrollView>
@@ -29,10 +49,10 @@
         android:id="@+id/historySummary"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="12dp"
-        android:textAppearance="?attr/textAppearanceSubtitle1"
+        android:layout_marginStart="@dimen/spacing_medium"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:layout_marginEnd="@dimen/spacing_medium"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
         app:layout_constraintTop_toBottomOf="@id/historyPeriodScroll"
         tools:text="5 h 20 min measured · 12 stretches · 4 sessions" />
 
@@ -40,10 +60,10 @@
         android:id="@+id/historyRange"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="@dimen/spacing_medium"
         android:layout_marginTop="2dp"
-        android:layout_marginEnd="12dp"
-        android:textAppearance="?attr/textAppearanceCaption"
+        android:layout_marginEnd="@dimen/spacing_medium"
+        android:textAppearance="?attr/textAppearanceBodySmall"
         app:layout_constraintTop_toBottomOf="@id/historySummary"
         tools:text="18 Jun 2026 – 18 Jun 2026" />
 
@@ -51,9 +71,9 @@
         android:id="@+id/historyList"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/spacing_small"
         android:clipToPadding="false"
-        android:paddingBottom="24dp"
+        android:paddingBottom="@dimen/spacing_large"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@id/historyRange"
         tools:listitem="@layout/item_work_history" />
@@ -73,8 +93,9 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:padding="24dp"
+        android:padding="@dimen/spacing_large"
         android:text="@string/history_empty"
+        android:textAppearance="?attr/textAppearanceBodySmall"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

@@ -3,6 +3,7 @@ package com.taskplanner.ui.profile
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.View
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -80,6 +81,13 @@ class ProfileAdapter(
                 
                 // Set border for profiles without email
                 avatarBorder.visibility = if (user.email.isBlank()) View.VISIBLE else View.GONE
+
+                // Which profile the app is working in. `is_current` has been a column since the profile
+                // table was written and the row never read it, so the switcher listed profiles without
+                // saying which one is live. A word and a check glyph, not a tint: the state has to survive
+                // a reader who cannot see the difference between two greys (WCAG 1.4.1), and a recycled row
+                // has to be able to come back unmarked.
+                currentProfileMark.isVisible = user.isCurrent
                 
                 // Show/hide edit and delete buttons
                 editProfileButton.visibility = View.VISIBLE

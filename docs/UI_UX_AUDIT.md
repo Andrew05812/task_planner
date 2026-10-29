@@ -398,6 +398,108 @@ twelve frames in each of the twelve configurations — 144 photographs, every on
 allowed to become a file. §20o of the plan lists the configurations, what each run cost, and the frames the
 rules refused before they were fixed.
 
+### 4.12 The five screens Stage 8a restyled, and what its own reviews measured — `before/04-categories.png`,
+`before/13-settings.png`, `before/14-profile-selection.png`
+
+Categories, Archive, Work history, Settings and the profile switcher were the last screens still drawn in the
+baseline's language. Archive and Work history have no "before" frame at all: until Stage 3 put search, sort,
+new topic, archive and work history into the Tasks header, the kebab that reaches them was never rendered, so
+nobody could open them to photograph them.
+
+Three of the five named themselves for the first time in this stage (`categoriesTitleText`,
+`archiveTitleText`, `historyTitleText`, `profilesTitleText`, `settingsTitleText`), and the row of the switcher
+that shows which profile the app is working in is new as well.
+
+**Resolved in Stage 8a**, each one found by a reviewer rather than by the person who wrote the code, and each
+measured rather than judged:
+
+- **A state word only a screen reader was ever given.** The archive row's mark carried "Archived" as a
+  `contentDescription` and nothing on the card, while its visible line read "Completed …" over tasks that were
+  archived *unfinished* — the query `getArchivedTasks` filters on `archived = 1` and on no status. The row now
+  shows the task's own status label (the same four strings the Tasks card uses) as visible text, the
+  strike-through stays only on the finished one, and the timestamp line is renamed to what it records:
+  `Archived %1$s`. WCAG 1.4.1 is satisfied by a word a sighted reader can read, not by an attribute.
+- **The one field that distinguishes two profiles was cut to a few characters.** `s8a-profile-selection.png`
+  showed "stage8a-other-9429194…" and "stage8a-9…": the address was pinned to one ellipsized line and the new
+  current-profile mark took the room. The name keeps one line and gives room; the address wraps and is read in
+  full, and the instrumented test now asks the laid-out text whether it dropped any characters.
+- **Nine colour chips with no names.** The category editor builds its preset chips in Kotlin with no text and
+  no description, so a reader who cannot see colour was handed nine anonymous buttons and a selection drawn
+  only as a stroke colour. Each chip is now named (Red…Gray) and the chosen one says so; the stroke is 2 dp
+  rather than the 2 *pixels* `chipStrokeWidth` was being given.
+- **The colour preview painted the wrong colour for every existing category.** `setupUI` reads the state once,
+  before `loadCategory` resolves the stored one, and the `Success` branch never re-painted it — so opening a
+  green category drew black and ticked no chip. Display-only, which is why nothing had ever noticed; the
+  restyle made it visible, so it is fixed here.
+- **A type attribute the theme does not answer.** Two empty-state lines were moved to
+  `?attr/textAppearanceBodyLarge` as the "modern" spelling of `Body1`. Neither `values/themes.xml` nor
+  `values-night/themes.xml` maps that attribute, so the view falls back to Material's own default and needs a
+  hand-written colour — which is what the diff showed. The sweep now refuses any text appearance the theme
+  does not map, and the plan's substitution table is corrected: `Body2` belongs to `Meta`
+  (`?attr/textAppearanceBodySmall`), not to `Body`, and the `Body1` row it never had is written down.
+- **The fixture made the evidence look broken.** The seeded profiles carried `avatarColor = 0`, the model's
+  default, so the switcher's own photograph showed two cards with invisible avatars and a floating white "S".
+  The app's creation path always sets a colour; the fixture now does too.
+- **The one field that distinguishes two categories was cut to a few characters.** The same defect the
+  switcher had, in a row this stage had already declared finished: its 393dp photograph read
+  "Quarterly reconciliation of supp…" beside a row that also said "0 tasks", so the only part of the screen
+  that told the two apart was the part that had been shortened. The name now takes the two lines the task
+  card's title has carried since before this redesign (`b367904`), and the seeded name is asked whether it
+  dropped any characters on the device, at 393dp and at 320dp both. `CategoriesLayoutTest` measures the
+  column that opens up — the width the chain hands the name, and that the count is still inside the card.
+  Whether a string fits a box is not a question this repository's JVM tests can ask at all: Robolectric's
+  LEGACY graphics return one pixel per character from `measureText` and ignore `textSize` (measured here: 81
+  characters came back as 81.0px), and the NATIVE mode that would measure it has no binary for this machine —
+  the wall `TaskCardWidthBudgetTest` wrote down in Stage 4. The first draft of the category test in this stage
+  reached for a line count anyway and failed on a layout that was right, which is how that limit got
+  re-measured.
+- **The archive row's own mark took the room the task's name needed.** The state word this stage added to that
+  card was constrained into the title's horizontal path, and beside two 48dp commands it left the name ~86dp
+  at 320dp: the stage's own narrow frame read "Stage 8a / unfinished a…", and the timestamp line under it
+  wrapped to three. The mark is given a line of its own now, under the name, which is where the task card puts
+  its state too, and the title and the timestamp both reach the commands. `a long title keeps both commands
+  inside the card at 320dp` had been passing on the broken row because it compared the title with
+  `restoreButton`, which sits on the far side of the mark — the measurement that catches it now compares the
+  title with the mark and asks where the mark actually is.
+
+**Open after Stage 8a**, with the numbers, because these are shared components and Stage 8a's rule was not to
+move them:
+
+- The **FAB's boundary**: fill `#EEF3F2` against the page `#FBF9F6` is **1.07:1** by day and `#26322E` against
+  `#12100F` is **1.43:1** by night — measured on the frames, and below the 3:1 WCAG 1.4.11 asks of a shape a
+  reader has to find. The glyph inside it is fine (5.27 / 7.40). This is the same figure the redesign rejected
+  for the navigation plate, and it belongs to `Widget.TaskPlanner.Fab`, which Tasks, Profile and Categories all
+  draw — Stage 10's to settle.
+- **Unselected chips and outlined buttons have no visible rectangle**: measured strokes of **1.28:1** (chip)
+  and **1.25:1** (`IMPORT DATA`) against their backgrounds. The `Field` style already solved this with
+  `ink_outline_strong` (3.55:1 on the archive search box); the chip and outlined-button styles were not carried
+  along with it.
+- A **checked** filter chip's fill is **1.07:1 / 1.43:1** from the page, so the selected period on Work history
+  and the selected category in Archive are told by the accent stroke (5.62:1 / 10.56:1) and by nothing else.
+  That passes 1.4.11 on the stroke; a check icon would make it survive a colour-blind reader and a future
+  theme, and `Widget.TaskPlanner.Chip.State` already does it for ticked chips elsewhere.
+- The **card/page seam** is 1.03:1 by day and 1.17:1 by night, carried by the card's shadow alone. No state
+  lives in that seam, so it is recorded rather than fixed.
+- The **disabled "SYNC NOW"** label measures 2.40:1 by day and 3.19:1 by night. Disabled controls are exempt
+  from 1.4.3, and this one is exempt *and* correct — the build has no cloud configuration — but the exemption
+  is stated here rather than assumed.
+- The **gate itself drifts**: `scripts/contrast_report.py` scores text against the untinted `ink_surface`
+  (`#FFFFFF` / `#1A1817` → 5.89 / 6.45), while the rendered card carries Material's 5 %-primary elevation tint
+  (`#F4F7F6` / `#1E211F`), where the same ink measures 5.47 / 5.93. Every pair still passes; the report
+  overstates by roughly half a ratio, and Stage 11's evidence should read the tinted surface.
+- `AuthRepository.linkProfile` inserts the linked profile with `is_current = true` before the session moves to
+  it, so a read that lands between the two statements sees **two** current profiles — and Stage 8a is the first
+  code to draw that flag, so the violation would now be visible as two "Current" marks. The record is Stage 13's
+  (`docs/PRODUCT_ROADMAP.md`), and the smallest fix is to stop setting the flag at insert time.
+- The **Archive's category filter row is dead interface**: `archiveCategoryChips` is in the layout,
+  `ArchiveViewModel.setCategoryFilter` is waiting for it, and nothing populates it. Stage 8a asserts the
+  container and the emptiness rather than deleting either.
+- The **archive row's meta line breaks after its separator**: `Archived Oct 29, 2026 00:24 · No category` is
+  one `TextView`, and at both 393dp and 320dp the line ends with the "·" and the category starts the next one.
+  Nothing is hidden and nothing is misread, so it is recorded rather than fixed: the fix is the same decision
+  as the dead filter row above — whether the category gets a line of its own on this card — and that belongs to
+  the stage that populates it.
+
 ## 5. What this evidence cannot show
 
 Stated plainly, because a limitation nobody writes down becomes a claim nobody checks.

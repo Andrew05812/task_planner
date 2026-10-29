@@ -10,49 +10,66 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingStart="@dimen/screen_margin"
+        android:paddingEnd="@dimen/screen_margin"
+        android:paddingTop="@dimen/spacing_normal"
+        android:paddingBottom="@dimen/spacing_normal">
 
+        <!-- The screen's name, in the role every other bottom-bar screen carries it in. -->
+        <TextView
+            android:id="@id/settingsTitleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/spacing_small"
+            android:text="@string/title_settings"
+            android:textAppearance="@style/TextAppearance.TaskPlanner.Headline" />
+
+        <!-- `Widget.TaskPlanner.Card` rather than nothing: an unstyled MaterialCardView inherits whatever the
+             theme's default card is, which is how three panels on this screen ended up with a different
+             corner and a different lift from every other panel in the app. -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            style="@style/Widget.TaskPlanner.Card">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="@dimen/card_padding_horizontal">
 
                 <TextView
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/settings_account"
-                    android:textAppearance="?attr/textAppearanceSubtitle1"
-                    android:textStyle="bold" />
+                    android:text="@string/settings_account" />
 
+                <!-- The account line and the sync line are read-outs, not headings: body-medium in the
+                     secondary ink, which is the role the type scale gives to a sentence about state. -->
                 <TextView
                     android:id="@+id/accountStatusText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
                     tools:text="Signed in as Andrew" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/signInButton"
-                    style="@style/Widget.Material3.Button.TonalButton.Icon"
+                    style="@style/Widget.TaskPlanner.Button.Tonal"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="@dimen/spacing_medium"
                     android:text="@string/sign_in_google"
                     app:icon="@drawable/ic_google"
                     app:iconGravity="textStart" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/signOutButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.TaskPlanner.Button.Outlined"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/sign_out"
                     android:visibility="gone"
                     tools:visibility="visible" />
@@ -61,18 +78,18 @@
                     android:id="@+id/localDataLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="@dimen/spacing_normal"
                     android:text="@string/settings_local_data"
-                    android:textAppearance="?attr/textAppearanceSubtitle1"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:visibility="gone"
                     tools:visibility="visible" />
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/localProfileLayout"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    style="@style/Widget.TaskPlanner.Field.Dropdown"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="@dimen/spacing_small"
                     android:hint="@string/settings_local_data"
                     android:visibility="gone"
                     tools:visibility="visible">
@@ -87,10 +104,10 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/migrateLocalDataButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    style="@style/Widget.TaskPlanner.Button.Text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/migrate_local_data"
                     android:visibility="gone"
                     tools:visibility="visible" />
@@ -101,35 +118,35 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp">
+            android:layout_marginTop="@dimen/spacing_normal"
+            style="@style/Widget.TaskPlanner.Card">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="@dimen/card_padding_horizontal">
 
                 <TextView
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/settings_sync"
-                    android:textAppearance="?attr/textAppearanceSubtitle1"
-                    android:textStyle="bold" />
+                    android:text="@string/settings_sync" />
 
                 <TextView
                     android:id="@+id/syncStatusText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
                     tools:text="Pushed 4, pulled 2 at 18:20" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/syncNowButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.TaskPlanner.Button.Outlined"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="@dimen/spacing_medium"
                     android:text="@string/sync_now" />
 
             </LinearLayout>
@@ -138,41 +155,46 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp">
+            android:layout_marginTop="@dimen/spacing_normal"
+            style="@style/Widget.TaskPlanner.Card">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="@dimen/card_padding_horizontal">
 
                 <TextView
+                    style="@style/Widget.TaskPlanner.SectionHeader"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/settings_backup"
-                    android:textAppearance="?attr/textAppearanceSubtitle1"
-                    android:textStyle="bold" />
+                    android:text="@string/settings_backup" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/backup_scope_hint"
-                    android:textAppearance="?attr/textAppearanceCaption" />
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
 
+                <!-- Export is the panel's primary action and Import is its counterpart, so one carries the
+                     filled role and the other the outlined one. Export used to be an unstyled MaterialButton
+                     — the theme's default, which is filled — and naming the style says so out loud. -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/exportButton"
+                    style="@style/Widget.TaskPlanner.Button.Filled"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="@dimen/spacing_medium"
                     android:text="@string/export_data" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/importButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.TaskPlanner.Button.Outlined"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/import_data" />
 
             </LinearLayout>
@@ -182,9 +204,9 @@
             android:id="@+id/cloudNoticeText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/spacing_normal"
             android:text="@string/app_locked_message"
-            android:textAppearance="?attr/textAppearanceCaption"
+            android:textAppearance="?attr/textAppearanceBodySmall"
             android:visibility="gone"
             tools:visibility="visible" />
 
@@ -192,9 +214,9 @@
             android:id="@+id/versionText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/spacing_normal"
             android:gravity="center"
-            android:textAppearance="?attr/textAppearanceCaption"
+            android:textAppearance="?attr/textAppearanceBodySmall"
             tools:text="Version 1.0" />
 
         <ProgressBar
@@ -202,7 +224,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/spacing_normal"
             android:visibility="gone"
             tools:visibility="visible" />
 

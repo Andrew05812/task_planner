@@ -1,54 +1,90 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+    One category: its colour, its name, and how much work is in it.
+
+    Stage 8a put the row on the system: `Widget.TaskPlanner.Card` instead of a hand-set 2dp elevation, the
+    title and body-small roles instead of `Subtitle1` and `Body2` with the platform's secondary colour pasted
+    over them, the 40dp icon container `row_list.xml` gives a list row's glyph instead of a bare 24dp image,
+    and spacing tokens instead of four numbers. The glyph keeps its own tint for a reason: `CategoryAdapter`
+    paints it with the colour the user chose for the category, which is data rather than a role and must not be
+    replaced by a token.
+
+    The name gets two lines before it is cut, which is what the task card's title has had since before this
+    redesign (`b367904` gave `taskTitle` `maxLines="2"`) and Stage 4 kept. It is the only thing on the row that
+    tells two categories apart — the count is "0 tasks" as often as not — and Stage 8a's own photograph showed
+    why one line was not enough: at 393dp a seeded row read "Quarterly reconciliation of supp…" beside another
+    row that also said "0 tasks", so the part of the screen that distinguished them was the part that had been
+    shortened. The count keeps its room because it is the fixed side of the chain: a long name gives up width
+    per line, not the count. `CategoriesLayoutTest` measures that column at 320dp; whether the seeded name is
+    read in full is measured on the device, because Robolectric's LEGACY text metrics cannot tell a name that
+    fits from one that was clipped.
+-->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
-    android:layout_marginEnd="8dp"
-    android:layout_marginTop="4dp"
-    android:layout_marginBottom="4dp"
-    app:cardElevation="2dp">
+    android:layout_marginStart="@dimen/card_gap"
+    android:layout_marginEnd="@dimen/card_gap"
+    android:layout_marginTop="@dimen/spacing_xs"
+    android:layout_marginBottom="@dimen/spacing_xs"
+    style="@style/Widget.TaskPlanner.Card">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp">
+        android:paddingStart="@dimen/card_padding_horizontal"
+        android:paddingEnd="@dimen/card_padding_horizontal"
+        android:paddingTop="@dimen/card_padding_vertical"
+        android:paddingBottom="@dimen/card_padding_vertical">
 
-        <ImageView
-            android:id="@+id/categoryIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:contentDescription="@string/label_category_icon"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
+        <!-- The 40dp container, so a category glyph weighs what a Profile row's weighs and the colour the
+             user picked sits on a surface rather than floating on the card. -->
+        <FrameLayout
+            android:id="@+id/categoryIconContainer"
+            android:layout_width="@dimen/icon_container"
+            android:layout_height="@dimen/icon_container"
+            android:background="@drawable/bg_icon_container"
             app:layout_constraintBottom_toBottomOf="parent"
-            tools:src="@drawable/ic_category" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <!-- No description, and not important to accessibility: the words beside it already name the
+                 category, and "Icon, Stage 8a work, 0 tasks" is a row that announces itself twice. What the
+                 glyph does carry is the category's colour, and a colour has no name in this app's strings —
+                 that gap is recorded as an open finding, not papered over with a label that would lie. -->
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/categoryIcon"
+                android:layout_width="@dimen/icon_glyph"
+                android:layout_height="@dimen/icon_glyph"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                tools:src="@drawable/ic_category" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/categoryName"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="8dp"
-            android:textAppearance="?attr/textAppearanceSubtitle1"
-            app:layout_constraintStart_toEndOf="@id/categoryIcon"
-            app:layout_constraintEnd_toStartOf="@id/taskCount"
-            app:layout_constraintTop_toTopOf="parent"
+            android:layout_marginStart="@dimen/spacing_medium"
+            android:layout_marginEnd="@dimen/spacing_small"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/taskCount"
+            app:layout_constraintStart_toEndOf="@id/categoryIconContainer"
+            app:layout_constraintTop_toTopOf="parent"
             tools:text="Work" />
 
         <TextView
             android:id="@+id/taskCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textAppearance="?attr/textAppearanceBody2"
-            android:textColor="?android:attr/textColorSecondary"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
             tools:text="5 tasks" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-</com.google.android.material.card.MaterialCardView> 
+</com.google.android.material.card.MaterialCardView>

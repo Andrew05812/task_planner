@@ -1,20 +1,37 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+    One profile in the switcher: its initials, its name, its address, the two things you can do to it, and —
+    since Stage 8a — a mark saying whether the app is currently working in this profile.
+
+    Three changes, all of them about what a reader is told rather than about colour.
+
+    * The row carries `Widget.TaskPlanner.Card` instead of a hand-set 8dp corner and 2dp elevation, so it
+      agrees with every other card in the app, and its side margins are gone: the screen already insets its
+      column by `screen_margin`, and a row that adds 16dp of its own gives a list a different gutter from the
+      header above it.
+    * The pencil and the bin are the system's 48dp icon-button target. They were `wrap_content` around a 24dp
+      glyph with 8dp padding — 40dp — on a row whose bin deletes a profile and everything it owns.
+    * `currentProfileMark` is the new one. `User.isCurrent` has been in the profile table since it was
+      written, and the row never read it: the switcher listed the profiles and said nothing about which one
+      the app is working in, so the only way to find out was to open one and look at the Profile screen. The
+      mark is a word plus a check glyph, which is what WCAG 1.4.1 asks of a state that a colour cannot carry
+      on its own — and `ProfileAdapter` shows it from the data, not from a position in the list.
+-->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="16dp"
-    android:layout_marginEnd="16dp"
-    android:layout_marginTop="8dp"
-    android:layout_marginBottom="8dp"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    android:layout_marginTop="@dimen/spacing_xs"
+    android:layout_marginBottom="@dimen/spacing_xs"
+    style="@style/Widget.TaskPlanner.Card">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp">
+        android:paddingStart="@dimen/card_padding_horizontal"
+        android:paddingEnd="@dimen/card_padding_horizontal"
+        android:paddingTop="@dimen/card_padding_vertical"
+        android:paddingBottom="@dimen/card_padding_vertical">
 
         <View
             android:id="@+id/avatarBorder"
@@ -22,47 +39,73 @@
             android:layout_height="52dp"
             android:background="@drawable/circle_red_border"
             android:visibility="gone"
-            app:layout_constraintStart_toStartOf="@+id/avatarView"
-            app:layout_constraintEnd_toEndOf="@+id/avatarView"
-            app:layout_constraintTop_toTopOf="@+id/avatarView"
             app:layout_constraintBottom_toBottomOf="@+id/avatarView"
-            app:layout_constraintDimensionRatio="1:1"/>
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintEnd_toEndOf="@+id/avatarView"
+            app:layout_constraintStart_toStartOf="@+id/avatarView"
+            app:layout_constraintTop_toTopOf="@+id/avatarView"
+            tools:visibility="visible" />
 
         <com.taskplanner.ui.components.AvatarView
             android:id="@+id/avatarView"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginStart="8dp"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <LinearLayout
+            android:id="@+id/profileTextColumn"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
+            android:layout_marginStart="@dimen/spacing_medium"
+            android:layout_marginEnd="@dimen/spacing_medium"
             android:orientation="vertical"
-            app:layout_constraintStart_toEndOf="@id/avatarView"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/buttonGroup"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent">
+            app:layout_constraintStart_toEndOf="@id/avatarView"
+            app:layout_constraintTop_toTopOf="parent">
 
             <TextView
                 android:id="@+id/profileName"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textAppearance="?attr/textAppearanceSubtitle1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
                 tools:text="John Doe" />
 
+            <!-- The address is what tells two profiles apart, so it is not allowed to be cut to a few
+                 characters: the name keeps one line and gives room, the address wraps and stays readable.
+                 Stage 8a's review caught the frame where both were pinned to one line and the only thing a
+                 reader could compare was "stage8a-other-9429194…". -->
             <TextView
                 android:id="@+id/profileEmail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                tools:text="john.doe@example.com" />
+
+            <!-- The state word, inside the column rather than beside it. `Widget.TaskPlanner.SectionLabel` is
+                 the small caps role the rest of the app uses for "this is what this thing is", and the check
+                 glyph in front of it means the mark is still read by someone who cannot see the difference
+                 between two greys. It sits under the address because the first cut placed it between the text
+                 and the two 48dp buttons, and the frame showed the address broken into five lines to make
+                 room for it: a mark that costs the reader the one field that distinguishes two profiles is a
+                 mark in the wrong place. Gone until the data says current. -->
+            <TextView
+                android:id="@id/currentProfileMark"
+                style="@style/Widget.TaskPlanner.SectionLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textAppearance="?attr/textAppearanceBody2"
-                android:textColor="?android:attr/textColorSecondary"
-                tools:text="john.doe@example.com" />
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:drawablePadding="@dimen/spacing_xs"
+                android:gravity="center_vertical"
+                android:text="@string/state_current"
+                android:visibility="gone"
+                app:drawableStartCompat="@drawable/ic_check"
+                tools:visibility="visible" />
 
         </LinearLayout>
 
@@ -71,33 +114,25 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent">
+            app:layout_constraintTop_toTopOf="parent">
 
             <ImageButton
                 android:id="@+id/editProfileButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                style="@style/Widget.TaskPlanner.IconButton"
                 android:contentDescription="@string/action_edit_profile"
-                android:padding="8dp"
                 android:src="@drawable/ic_edit"
                 app:tint="?attr/colorPrimary" />
 
             <ImageButton
                 android:id="@+id/deleteProfileButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                style="@style/Widget.TaskPlanner.IconButton"
                 android:contentDescription="@string/action_delete_profile"
-                android:padding="8dp"
                 android:src="@drawable/ic_delete"
                 app:tint="?attr/colorError" />
 
         </LinearLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-</com.google.android.material.card.MaterialCardView> 
+</com.google.android.material.card.MaterialCardView>

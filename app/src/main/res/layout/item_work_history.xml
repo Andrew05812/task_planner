@@ -8,32 +8,35 @@
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground"
     android:orientation="vertical"
-    android:paddingStart="12dp"
-    android:paddingTop="10dp"
-    android:paddingEnd="12dp"
-    android:paddingBottom="10dp">
+    android:paddingStart="@dimen/spacing_medium"
+    android:paddingTop="@dimen/spacing_small"
+    android:paddingEnd="@dimen/spacing_medium"
+    android:paddingBottom="@dimen/spacing_small">
 
+    <!-- What was worked on, and the only line on this row that says so. Two lines before it is cut, the policy
+         the task card's title has had since before this redesign: one line at 320dp leaves a session with a
+         real name unreadable, and nothing else on the row identifies it. -->
     <TextView
         android:id="@+id/historyTaskTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
-        android:maxLines="1"
-        android:textAppearance="?attr/textAppearanceSubtitle1"
+        android:maxLines="2"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
         tools:text="Write the report" />
 
     <TextView
         android:id="@+id/historyWhen"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/textAppearanceCaption"
+        android:textAppearance="?attr/textAppearanceBodySmall"
         tools:text="18 Jun, 09:00 · 2 stretches · 1 entered by hand" />
 
     <TextView
         android:id="@+id/historyTotal"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/textAppearanceBody2"
+        android:textAppearance="?attr/textAppearanceBodySmall"
         tools:text="1 h 15 min" />
 
     <TextView
@@ -41,7 +44,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/history_in_progress"
-        android:textAppearance="?attr/textAppearanceCaption"
+        android:textAppearance="?attr/textAppearanceBodySmall"
         android:visibility="gone" />
 
     <LinearLayout
@@ -49,5 +52,5 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingTop="6dp" />
+        android:paddingTop="@dimen/spacing_xs" />
 </LinearLayout>

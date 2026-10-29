@@ -1,50 +1,88 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+    One archived task: what it was, when it left the list, which category owned it, and the two things a
+    reader can still do to it.
+
+    Stage 8a put this row on the system: the card style instead of a hand-set 1dp elevation, the title and
+    meta roles instead of `Subtitle1` and `Caption`, the secondary ink token instead of the platform's text
+    colour, and the 48dp icon-button target instead of the 44dp box this row itself shipped with — 48dp is
+    `@dimen/touch_target_min`, and the more destructive of these two commands deletes a task permanently.
+
+    The state mark under the task's name is the part that is new. The screen used one ink colour and one verb
+    to say what a row is, and `getArchivedTasks` filters on `archived = 1` alone — every row here is archived,
+    and not every row is finished. So the row now says its status in a word the app already uses elsewhere for
+    that status, and the timestamp line is named for the moment it records.
+-->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
-    android:layout_marginEnd="8dp"
-    android:layout_marginTop="4dp"
-    android:layout_marginBottom="4dp"
-    app:cardElevation="1dp">
+    android:layout_marginStart="@dimen/card_gap"
+    android:layout_marginEnd="@dimen/card_gap"
+    android:layout_marginTop="@dimen/spacing_xs"
+    android:layout_marginBottom="@dimen/spacing_xs"
+    style="@style/Widget.TaskPlanner.Card.Completed">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="12dp">
+        android:paddingStart="@dimen/card_padding_horizontal"
+        android:paddingEnd="@dimen/card_padding_horizontal"
+        android:paddingTop="@dimen/card_padding_vertical"
+        android:paddingBottom="@dimen/card_padding_vertical">
 
         <TextView
             android:id="@+id/archiveTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:ellipsize="end"
-            android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceSubtitle1"
+            android:maxLines="2"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
             app:layout_constraintEnd_toStartOf="@id/restoreButton"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             tools:text="Completed task" />
 
+        <!-- The row's state, in the app's own status vocabulary: `ArchiveAdapter` puts the task's status label
+             here, so a row can only ever say what the record says. The word is visible text rather than a
+             content description because a state a reader takes only as ink is a state they cannot read
+             (WCAG 1.4.1), and the archive holds unfinished tasks as well as finished ones.
+             It is given a line of its own, under the name, the way the task card puts its state pill under the
+             title. The first version of this row constrained the title to end at the mark, and at 320dp a mark
+             plus two 48dp commands left the name ~86dp — the stage's own narrow frame read
+             "Stage 8a / unfinished a…", with the timestamp wrapped to three lines under it. -->
+        <TextView
+            android:id="@id/archiveStateMark"
+            style="@style/Widget.TaskPlanner.SectionLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:drawablePadding="@dimen/spacing_xs"
+            android:gravity="center_vertical"
+            app:drawableStartCompat="@drawable/ic_archive"
+            app:drawableTint="@color/ink_text_secondary"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/archiveTitle"
+            tools:text="Done" />
+
         <TextView
             android:id="@+id/archiveMeta"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textAppearance="?attr/textAppearanceCaption"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:textAppearance="?attr/textAppearanceBodySmall"
             app:layout_constraintEnd_toStartOf="@id/restoreButton"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/archiveTitle"
-            tools:text="Completed Oct 17, 2026 · Work" />
+            app:layout_constraintStart_toStartOf="@id/archiveTitle"
+            app:layout_constraintTop_toBottomOf="@id/archiveStateMark"
+            tools:text="Archived Oct 17, 2026 · Work" />
 
+        <!-- `Widget.TaskPlanner.IconButton` carries the 48dp box, the borderless ripple and the centred
+             glyph; each button keeps its own tint because the two commands are not the same kind of thing —
+             one returns the task to the list, the other destroys it. -->
         <ImageButton
             android:id="@+id/restoreButton"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            style="@style/Widget.TaskPlanner.IconButton"
             android:contentDescription="@string/restore_task"
-            android:padding="10dp"
             android:src="@drawable/ic_restore"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/deleteForeverButton"
@@ -53,11 +91,8 @@
 
         <ImageButton
             android:id="@+id/deleteForeverButton"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/action_delete"
-            android:padding="10dp"
+            style="@style/Widget.TaskPlanner.IconButton"
+            android:contentDescription="@string/action_delete_forever"
             android:src="@drawable/ic_delete"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"

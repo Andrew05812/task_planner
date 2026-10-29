@@ -10,21 +10,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.ListAdapter
-import androidx.recyclerview.widget.RecyclerView
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
 import com.taskplanner.databinding.FragmentArchiveBinding
-import com.taskplanner.databinding.ItemArchiveBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @AndroidEntryPoint
 class ArchiveFragment : Fragment() {
@@ -90,45 +83,5 @@ class ArchiveFragment : Fragment() {
     override fun onDestroyView() {
         _binding = null
         super.onDestroyView()
-    }
-}
-
-private class ArchiveAdapter(
-    val onRestore: (com.taskplanner.data.model.Task) -> Unit,
-    val onDeleteForever: (com.taskplanner.data.model.Task) -> Unit,
-    val onOpenDetail: (com.taskplanner.data.model.Task) -> Unit
-) : ListAdapter<ArchiveState.ArchivedTask, ArchiveAdapter.VH>(
-    object : DiffUtil.ItemCallback<ArchiveState.ArchivedTask>() {
-        override fun areItemsTheSame(
-            oldItem: ArchiveState.ArchivedTask,
-            newItem: ArchiveState.ArchivedTask
-        ) = oldItem.task.id == newItem.task.id
-
-        override fun areContentsTheSame(
-            oldItem: ArchiveState.ArchivedTask,
-            newItem: ArchiveState.ArchivedTask
-        ) = oldItem == newItem
-    }
-) {
-    class VH(val binding: ItemArchiveBinding) : RecyclerView.ViewHolder(binding.root)
-
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
-        VH(ItemArchiveBinding.inflate(LayoutInflater.from(parent.context), parent, false))
-
-    override fun onBindViewHolder(holder: VH, position: Int) {
-        val item = getItem(position)
-        with(holder.binding) {
-            archiveTitle.text = item.task.title
-            val completed = item.task.archivedAt?.let { dateFormat.format(Date(it)) } ?: "—"
-            val category = item.category?.name
-                ?: root.context.getString(R.string.no_category)
-            archiveMeta.text = root.context.getString(R.string.archive_completed_at, completed) +
-                " · $category"
-            restoreButton.setOnClickListener { onRestore(item.task) }
-            deleteForeverButton.setOnClickListener { onDeleteForever(item.task) }
-            root.setOnClickListener { onOpenDetail(item.task) }
-        }
     }
 }

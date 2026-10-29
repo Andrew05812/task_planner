@@ -1,34 +1,77 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+    The archive: a search field, a category filter, and the tasks that left the list.
+
+    Three things changed here in Stage 8a, and all three are about the screen agreeing with the rest of the
+    app rather than about colour.
+
+    * It has a title now. Tasks, Profile and the editor each say what they are; this screen and three of its
+      neighbours were identified only by the icon in the bar, which is a poor way to answer "where am I".
+    * The search field is a `Widget.TaskPlanner.Field`. It used to be a bare `TextInputEditText` with a hint
+      and a 12dp margin, which is the one input in the app that never grew the box the other forty have — and
+      a hint inside an unframed field disappears the moment anything is typed, leaving no label at all. The id
+      stays on the inner field, so `ArchiveFragment.doAfterTextChanged` binds exactly what it bound before.
+    * Every gap is a spacing token and every word a type role, so the screen moves with the system instead of
+      with whoever last typed a number.
+
+    The list is still a direct child of the root, and the filter row still scrolls sideways: five categories
+    do not fit 320dp, and `WorkHistoryLayoutTest`'s sibling screen proves the same claim for the history
+    filter.
+-->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.google.android.material.textfield.TextInputEditText
-        android:id="@+id/archiveSearch"
-        android:layout_width="match_parent"
+    <TextView
+        android:id="@id/archiveTitleText"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_margin="12dp"
-        android:hint="@string/action_search"
-        android:imeOptions="actionSearch"
-        android:inputType="text"
-        android:maxLines="1"
+        android:layout_marginStart="@dimen/screen_margin"
+        android:layout_marginTop="@dimen/spacing_normal"
+        android:layout_marginEnd="@dimen/screen_margin"
+        android:text="@string/title_archive"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Headline"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/archiveSearchLayout"
+        style="@style/Widget.TaskPlanner.Field"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_medium"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:layout_marginEnd="@dimen/spacing_medium"
+        android:hint="@string/hint_search_archive"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/archiveTitleText">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/archiveSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1" />
+    </com.google.android.material.textfield.TextInputLayout>
 
     <HorizontalScrollView
         android:id="@+id/archiveCategoryScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_small"
         android:scrollbars="none"
-        app:layout_constraintTop_toBottomOf="@id/archiveSearch">
+        app:layout_constraintTop_toBottomOf="@id/archiveSearchLayout">
 
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/archiveCategoryChips"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingStart="@dimen/spacing_medium"
+            android:paddingEnd="@dimen/spacing_medium"
             app:singleLine="true"
             app:singleSelection="true" />
     </HorizontalScrollView>
@@ -37,9 +80,9 @@
         android:id="@+id/archiveList"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="@dimen/spacing_xs"
         android:clipToPadding="false"
-        android:paddingBottom="24dp"
+        android:paddingBottom="@dimen/spacing_large"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@id/archiveCategoryScroll"
         tools:listitem="@layout/item_archive" />
@@ -56,9 +99,14 @@
 
     <TextView
         android:id="@+id/archiveEmpty"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/screen_margin"
+        android:layout_marginEnd="@dimen/screen_margin"
+        android:gravity="center"
         android:text="@string/empty_archive_message"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
