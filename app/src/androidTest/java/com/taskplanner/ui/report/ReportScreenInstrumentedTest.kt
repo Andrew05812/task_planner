@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Rect
 import android.os.Environment
 import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
@@ -12,6 +13,7 @@ import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
@@ -34,6 +36,7 @@ import com.taskplanner.ui.MainActivity
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matchers.startsWith
@@ -81,6 +84,12 @@ import org.junit.runner.RunWith
  * Each state it passes through is photographed into the app's external files directory. The images are pulled
  * off afterwards and looked at, and the ones that decided something are kept beside the documentation: a visual
  * claim nobody can see is not a claim.
+ *
+ * A third test measures the two period buttons where they actually are — the laid-out pixels of each child
+ * inside the row that holds them — because a `baselineAligned` attribute in XML is a claim about a layout, while
+ * a button clipped by 13% of its own height is a fact about a handset. It writes the numbers out per
+ * configuration, so the same class run at 393dp, at 320dp and with the reader's font at 1.3 leaves a comparison
+ * behind rather than a pass.
  *
  * A second test goes the whole way through Save, pressing the platform's own button in the picker, because a
  * hand-over that was only ever started is not a hand-over that worked. What the screen announces is written down
@@ -225,6 +234,167 @@ class ReportScreenInstrumentedTest {
         shot("11-saved")
         record("11-saved-message", "announced=$message\nnote=$note\n")
         println("saved report: note=$note announced=$message bytes=$bytes")
+    }
+
+    /**
+     * The two period buttons sit in one horizontal row, and the row decides their geometry.
+     *
+     * A `LinearLayout` with `orientation="horizontal"` aligns its children by **baseline** unless told otherwise,
+     * so when one label wraps to two lines ("CHOOSE A / TIMEZONE" at 320dp with the reader's font at 1.3) and the
+     * other stays on one, the one-line button is shifted *down* to meet the two-line one's baseline. The row is
+     * `wrap_content`, so the shift pushes that button past the row's own bottom edge, and the row clips it: 9px of
+     * offset and 13% of the button's height off the screen, measured on the handset. The clipped band is the lower
+     * part of the touch target, which is why Espresso's `click()` — it requires 90% of a view inside its
+     * parent's visible rectangle — refused to press it at all.
+     *
+     * So this test does not read the XML. It measures what the laid-out views actually occupy: each button inside
+     * its own row (top, bottom against the row's height), the share of the button that is really visible, and the
+     * height the accessibility guidance asks a touch target to have. It reports the numbers it saw, in pixels, on
+     * every configuration the matrix runs it in.
+     */
+    @Test
+    fun thePeriodRowHoldsBothButtonsInsideItselfAtEveryWidth() {
+        openTheReport()
+        assertTrue("the preview arrived", waitUntil("the report pages") { shown(R.id.reportPagesScroll) })
+
+        val zone = boundView(R.id.reportZoneButton)
+        val dates = boundView(R.id.reportDatesButton)
+        val row = zone.parent as View
+        val density = context.resources.displayMetrics.density
+
+        // First, the screen as it ships: whatever the labels happen to be, nothing may leave its row.
+        assertChildrenInsideRow("as shipped", row, listOf(dates to "dates", zone to "zone"), density)
+
+        // Then the condition the defect needs. Baseline alignment only displaces a child whose baseline sits at a
+        // different depth than its neighbour's, so a row whose two labels land at the same height cannot show the
+        // problem at all — measured on this handset, the shipped English labels are one line each at 392dp and two
+        // lines each at 320dp with the font at 1.3, and the row is sound in both. That is not the layout being
+        // proven safe; it is the test never reaching the case. Stage 14's Russian strings are where the two labels
+        // diverge, so this makes the divergence happen now, in the language the screen is in: a one-word label
+        // beside a two-line one, which is exactly the shape that pushed `reportZoneButton` 9px out of its row.
+        relabel(dates, "Due")
+        relabel(zone, "Choose the timezone this report is counted in")
+        val taller = waitUntil("the row re-laid out around the longer label") {
+            row.height > dates.height && zone.lineCount >= 2
+        }
+        assertTrue("the labels never became the asymmetric pair the test asks for: taller=$taller", taller)
+        assertChildrenInsideRow("with a one-line label beside a two-line one", row,
+            listOf(dates to "dates", zone to "zone"), density)
+
+        // The claim that started this: a press lands. Espresso refuses a view whose visible share inside its
+        // parent is under 90%, so reaching the picker through `click()` is the device-side proof.
+        //
+        // The picker is an `AlertDialog` (`ReportFragment.askForZone` inflates `DialogReportZoneBinding`), so its
+        // views are not children of the activity and this class's `shown()` — which asks the activity — cannot see
+        // them. Espresso searches the focused window, which is the dialog, so the check is asked of Espresso; and
+        // the dialog is dismissed before the test ends, because a window left standing in a process the next test
+        // method reuses is a defect in this one, not in the screen.
+        onView(withId(R.id.reportZoneButton)).perform(click())
+        var pickerOpened = false
+        try {
+            onView(withId(R.id.reportZoneSearch)).check(matches(isDisplayed()))
+            pickerOpened = true
+            shot("13-period-row-pressed")
+        } finally {
+            runCatching { Espresso.pressBack() }
+        }
+        assertTrue("the zone picker opened from a button that is not clipped", pickerOpened)
+    }
+
+    /**
+     * Every child of [row] sits wholly inside it, is entirely on the screen, and is at least 48dp tall.
+     *
+     * Three separate questions, all measured on the laid-out views rather than read from the XML: a child pushed
+     * past the row's bottom edge is clipped by it (`clipChildren` is on by default, and the row is
+     * `wrap_content`, so its height is the *tallest* child, not the sum of the offsets); a child the row does not
+     * clip can still be partly off the screen; and a child fully visible can be too small to aim at. The geometry
+     * line is printed and written beside the screenshots, so a pass at one width is comparable with a pass at
+     * another instead of being a claim nobody can re-check.
+     */
+    private fun assertChildrenInsideRow(
+        case: String,
+        row: View,
+        children: List<Pair<View, String>>,
+        density: Float
+    ) {
+        val minimumTouch = (MIN_TOUCH_DP * density).toInt()
+        val report = geometryOf("$case:", row, children, density)
+        println("period-row geometry $report")
+        record("period-row-geometry-" + case.substringBefore(' ').lowercase(), report + "\n")
+        shot("12-period-row-" + case.substringBefore(' ').lowercase())
+
+        for ((button, name) in children) {
+            assertTrue(
+                "$case — $name is taller than the row that holds it: $report",
+                button.height <= row.height + 1
+            )
+            assertTrue("$case — $name starts above the top of its row: $report", button.top >= 0)
+            assertTrue(
+                "$case — $name is pushed past the bottom of its row by baseline alignment, and the row clips it " +
+                    "(bottom=${button.bottom} against row height=${row.height}): $report",
+                button.bottom <= row.height + 1
+            )
+            val visible = Rect().also { button.getLocalVisibleRect(it) }
+            val ratio = visible.height().toFloat() / button.height.toFloat()
+            assertTrue(
+                "$case — $name is not entirely on the screen: visible ${visible.height()}px of ${button.height}px " +
+                    "(ratio ${"%.3f".format(Locale.ROOT, ratio)}): $report",
+                ratio > 0.99f
+            )
+            assertTrue(
+                "$case — $name's whole height is its touch target, so it must be at least $MIN_TOUCH_DP dp " +
+                    "(${button.height}px at ${density}x): $report",
+                button.height >= minimumTouch
+            )
+        }
+    }
+
+    /**
+     * Puts [text] on a button from the UI thread and lets the layout settle.
+     *
+     * Only a test needs this; nothing in the app rewrites those labels at runtime. It is done here because the
+     * defect's condition is a pair of labels of different depths, and waiting for a locale to supply one would
+     * leave the guard untestable in the language the repository ships.
+     */
+    private fun relabel(button: View, text: String) {
+        scenario.onActivity { activity ->
+            activity.runOnUiThread { (button as TextView).text = text }
+        }
+        instrumentation.waitForIdleSync()
+    }
+
+    /** How many lines a button's label is drawn in — the fact baseline alignment actually keys on. */
+    private val View.lineCount: Int
+        get() = (this as? TextView)?.layout?.lineCount ?: 0
+
+    /**
+     * One line of numbers for one row: the row's own height, then each child's top, bottom, height, the share of
+     * it that is visible, and the screen the measurement was taken on.
+     *
+     * Written out because the assertion alone hides the thing a reader of a failure needs — whether the numbers
+     * differ between 393dp and 320dp, or between the reader's font at 1.0 and at 1.3.
+     */
+    private fun geometryOf(screen: String, row: View, children: List<Pair<View, String>>, density: Float): String {
+        val location = IntArray(2).also { row.getLocationOnScreen(it) }
+        val metrics = context.resources.displayMetrics
+        return buildString {
+            append(screen)
+                .append(" [").append(metrics.widthPixels).append('x').append(metrics.heightPixels)
+                .append(" @").append(density).append("dpi → ")
+                .append((metrics.widthPixels / density).toInt()).append("dp wide")
+                .append("]")
+                .append(" rowHeight=").append(row.height).append("@y=").append(location[1])
+            for ((child, name) in children) {
+                val visible = Rect().also { child.getLocalVisibleRect(it) }
+                append(" | ").append(name)
+                    .append(" top=").append(child.top).append(" bottom=").append(child.bottom)
+                    .append(" h=").append(child.height)
+                    .append(" visible=").append(visible.height())
+                    .append(" ratio=").append(
+                        "%.3f".format(visible.height().toFloat() / child.height.toFloat().coerceAtLeast(1f))
+                    )
+            }
+        }
     }
 
     // -- the path ---------------------------------------------------------------------------------
@@ -540,6 +710,12 @@ class ReportScreenInstrumentedTest {
         return found
     }
 
+    /** The same read as [findView], for a view the test cannot proceed without — a missing id is named, not skipped. */
+    private fun boundView(id: Int): View =
+        findView(id) ?: throw AssertionError(
+            "no view with id ${context.resources.getResourceEntryName(id)} on the screen: ${screenState()}"
+        )
+
     private fun shown(id: Int): Boolean = findView(id)?.visibility == View.VISIBLE
 
     private fun text(id: Int): String = (findView(id) as? TextView)?.text?.toString().orEmpty()
@@ -619,6 +795,9 @@ class ReportScreenInstrumentedTest {
 
         /** A sheet below this height was never laid out. */
         const val MIN_SHEET = 400
+
+        /** The smallest touch target accessibility guidance asks for, in dp — see the period-row test. */
+        const val MIN_TOUCH_DP = 48
 
         /** Fewer dark samples than this and the page is blank; a page of Russian text gives hundreds. */
         const val INK_MINIMUM = 200

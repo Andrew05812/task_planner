@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,6 +8,30 @@ plugins {
     id("androidx.navigation.safeargs.kotlin")
     id("org.jetbrains.kotlin.plugin.parcelize")
 }
+
+/**
+ * Where a cloud configuration value may come from, in the order the developer is told to use.
+ *
+ * `providers.gradleProperty(…)` reads `gradle.properties` — the project's committed one and the user's own in
+ * `~/.gradle` — and `-P` flags. It does **not** read `local.properties`, which is the file Android Studio creates
+ * for `sdk.dir`, the one `.gitignore` keeps out of git, and the one `firebase.example.properties` and
+ * `docs/FIREBASE_SETUP.md` tell a developer to copy these four values into. Written this way the documented path
+ * would have been silently ignored: the build would print `NOT_CONFIGURED` forever and the reader would conclude
+ * the instructions were wrong rather than the build script. A `-P` flag still wins, so CI secrets keep working.
+ *
+ * (`Properties` is imported rather than written as `java.util.Properties`: in a Gradle Kotlin DSL script the name
+ * `java` resolves to the `java` plugin extension, so the qualified spelling is not the `java.util` package, and
+ * the failure it produces is a script compilation error three lines away from the reason.)
+ */
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun cloudProperty(name: String): String =
+    providers.gradleProperty(name).orNull?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: "NOT_CONFIGURED"
 
 android {
     namespace = "com.taskplanner"
@@ -31,14 +57,32 @@ android {
         // Firebase / Google OAuth configuration. These are placeholders on purpose:
         // real values must be provided by the developer (see docs/FIREBASE_SETUP.md).
         // The app runs fully in local mode while they are not configured.
-        val firebaseProjectId = providers.gradleProperty("firebase.projectId").getOrElse("NOT_CONFIGURED")
-        val firebaseAppId = providers.gradleProperty("firebase.appId").getOrElse("NOT_CONFIGURED")
-        val firebaseApiKey = providers.gradleProperty("firebase.apiKey").getOrElse("NOT_CONFIGURED")
-        val googleWebClientId = providers.gradleProperty("google.webClientId").getOrElse("NOT_CONFIGURED")
+        val firebaseProjectId = cloudProperty("firebase.projectId")
+        val firebaseAppId = cloudProperty("firebase.appId")
+        val firebaseApiKey = cloudProperty("firebase.apiKey")
+        val googleWebClientId = cloudProperty("google.webClientId")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
+
+        // Say which build this is, at build time. A reader who opens Settings on a local-only build already sees
+        // the disabled sign-in row and the reason beside it; a developer looking at a console should not have to
+        // infer the same thing from silence. No value is ever printed — only which keys are still placeholders.
+        val unconfigured = listOfNotNull(
+            "firebase.projectId".takeIf { firebaseProjectId == "NOT_CONFIGURED" },
+            "firebase.appId".takeIf { firebaseAppId == "NOT_CONFIGURED" },
+            "firebase.apiKey".takeIf { firebaseApiKey == "NOT_CONFIGURED" },
+            "google.webClientId".takeIf { googleWebClientId == "NOT_CONFIGURED" }
+        )
+        if (unconfigured.isNotEmpty()) {
+            logger.lifecycle(
+                "task-planner: local-only build — " + unconfigured.joinToString(", ") +
+                    " still NOT_CONFIGURED (set them in local.properties or with -P; see docs/FIREBASE_SETUP.md" +
+                    " and firebase.example.properties). Every local feature works; Google sign-in and Firestore" +
+                    " sync stay disabled."
+            )
+        }
 
         // Room schema export
         kapt {

@@ -142,10 +142,40 @@ the merge rules above, run against a real Room database.
 
 `AuthRepository.attachLocalDataToAccount(sourceUserId, targetUser)` is the explicit handover the
 settings screen offers. It changes the owner of the source rows instead of copying them, so local
-ids, uuids and the links between tasks, categories, topics, repeat patterns and lead times all
-survive; a task the account already has by uuid is deduplicated (the newer copy stays) rather than
-becoming a second row with a duplicated identity. A pattern or a lead time needs no such merge: their
-uuid is the table's primary key, so one row can only ever have one owner. It refuses to run unless
-the target is the profile that is currently signed in, and refuses a profile onto itself, which
-would otherwise wipe it.
+ids, uuids and the links between them survive — across **all sixteen tables that carry a `user_id`**,
+which is more than it used to cover: until Stage 13 the handover moved tasks, categories, topics,
+repeat patterns and lead times, and left the tracking sessions, measured intervals and their
+corrections, the goals with their task sets and value-change history, the habits with their marks and
+their correction history, the insights and the achievements behind on the profile the reader had just
+stopped being shown (`ProfileAttachDao` is where those eleven now move).
+
+A task the account already has by uuid is deduplicated (the newer copy stays) rather than becoming a
+second row with a duplicated identity. A pattern or a lead time needs no such merge: their uuid is the
+table's primary key, so one row can only ever have one owner. Of the eleven newer tables, the same is true
+wherever `uuid` is unique across the table — which is most of them, and is why they move with one statement
+each — and the collisions that remain are the *slots* two profiles can each legitimately hold:
+`achievements (user_id, achievement_key)` and an insight's `(user_id, rule_key, period_from_day,
+period_to_day)`. Two further slot rules, `goal_tasks (goal_uuid, task_uuid)` and
+`habit_checks (habit_uuid, day_marker)`, cannot be reached while their parents are keyed by a table-wide unique
+uuid, and they are handled in proportion to what a merge would cost: a repeated goal link is one fact twice, so one
+is kept and nothing goes away, while two marks of one habit for one day could carry different correction histories —
+there nothing is merged, the statement is refused by the index and the transaction rolls back. The schema fact is
+itself under test (`AccountAttachTest.the schema says which row identities two profiles can share`), so a migration
+that made one of those identities per-profile fails a test instead of quietly turning a rule into live code.
+
+Two guards run before the first write, and one check after the last. A profile with a timer still
+running is **refused** rather than merged, because an open interval is a fact still being written and
+its unique index would not allow two on one profile. A verified copy of the whole database file is
+written to `filesDir/safety/` (`ProfileSafetyCopy`) — the file, not the five-table backup format — and it is
+*read back* before the move starts: the write-ahead log folded in and reported, the copy hashed against the
+source, its SQLite header checked for a whole page count, then reopened as a separate database and counted
+table by table against the live rows. The identity merge deletes a row, and a deletion is only survivable if
+something provably holds the other copy. And when the transaction reaches its end, a count
+over all sixteen tables proves nothing is still addressed to the source profile; a non-zero count throws,
+which rolls the whole move back.
+
+It refuses to run unless the target is the profile that is currently signed in, and answers
+`AlreadyTheSameProfile` for a profile onto itself, which would otherwise wipe it. Signing out ends the
+cloud session and leaves the reader on this profile, with the `firebase_uid` link in place so that
+signing in again returns to the same row rather than creating a second one.
 

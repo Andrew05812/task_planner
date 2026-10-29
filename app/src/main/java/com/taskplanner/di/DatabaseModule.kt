@@ -14,6 +14,7 @@ import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.LegacyDbRescuer
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
+import com.taskplanner.data.local.ProfileAttachDao
 import com.taskplanner.data.local.TaskDao
 import com.taskplanner.data.local.TaskStatisticsDao
 import com.taskplanner.data.local.TrackingSessionDao
@@ -109,4 +110,11 @@ object DatabaseModule {
     @Provides
     fun provideAchievementStatsDao(database: AppDatabase): AchievementStatsDao =
         database.achievementStatsDao()
+
+    /**
+     * The statements that move the eleven profile tables the sign-in handover used to leave behind —
+     * time tracking, goals, habits, insights and achievements. See the DAO's own doc for the rule they apply.
+     */
+    @Provides
+    fun provideProfileAttachDao(database: AppDatabase): ProfileAttachDao = database.profileAttachDao()
 }

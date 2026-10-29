@@ -67,10 +67,31 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 tools:text="Europe/Berlin · UTC+02:00 · the device's own timezone" />
 
+            <!-- `baselineAligned="false"` is the fix for a defect measured on the handset, not a style choice: a
+                 horizontal LinearLayout aligns its children by baseline by default, so when one label wraps to two
+                 lines and its neighbour stays on one, the pair is shifted against each other and the taller button
+                 ends up below the bottom edge of the `wrap_content` row that holds it. The row then clips it — and
+                 a clipped band is part of a touch target that dispatches no click.
+
+                 Measured, with the attribute removed and the asymmetry forced (a one-line label beside a two-line
+                 one, 392dp wide, font scale 1.3): the two-line button lands at top=6 bottom=132 in a row 126 tall,
+                 so 6px of 126 — 4.8% of its height — is outside the row. With the attribute in place it is
+                 top=0 bottom=126, entirely inside, visible ratio 1.000. `ReportScreenInstrumentedTest`
+                 .thePeriodRowHoldsBothButtonsInsideItselfAtEveryWidth does exactly that measurement on every run.
+
+                 The shipped English pair happens to be the same height at every width this device reaches (one
+                 line each at 392dp, two lines each at 320dp with the font at 1.3), which is why the row looks
+                 healthy without the fix until the labels are made to differ. The version of this defect that
+                 started the investigation was worse — 9px and 13% of the view, with the bottom of the word
+                 "TIMEZONE" cut off — because `click()` asks a view to be displaying at least 90% of itself
+                 (`GeneralClickAction.java:99`, measured with `getGlobalVisibleRect`, which is the rectangle the
+                 ancestors leave standing), so 13% gone is a refused press while 4.8% gone is not. Russian labels
+                 in Stage 14 will make two labels of one row differ again, which is what this line is here for. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_small"
+                android:baselineAligned="false"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
@@ -268,10 +289,17 @@
         </FrameLayout>
     </androidx.core.widget.NestedScrollView>
 
+    <!-- `baselineAligned="false"`: the same row shape as the two buttons in the card above, where a two-line label
+         on one button pushed its one-line sibling past the row's edge and the row clipped it. Today's two labels
+         ("Save", "Share") fit on one line each at every width the app budgets, so this is the same defect kept
+         from arriving rather than a defect repaired — the footer is constrained to the bottom of the screen, so a
+         button that grows past its row here has nothing to scroll it back into view. Stage 14's Russian strings
+         are where that would show up first. -->
     <LinearLayout
         android:id="@+id/reportActions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:baselineAligned="false"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="@dimen/spacing_normal"

@@ -44,6 +44,20 @@
                     android:layout_height="wrap_content"
                     android:text="@string/settings_account" />
 
+                <!-- Which of the four states this build is in, named before anything else: a reader who sees a
+                     disabled button and no reason concludes the app is broken. Stage 8a hid the whole section
+                     when Firebase was absent, which hid the feature along with the configuration.
+                     Body-medium in the card's own ink, not `SectionLabel`: the label role is 11sp, all-caps and
+                     secondary ink — the smallest and faintest voice on the card — and this line is the one
+                     sentence on the screen the reader has to believe before they trust the button under it. -->
+                <TextView
+                    android:id="@+id/accountStateText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    tools:text="Not configured" />
+
                 <!-- The account line and the sync line are read-outs, not headings: body-medium in the
                      secondary ink, which is the role the type scale gives to a sentence about state. -->
                 <TextView
@@ -63,6 +77,18 @@
                     android:text="@string/sign_in_google"
                     app:icon="@drawable/ic_google"
                     app:iconGravity="textStart" />
+
+                <!-- Shown beside the disabled button, and only there. It says what is missing without pretending
+                     the button works, and it names the file that explains how to provide it. -->
+                <TextView
+                    android:id="@+id/signInExplanation"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/sign_in_not_configured_explanation"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/signOutButton"
@@ -90,7 +116,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_small"
-                    android:hint="@string/settings_local_data"
+                    android:hint="@string/local_profile_picker_hint"
                     android:visibility="gone"
                     tools:visibility="visible">
 
@@ -109,6 +135,21 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/migrate_local_data"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <!-- Said before the move rather than after it. This is the block\'s own answer to the question a
+                     reader has to ask before pressing: which data, from where to where, and what happens to a
+                     record both profiles hold. It used to be a string nothing referenced; the safety sentence it
+                     replaces was written into the layout as a second note and merged back into this one, because
+                     two paragraphs about the same button say less than one. -->
+                <TextView
+                    android:id="@+id/migrateSafetyNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/migrate_local_data_message"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
                     android:visibility="gone"
                     tools:visibility="visible" />
 

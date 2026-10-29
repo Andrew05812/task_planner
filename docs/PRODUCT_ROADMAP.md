@@ -181,6 +181,46 @@ A named person signed in on a named device, saw their own data, signed out, saw 
 above is backed by a command output in the stage report. Until then this stage is described as unreachable,
 which is what is true today.
 
+## 13.13 State after the Stage 13 work of 2026-10-29
+
+**Status: `BLOCKED — Firebase project / OAuth configuration required` for the credential itself; the local
+half is DONE and measured.**
+
+What the code now does, against what 13.3 listed as "implemented, unexercised":
+
+| 13.3 claim | state now |
+|---|---|
+| the handover covers tasks, categories, groups, rules, reminders | **all sixteen tables that carry a `user_id`**; the other eleven move through `ProfileAttachDao`, inside the same transaction |
+| `linkProfile` | unchanged in decision, fixed in effect: the account row is no longer inserted with `is_current = true`, so the window in which two profiles answered that question is gone |
+| `signOut` | ends the cloud session and **leaves the reader on their profile**; it no longer clears `is_current` and drops the repair anchor, which used to make every row unreachable after a sign-out |
+| Settings shows one of three states | four named states (`AccountUiState`), and on a build with no project the sign-in row is **visible and disabled with the reason beside it** — Stage 8a's `GONE` assertion was rewritten to say so |
+| a real Firebase project | **still does not exist.** No `google-services.json`, no `firebase.*` properties, so `CloudConfig.isConfigured` is false in every build of this repository |
+| tests that exercise a signed-in session | `AccountAttachTest` (twenty, real Room on the JVM), `ProfileSafetyCopyTest` (eight), `AuthRepositoryTest` (ten, across a sign-in seam), `UserIdentityConflictTest` (ten), `CloudConfigTest` (four), `LocalDataMigrationTest` (nine), `AccountUiStateTest` (six), `SettingsLayoutTest` (six), and `SignInDataPreservationInstrumentedTest` on the device: sign-in seam, handover, restart, sign-out, second sign-in without duplicates, and the snapshot reopened by the shipping SQLite. Every instrumented class runs one at a time — see the note on the merged run below |
+
+What remains blocked, and exactly what unblocks it: the four values in `firebase.example.properties` —
+`firebase.projectId`, `firebase.appId`, `firebase.apiKey` (an Android API key) and `google.webClientId` (the
+**Web** OAuth client id, which is the server client id `GetGoogleIdOption` asks for) — supplied through
+`local.properties`, `-P` flags or CI secrets, plus a Firestore database and `firebase deploy --only
+firestore:rules`. Until then no automated test can reach Credential Manager, the Google ID token or the
+Firebase exchange, and "sign-in works" is claimed only of everything a sign-in is *for*.
+
+**What was measured, on the tree this section describes.** JVM: 118 classes, 1576 tests, 0 failures, 0 errors,
+0 skipped. Lint: 0 errors, 144 warnings. `assembleDebug` and `assembleDebugAndroidTest` both produced, installed on
+`taskplanner_avd` (API 35) and sha256-matched against `/data/app` before any frame was taken. Instrumented: 18
+classes, 90 tests, each class in its own Gradle command and its own instrumentation process — a merged run of the
+same suite reports 35 failures that no class produces on its own, because the fixtures write global session state
+and the runner does not re-seat it between classes; the merged number is therefore not the suite's result, and no
+production code was changed to chase it. The one failure the isolated matrix did find (`TaskEditorFramesInstrumentedTest`)
+was a test precondition the project's own `clearPackageData` setting makes unsatisfiable, fixed in the fixture.
+Conservation: sixteen tables, each `1→1`, printed by the test that checks it. Screenshots: Settings in state A at
+393dp light, 393dp dark and 320dp with the font at 1.3, in `docs/images/ui-redesign/after/s13-*.png`.
+
+Two gaps this stage found and did **not** close, because they are later stages' by the roadmap's own ordering:
+the eleven tables that moved into the handover are still in **neither** the backup file (format `1.1`) nor a
+Firestore collection, so a signed-in device does not carry a reader's measured work, goals, habits, insights or
+achievements to another device; and `SyncWorker` still treats "no cloud" and "not linked" as a finished job.
+
+
 ---
 
 # Stage 14 — Russian: a language toggle, and the whole app behind it

@@ -941,11 +941,17 @@
 
     <!-- The footer. A sibling of the scroll rather than its last child, on its own surface, with a hairline
          across the top: the fields sliding behind it have to stop at a line and not run into the labels. -->
+    <!-- `baselineAligned="false"`: the same shape as the two-button rows on the report screen, where a two-line
+         label on one button pushed its one-line sibling past the row's edge and the row clipped it. Both labels fit
+         one line at every width this app budgets today, so nothing about this footer's measured frames changes —
+         it is the defect kept from arriving, which a longer translation (Stage 14) or a narrower handset is enough
+         to start. -->
     <LinearLayout
         android:id="@+id/button_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_footer"
+        android:baselineAligned="false"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="@dimen/screen_margin"

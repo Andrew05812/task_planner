@@ -33,8 +33,10 @@ interface UserDao {
      * `categories` and `reminders` carry a `user_id` with no foreign key at all. SQLite resolves
      * `INSERT OR REPLACE` on a unique-index conflict by deleting the conflicting row first, so `REPLACE` here
      * was a profile deletion wearing an insert's clothes: the owner vanished, everything that cascaded went
-     * with it, and its tasks were left owned by nobody — ready to be adopted by whoever is handed that row id
-     * next, since `autoGenerate` reuses the highest freed id rather than reserving a new one.
+     * with it, and its tasks, categories and reminders were left owned by an id that names nobody. They are not
+     * adopted by the next profile either — `users.id` is `INTEGER PRIMARY KEY AUTOINCREMENT`, so a new profile
+     * gets a fresh id from `sqlite_sequence` and never the freed one — which makes the residue permanent rather
+     * than temporary: rows on the device that no screen can address and no sign-out can clean.
      *
      * `ABORT` lets the index do the checking. The statement fails, nothing is removed, and the caller answers
      * about the conflict instead of causing one.

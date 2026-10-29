@@ -80,3 +80,16 @@ captures/
 .cxx/
 local.properties
 *.hprof
+
+# Task Planner — cloud configuration and local data (added in Stage 13)
+#
+# `gradle.properties` is deliberately NOT ignored: it is committed and carries build switches. That is exactly
+# why the four Firebase values must never go there — see firebase.example.properties for where they belong.
+firebase.properties
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+# A safety snapshot is the reader's database, copied. It lives in app-private storage on a device, and this
+# line is the guard against a debugging run ever dropping one next to the sources.
+safety/

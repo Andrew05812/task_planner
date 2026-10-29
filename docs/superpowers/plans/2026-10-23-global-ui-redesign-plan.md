@@ -5421,3 +5421,214 @@ more, in a different shape: after a 10-minute Gradle invocation finished with th
 host was at 87 % memory and `adb` answered `device not found` for a live emulator. `--stop`, twenty seconds, and
 the install went through. The rule this stage learned is that the matrix and the build are never in flight at
 the same time on this machine.
+
+## 20r — Stage 13 executed: the account boundary, and what seven reviews found against it
+
+**What was asked.** A reader who signs in with Google must keep everything they already have: no empty profile, no
+vanished tasks, no reset history, no lost measured work, no duplicate of a record the account already holds, no loss
+on sign-out. Settings must say which account state the build is in rather than hide the section when sign-in is
+unavailable. No secret may be invented or committed, and real authorisation may not be presented as verified when no
+Firebase project exists. One rule governs all of it: *the safety of the reader's local data is never traded for the
+ability to sign in* — the local profile is guaranteed first, and the cloud account is attached afterwards.
+
+### The recon, which changed the plan before a line was written
+
+Three facts, each read out of the shipping schema rather than from a model file, decided the shape of the work.
+
+* Seventeen tables exist; **sixteen carry a `user_id`**, and the handover moved five of them. The other eleven —
+  tracking sessions, measured intervals and their corrections, goals with their task sets and value-change history,
+  habits with their marks and correction history, insights, achievements — were left owned by a profile the reader
+  had just stopped being shown. That is the stage's central defect, and no test existed to see it, because every
+  test that counted rows counted *tasks*.
+* Only `tasks.uuid` and `categories.uuid` lack a unique index. Everywhere else a uuid is either the primary key or
+  covered by a table-wide unique index, so two profiles cannot hold the same one — which means the merge problem is
+  confined to exactly two tables, and the *slots* (`reminders(task_uuid, offset_minutes)`,
+  `tasks(series_uuid, occurrence_at)`, `habit_checks(habit_uuid, day_marker)`, `insights(user_id, rule_key, …)`,
+  `achievements(user_id, achievement_key)`, `goal_tasks(goal_uuid, task_uuid)`) are where two profiles can each
+  legitimately hold a row. The refusal that guards them is a semantic rule, not an index constraint; a first version
+  of the code refused a state the index could never produce, and that dead branch was removed rather than kept as
+  decoration.
+* `users.firebase_uid` has **no** unique index, and `users.id` is `INTEGER PRIMARY KEY AUTOINCREMENT`. The first
+  means the identity anchor is enforced by code and a transaction, not by storage — so the read-then-write in
+  `linkProfile` had to be put inside one transaction, and the index itself is deferred to a schema change. The second
+  means a row id freed by a deleted profile is never handed to anybody, so orphaned rows are not a temporary state
+  that a later profile adopts: they are permanent residue on the device that no screen can address.
+
+### What moved
+
+Four new production files (`ProfileSafetyCopy`, `GoogleSignInTransport`, `ProfileAttachDao`, `di/AuthModule`),
+six rewritten ones (`AuthRepository`, `CloudConfig`, `SettingsViewModel`, `SettingsFragment`, `AppDatabase`,
+`DatabaseModule`), three layouts, `strings.xml`, `app/build.gradle.kts`, `.gitignore`,
+`firebase.example.properties`, `docs/FIREBASE_SETUP.md`, `docs/BACKUP_AND_SYNC.md`, `README.md`, and a new
+`docs/AUTH_SYNC_ENGINEERING.md` written for the reader who wants to know how the boundary is drawn. On the test
+side: five new JVM classes and one new instrumented class, plus a rewritten Settings method and a new geometry test
+in the report screen's class.
+
+### Tests first, and the failures that were seen
+
+The REDs are listed in the order they happened, because two of them were wrong in ways that mattered.
+
+* The conservation test was written against **totals** and passed while the handover stranded rows. It was rewritten
+  to count per table per profile, and then to print a ledger (`build/account-attach-conservation.txt`) that a reader
+  can compare row by row — sixteen tables, each `1→1`.
+* `ProfileSafetyCopyTest` asked for three retained snapshots and found five. The prune rebuilt each path without its
+  `.db` extension, matched nothing, deleted nothing, and reported success; the RED named fifteen files. Sidecars go
+  with their database now.
+* The merge test for a task both profiles hold failed with `[2] vs [2, 2]` — one task twice — because
+  `TaskDao.findTaskByUuid` is a `LIMIT 1` over a rowid-order scan and answers with the *local* row, hiding the
+  account's twin. The read moved to `ProfileAttachDao.getTaskOfUser`, which names the owner in the query.
+* The re-pointing of measured intervals ran **before** the table that owns them had moved, so it matched nothing and
+  reported success. `a merged task takes its measured intervals to the row that survives` is the test that found it.
+* The handover's refusal for a stranded row said "1 row is left behind". Making it name the tables
+  (`strandedTablesOf`) is what turned the blank-`uuid` topic case from a mystery into one line of output.
+
+### The isolation mechanism, and what it was for
+
+The first-ever merged `connectedDebugAndroidTest` run answered 89 tests with 35 failures. Two classes were named in
+almost all of them, and both had passed on their own minutes earlier. Before touching production code, the run was
+reproduced and then taken apart: two classes combined reproduce both failures; the same two in the reverse order
+pass; and the database read after a merged run has `users` empty while `session_last_user_id = 29` — a fixture that
+writes global session state, and a runner that never re-seats the session between classes. **No production code was
+changed to satisfy an artificially merged run.** The suite is documented to run one class at a time, and
+`scripts/run-isolated-gradle-matrix.sh` is how: one Gradle command, one instrumentation process, one result XML per
+class, with a pre-flight that checks the AVD name, the API level, the serial, host and guest memory, and that no
+other Gradle process is alive.
+
+| Test class | Tests | Passed | Failed | Errors | Skipped | Exit code |
+|---|---:|---:|---:|---:|---:|---:|
+| `SignInDataPreservationInstrumentedTest` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `DatabaseLocationInstrumentedTest` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `PdfReportInstrumentedTest` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `ReportPdfBytesInstrumentedTest` | 1 | 1 | 0 | 0 | 0 | 0 |
+| `SeededProfileCleanupTest` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `BottomNavigationInstrumentedTest` | 9 | 9 | 0 | 0 | 0 | 0 |
+| `Stage8aScreensInstrumentedTest` | 6 | 6 | 0 | 0 | 0 | 0 |
+| `TasksScreenInstrumentedTest` | 4 | 4 | 0 | 0 | 0 | 0 |
+| `ProfileNoUserInstrumentedTest` | 2 | 2 | 0 | 0 | 0 | 0 |
+| `ProfileScreenInstrumentedTest` | 6 | 6 | 0 | 0 | 0 | 0 |
+| `ReportScreenInstrumentedTest` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `TaskCardStatesInstrumentedTest` | 12 | 12 | 0 | 0 | 0 | 0 |
+| `TaskCardSwipeInstrumentedTest` | 2 | 2 | 0 | 0 | 0 | 0 |
+| `TaskCardWidthBudgetInstrumentedTest` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `TaskEditorFramesInstrumentedTest` | 11 | 10 | **1** | 0 | 0 | **1** |
+| `TaskEditorInstrumentedTest` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `TasksFabClearanceInstrumentedTest` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `TasksHeaderInstrumentedTest` | 5 | 5 | 0 | 0 | 0 | 0 |
+
+Ninety tests, one failure — and the failure is the most useful thing in the table, because it is not a merged-run
+artefact. It is a class that had never once run under Gradle.
+
+### What that one failure turned out to be
+
+`tickingALeadTimeShowsAMarkAndNotOnlyAColour` opens with an assertion that the app holds `POST_NOTIFICATIONS`, so
+the permission prompt cannot be photographed in place of the form, and its message told the reader to run
+`adb shell pm grant …`. The project's own build file makes that command unable to work:
+`app/build.gradle.kts:55` sets `testInstrumentationRunnerArguments["clearPackageData"] = "true"`, so the wipe happens
+when the instrumentation *starts* — after any grant issued from a shell. The class had passed for the whole of
+Stage 6 because it was run with `am instrument`, which does not inherit that argument. Every Gradle-launched run of
+it has been failing since the day it was written, and the merged run hid that among 35 failures attributed to shared
+session state.
+
+The fix is in the fixture, not in the app: `androidx.test:rules` was already an androidTest dependency, so the class
+now carries `GrantPermissionRule.grant(POST_NOTIFICATIONS)`, which takes the permission after the wipe rather than
+asking someone to have taken it before. The assertion stayed where it is, with the same strength — it is now the
+check that the grant took effect. `build/instrumented-gradle/TaskEditorFramesInstrumentedTest.before-permission-rule.log`
+holds the failure and `.after-permission-rule.log` holds `BUILD SUCCESSFUL` with 11 tests, 0 failures. No test was
+deleted, none was ignored, and no assertion was loosened.
+
+### The test that was written last, and what writing it found
+
+The stage brief asks for a per-table re-check of identities, ownership, links, deleted flags, sync state and
+timestamps. Ownership, links and deleted flags were covered. **Identities and queue positions were not, and nothing
+in the suite would have noticed** — so `the moved rows keep their identities and their place in the sync queue` was
+written, and it disagreed with the code twice before it passed.
+
+* A row can arrive with a *different* uuid, and that is correct: `Category` is created on this device with a blank
+  `uuid`, and a blank is not an identity to preserve but the absence of one, which the handover mints on the way in.
+  A first version of the test compared uuid sets and failed on that row. The claim was rewritten into three that
+  hold: every row that *had* an identity keeps exactly that one, once; no row arrives without an identity; and no
+  two arriving rows share one.
+* The queue check is deliberately not paired with the identity, for the same reason.
+* Two mutations proved the test load-bearing. Making the handover re-mint identities fails it with *"every row of
+  tasks that arrived with an identity keeps exactly that one"* — and three existing merge tests beside it. Making
+  `moveGoals` write `sync_state = 'SYNCED'` fails **only** this test, with *"goals keeps its place in the queue:
+  this handover moves rows, it does not resolve them"* — which is the proof that no other assertion in the suite
+  watched that column. Both mutations were reverted, and the class is green at 20 tests.
+
+### The touch-target question, asked again
+
+Stage 8a recorded that a two-line label on one button pushed its one-line sibling 9px past the row that holds it,
+and that Espresso refused to press a view 13% of which was clipped. Re-measured on the current build, the period row
+is not clipped: `top=0 bottom=126 ratio=1.000`. The attribute that fixed it (`baselineAligned="false"`) is kept, and
+the mutant that forces the asymmetry reproduces a 6px clip of 126 — 4.8%, which `isDisplayingAtLeast(90)` does
+*not* refuse, which is why the historical 9px/13% case is quoted as the reason and not as today's measurement. The
+rule is read from `espresso-core-3.5.1-sources.jar` (`GeneralClickAction`, line 99) rather than remembered.
+`thePeriodRowHoldsBothButtonsInsideItselfAtEveryWidth` measures the real bounds of both buttons against the row that
+holds them, asks that each be entirely visible (a stricter bar than Espresso's: ratio > 0.99 against 0.90) and at
+least 48dp tall, prints what it found and writes it to `shots/period-row-geometry-*.txt` on the device; it then
+presses the button, which is the device-side proof that a clipped view is not what the reader has to hit. It was
+read at the default 393dp and at 320dp with the font at 1.3, in both themes, and it passes in isolation.
+
+### Where the findings live
+
+Every finding from the seven review passes — five independent reviews of the diff, then a code review and a
+silent-failure review of the fixes those five produced — is in **`docs/AUTH_SYNC_ENGINEERING.md` §8**, with the check
+that settled it and one of `FIXED` / `VERIFIED — NOT A BUG` / `DEFERRED` / `OPEN`. A review is not a test, so each
+row names the assertion or the measurement that decided it, and the rows where no such thing exists say so.
+
+### The frames, and which build they belong to
+
+Every frame below was written by the instrumented test on the device, from the APK pair installed for this record
+and hash-matched against `/data/app` before the runs: app `4476bbcef6888af5…`, androidTest
+`7550ace509a46a52…`. The device was set for each configuration and restored afterwards to 220dpi / font 1.0 / light.
+
+| frame | configuration | what it proves |
+|---|---|---|
+| `s13-393-light-10-settings-account.png` | 393dp, light, font 1.0 | state A named in its own line ("Not configured"), the reader's own profile under it, the sign-in row **present and dimmed**, and the sentence beside it |
+| `s13-393-dark-10-settings-account.png` | 393dp, dark, font 1.0 | the same row in the dark theme: disabled reads as disabled, and the one enabled command on the card (`EXPORT DATA`) is still the loudest thing on it |
+| `s13-320-light-13-settings-account.png` | 320dp, light, font 1.3 | the narrowest width and the largest font the app budgets: the explanation wraps to six lines inside the card, nothing is clipped, nothing pushes the button off its row |
+
+The frame the class already wrote was not enough, and the reason is worth keeping. `photograph` captures the window
+wherever the last *in-scroll* `scrollTo` left it; the cloud notice that closes the screen sits outside the scroll, so
+scrolling to it does not move anything, and the frame the method ended with was a picture of the button and the
+sentence — not of the state line that Stage 13 added. The method now writes a second frame at the moment it is
+asserting the state line, which is the moment the claim is actually about.
+
+One run was refused before it succeeded, and it is recorded rather than dropped: the first dark attempt failed with
+`the tab 2131231400 did not draw its screen` — the warm-up guard refusing to photograph a screen that had not drawn,
+which is the behaviour Stage 7's incident asked for. The same command retried green (`OK (1 test)`, 19.8s). A refused
+run is not a failed test, and neither is treated as a pass.
+
+### The gates, on the tree this commit contains
+
+| gate | command | result |
+|---|---|---|
+| JVM suite | `./gradlew --offline --no-build-cache testDebugUnitTest` | 118 classes, **1576 tests, 0 failures, 0 errors, 0 skipped**, exit 0 |
+| lint | `lintDebug` | **0 errors, 144 warnings**, the same totals the clean run before the last two edits produced |
+| app build | `assembleDebug` | produced, `app-debug.apk` |
+| test build | `assembleDebugAndroidTest` | produced, `app-debug-androidTest.apk` |
+| instrumented suite | 18 per-class Gradle runs, one instrumentation process each | 90 tests, 89 passing at the first pass, the one failure fixed in the fixture and re-run green (11/11) |
+| data conservation | `AccountAttachTest`'s own ledger | sixteen tables, each `1→1`, in `build/account-attach-conservation.txt` |
+
+The clean-tree run before the last two edits was 1575 tests; the identity-and-queue test is the one that took it to
+1576, and the numbers above are from the run that contains it.
+
+### What is still true at the end of the stage
+
+* **Google sign-in itself is unverified, and stays `BLOCKED — Firebase project / OAuth configuration required`.**
+  There is no Firebase project and no OAuth Web client id in this repository, by design. Everything a credential is
+  *for* runs on real Room and on the device — `linkProfile`, the handover, the session, the safety copy — and
+  `CredentialManagerSignInTransport` is the one class no test here can reach. A test seam is not proof of real
+  authorisation, and the record does not claim any.
+* Eleven of the sixteen tables still travel in **neither** the backup file nor Firestore, so a signed-in device does
+  not carry a reader's measured work, goals, habits, insights or awards to another device. **Stage 15/16.**
+* `SyncWorker` treats "no cloud" and "not linked" as a finished job. **Stage 17.**
+* `users.firebase_uid` has no unique index; the transaction is what holds the boundary today. **Stage 17** (schema).
+* `SettingsViewModel` has no JVM harness of its own: what the screen *renders* is under test
+  (`AccountUiStateTest`, six methods over the twelve combinations), what the ViewModel *does between* renders is
+  argued from reading. The next stage that touches this screen owns the harness.
+* `AuthRepository` is now 665 lines and holds three responsibilities — sign-in, the handover, the session. The
+  handover wants its own class. Deferred rather than done mid-stage, so that a refactor with no test of its own does
+  not ride in on a data-safety commit.
+
+The full ledger — every finding, the check that settled it, and its status — is `docs/AUTH_SYNC_ENGINEERING.md` §8.

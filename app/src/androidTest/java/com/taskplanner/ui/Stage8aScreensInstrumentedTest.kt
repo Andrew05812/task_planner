@@ -34,6 +34,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.After
@@ -242,16 +243,17 @@ class Stage8aScreensInstrumentedTest {
     // ---------------------------------------------------------------- Settings
 
     /**
-     * Settings keeps its five named controls, and says why Sign In is not one of them.
+     * Settings keeps its five named controls, and shows the sign-in affordance it cannot yet use.
      *
-     * `SettingsFragment.render()` shows `signInButton` only when `state.cloudConfigured` holds, and
      * `CloudConfig.isConfigured` is false on every build this repository produces: the Gradle properties
-     * `firebase.projectId` and `firebase.appId` default to the literal `NOT_CONFIGURED`, so
-     * `BuildConfig.FIREBASE_PROJECT_ID` is that placeholder and no `google-services.json` exists to override
-     * it. The button being gone is therefore the designed local-only mode, not a rendering accident — and the
-     * screen states it, which is what the last two assertions ask. The stage's rule is to diagnose this, not
-     * to decorate over it: no fake sign-in control is added, and `syncNowButton` is asserted *disabled*,
-     * because that is what the same state produces.
+     * `firebase.projectId` and `firebase.appId` default to the literal `NOT_CONFIGURED`, and no
+     * `google-services.json` exists to override them. Stage 8a answered that by hiding the button, and this
+     * method asserted `View.GONE`; Stage 13 changed the rule and this assertion with it, because a control that
+     * is absent cannot be told apart from a feature that was never built. The honest rendering is
+     * visible-and-disabled beside a sentence that names what is missing — and an enabled button on this build
+     * would be the decorative fake the stage was told not to make, which is why `isEnabled` is asserted false
+     * rather than left to the eye. `signOutButton` stays gone, because nobody is signed in, and `syncNowButton`
+     * is still asserted *disabled*: that is what the same state produces.
      */
     @Test
     fun settingsKeepsItsControlsAndExplainsTheAbsentSignIn() {
@@ -280,16 +282,40 @@ class Stage8aScreensInstrumentedTest {
             installed != null && version.contains(installed)
         )
 
-        assertEquals(
-            "Sign In must not appear on a build with no cloud configuration — and it must be *gone*, not " +
-                "merely invisible, so a reader with a screen reader is never offered it",
-            View.GONE,
-            findViewById(R.id.signInButton).visibility
+        // State A: the sign-in row is on screen, it is *not* usable, and the screen says why in its own words.
+        // Stage 8a asserted this button was GONE; Stage 13 changed the rule, because a control that is absent
+        // cannot be told apart from a feature that was never built. Disabled-and-explained is the honest
+        // rendering, and an enabled one here would be the decorative fake the stage was told not to make.
+        onView(withId(R.id.signInButton)).perform(scrollTo()).check(matches(isDisplayed()))
+        assertFalse(
+            "Sign In is shown on a build with no cloud configuration, so it must be disabled",
+            findViewById(R.id.signInButton).isEnabled
         )
         assertEquals(
             "and the matching sign-out is gone too — nobody is signed in",
             View.GONE,
             findViewById(R.id.signOutButton).visibility
+        )
+        onView(withId(R.id.accountStateText)).perform(scrollTo()).check(matches(isDisplayed()))
+        assertEquals(
+            "the account section names its own state, and this build's state is 'not configured'",
+            context.getString(R.string.account_state_not_configured),
+            textOf(R.id.accountStateText)
+        )
+        // A frame of the row that names the state, taken here rather than at the end of the method.
+        //
+        // The one `photograph` this method had was written after its last `scrollTo`, so it showed whatever the
+        // final assertion had scrolled to — the cloud notice at 393dp, and at 320dp with the font at 1.3 the
+        // Backup card. Both are real frames of a real screen, and neither is the thing Stage 13 changed: the
+        // line that says which of the four states this build is in sits above the fold by then. The state line
+        // was still *asserted*, which is the difference between a screen that works and a picture that proves
+        // it, and Stage 13 is the stage that promised the picture.
+        photograph("s8a-settings-account")
+        onView(withId(R.id.signInExplanation)).perform(scrollTo()).check(matches(isDisplayed()))
+        assertEquals(
+            "the sentence beside the disabled button is not the one the app writes",
+            context.getString(R.string.sign_in_not_configured_explanation),
+            textOf(R.id.signInExplanation)
         )
         onView(withId(R.id.cloudNoticeText)).perform(scrollTo()).check(matches(isDisplayed()))
         val notice = textOf(R.id.cloudNoticeText)

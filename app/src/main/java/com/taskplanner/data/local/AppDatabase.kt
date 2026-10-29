@@ -61,6 +61,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun insightDao(): InsightDao
     abstract fun achievementDao(): AchievementDao
 
+    /** The eleven profile tables the sign-in handover used to leave behind. See the DAO's doc. */
+    abstract fun profileAttachDao(): ProfileAttachDao
+
     /** The lifetime totals the achievement rules are judged against; reads only. */
     abstract fun achievementStatsDao(): AchievementStatsDao
 

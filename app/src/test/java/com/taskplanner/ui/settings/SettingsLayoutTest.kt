@@ -76,23 +76,36 @@ class SettingsLayoutTest {
     }
 
     /**
-     * The notice that explains an absent cloud, and the rule that decides whether Sign In is on screen.
+     * The account section carries the three things a reader needs to know it is in state A: the state named,
+     * the button present, and the reason beside it.
      *
-     * `SettingsFragment.render()` hides `signInButton` and shows `cloudNoticeText` when
-     * `CloudConfig.isConfigured` is false — which is the answer to "where is Google Sign-In", and the reason
-     * a screenshot of a configured build and a screenshot of this one differ by one button. The rule lives in
-     * the fragment, so what a layout test can honestly hold is the pair: the notice exists, it carries the
-     * explanation, and it starts hidden because the layout does not know the build's configuration.
+     * `SettingsFragment.render()` used to answer an unconfigured build by hiding `signInButton` and showing one
+     * notice at the foot of the screen. Stage 13 moved that decision into `AccountUiState` and gave the card
+     * three views, so the layout has to hold all three before the fragment can show any of them — and the
+     * layout must not guess the build's state, which is why every one of them starts hidden or empty here and
+     * the fragment is the only thing that decides what a reader sees.
      */
     @Test
     fun `the screen carries the notice that explains an unconfigured cloud`() {
         val binding = screen()
         assertEquals(
-            "the notice is the only thing a reader gets when the build has no Firebase configuration",
+            "the notice is what a reader gets when the build has no Firebase configuration",
             themed().getString(R.string.app_locked_message), binding.cloudNoticeText.text.toString()
         )
         assertTrue("and the layout must not guess the build's state: it starts hidden",
             !binding.cloudNoticeText.isVisible)
+        assertTrue(
+            "the state line is empty in the layout: the fragment decides which of the four states this is, " +
+                "and a layout that guessed one would make the decision untestable",
+            binding.accountStateText.text.isEmpty()
+        )
+        assertEquals(
+            "and the explanation beside the disabled button is the sentence the app writes",
+            themed().getString(R.string.sign_in_not_configured_explanation),
+            binding.signInExplanation.text.toString()
+        )
+        assertEquals("the sign-in button is in the layout, not added only when a cloud exists",
+            View.VISIBLE, binding.signInButton.visibility)
     }
 
     @Test

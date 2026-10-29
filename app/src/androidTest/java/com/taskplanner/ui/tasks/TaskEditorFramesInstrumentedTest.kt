@@ -33,6 +33,7 @@ import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.rule.GrantPermissionRule
 import com.google.android.material.chip.Chip
 import com.google.android.material.textfield.TextInputLayout
 import com.taskplanner.R
@@ -61,6 +62,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.BeforeClass
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -102,6 +104,29 @@ class TaskEditorFramesInstrumentedTest {
     private val context: Context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private lateinit var scenario: ActivityScenario<MainActivity>
+
+    /**
+     * The notification permission, taken by the run instead of asked of whoever started it.
+     *
+     * This class used to state the grant as a precondition in a comment — "start the run with
+     * `adb shell pm grant …`" — and assert it at the top of the one test that ticks a reminder. That precondition
+     * was unsatisfiable on every run Gradle starts, and the reason is in this module's own build file:
+     * `clearPackageData = "true"` is a *runner argument*, so the wipe happens when the instrumentation begins,
+     * which is after any `pm grant` issued from a shell. What survives a manual `am instrument` run — which is how
+     * this class passed for the whole of Stage 6 — cannot survive a `connectedDebugAndroidTest` run, and the only
+     * thing the difference produced was a failing test whose message told the reader to run the command that had
+     * just been undone.
+     *
+     * Granting here is the AndroidX-sanctioned way to ask the same thing: the rule runs before every method in
+     * this class, so the grant lands after the wipe rather than before it. The assertion in
+     * [tickingALeadTimeShowsAMarkAndNotOnlyAColour] stays exactly where it was and stays as strong — it is now the
+     * check that the grant took effect, which is the fact the photograph depends on.
+     */
+    @Rule
+    @JvmField
+    val notificationPermission: GrantPermissionRule = GrantPermissionRule.grant(
+        Manifest.permission.POST_NOTIFICATIONS
+    )
 
     private companion object {
         /**
@@ -444,11 +469,13 @@ class TaskEditorFramesInstrumentedTest {
         // Ticking a reminder asks the system for the notification permission the first time, and the
         // prompt lands over this screen a moment later — after the click returns, before the photograph is
         // taken. Every pixel check in this file would pass on a frame of that dialog, so the run has to be
-        // configured not to raise it.
+        // configured not to raise it. The `notificationPermission` rule takes the permission at the start of
+        // every method here; what this line asks is whether that actually happened, because the frame is only
+        // evidence of the form if the form is what is on the screen.
         assertEquals(
-            "the app already holds the notification permission; start the run with " +
-                "`adb -s emulator-5584 shell pm grant com.taskplanner android.permission.POST_NOTIFICATIONS` " +
-                "so the chip's prompt cannot be photographed in place of the form",
+            "the run holds the notification permission — the class's GrantPermissionRule granted it, and if " +
+                "the device still says no then the chip's prompt would be photographed in place of the form, " +
+                "which is the one frame this file must never accept",
             PackageManager.PERMISSION_GRANTED,
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
         )

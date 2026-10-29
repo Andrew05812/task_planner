@@ -13,7 +13,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -217,17 +216,36 @@ class LocalDataMigrationTest {
         )
     }
 
+    /**
+     * Signing out closes the cloud session and nothing else.
+     *
+     * This method used to assert `assertNull(sessionRepository.currentUserId())` — that after a sign-out the
+     * app resolves to nobody. It was written as a guard against deleting data, and it passed, because the code
+     * did keep every row; what it silently accepted was that the rows became unreachable: `endSession()` also
+     * cleared `is_current` and dropped the repair anchor, so the next start-up showed `NoUser` and offered a
+     * fresh profile while the reader's own work sat in the database underneath. Stage 13's whole subject is
+     * that a sign-in must not cost a person their data, and an unreachable one costs them the same thing.
+     *
+     * The assertion is therefore replaced with a stronger one, not a weaker: the reader is still on the profile
+     * they signed into, the rows are readable *through that session*, and the link that makes a second sign-in
+     * a return rather than a duplicate is still on the row.
+     */
     @Test
-    fun `signing out of the account leaves every stored task alone`() = runTest {
+    fun `signing out leaves the reader on their profile with the data reachable`() = runTest {
         val account = signInAsGoogleAccount()
         fixture.addTask(account.id, "After the move")
 
         fixture.authRepository.signOut()
 
-        assertNull(fixture.sessionRepository.currentUserId())
+        val still = fixture.sessionRepository.currentUserId()
+        assertEquals("signing out of the cloud leaves the profile selected", account.id, still)
         assertEquals(
             "signing out is not deleting",
-            listOf("After the move"), fixture.taskDao.getAllTasksOnce(account.id).map { it.title }
+            listOf("After the move"), fixture.taskDao.getAllTasksOnce(still!!).map { it.title }
+        )
+        assertEquals(
+            "and the profile still knows which Google account it belongs to, so signing in again returns here",
+            account.firebaseUid, fixture.userDao.getUserById(account.id)?.firebaseUid
         )
         assertEquals(account.id, fixture.userDao.getUserById(account.id)?.id)
     }

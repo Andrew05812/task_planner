@@ -87,26 +87,64 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    /**
+     * Shows a notice once, and only once, per notice.
+     *
+     * The memory is of the *text*, so that a screen resumed from the background — where `StateFlow` replays its
+     * current value and the same unconsumed sentence would arrive again — does not toast the same thing twice.
+     * It is cleared the moment the state stops carrying a notice, which is what makes a second failure that reads
+     * exactly like the first one show again: a reader who pressed "Move local data" twice and was refused twice
+     * ("stop the timer first") was previously refused in silence the second time, because the words had not
+     * changed. Same words twice is not the same notice twice, and the state, not the string, says which it is.
+     */
     private fun showNotice(message: String?) {
-        if (message == null || message == lastShownNotice) return
+        if (message == null) {
+            lastShownNotice = null
+            return
+        }
+        if (message == lastShownNotice) return
         lastShownNotice = message
         Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG).show()
         viewModel.consumeMessages()
     }
 
     private fun render(state: SettingsState) {
-        val googleSignedIn = state.user?.firebaseUid != null
+        val signedIn = state.accountState == AccountUiState.SignedIn
         binding.apply {
             progressBar.isVisible = state.busy
             exportButton.isEnabled = !state.busy
             importButton.isEnabled = !state.busy
             syncNowButton.isEnabled = !state.busy && state.cloudConfigured
-            signInButton.isVisible = state.cloudConfigured && !googleSignedIn
-            signOutButton.isVisible = googleSignedIn
+
+            accountStateText.setText(state.accountState.labelRes)
+            // The button is present in every state except "already signed in", and *disabled* rather than
+            // hidden when the build cannot use it. Stage 8a hid it, which left a reader unable to tell an
+            // unconfigured build from a missing feature — and the feature is not missing, it is waiting.
+            signInButton.isVisible = !signedIn
+            signInButton.isEnabled =
+                state.accountState != AccountUiState.NotConfigured && !state.busy
+            signInExplanation.isVisible = state.accountState == AccountUiState.NotConfigured
+            // A screen reader reaches the button before the sentence under it, and a dimmed control announces
+            // only "double-tap to activate". The reason travels with the button, so the explanation cannot be
+            // missed by the one reader for whom order is all there is.
+            signInButton.contentDescription = if (signInButton.isEnabled) {
+                null
+            } else {
+                getString(R.string.sign_in_not_configured_explanation)
+            }
+            signOutButton.isVisible = signedIn
             cloudNoticeText.isVisible = !state.cloudConfigured
 
+            // Whose profile this is, in the words the state line above just used. The old rendering said
+            // "Local profile: Ivan" under a state line that said "Linked to this Google account" — two sentences
+            // about the same row that contradicted each other, and the reader had to guess which one the app
+            // believed. And when there is no profile at all, the state line already says "Not signed in"; a
+            // second line with the same four words is not more information.
+            accountStatusText.isVisible = state.user != null
             accountStatusText.text = when {
-                googleSignedIn -> getString(R.string.signed_in_as, state.user?.name.orEmpty())
+                signedIn -> getString(R.string.signed_in_as, state.user?.name.orEmpty())
+                state.accountState == AccountUiState.LinkedSignedOut && state.user != null ->
+                    getString(R.string.account_linked_profile_format, state.user.name)
                 state.user != null -> getString(R.string.account_local_profile_format, state.user.name)
                 else -> getString(R.string.google_account_missing)
             }
@@ -114,10 +152,15 @@ class SettingsFragment : Fragment() {
             syncStatusText.text = viewModel.describeSyncStatus()
             versionText.text = getString(R.string.version_format, state.versionName)
 
-            val showMigration = googleSignedIn && state.localProfiles.isNotEmpty()
+            // The merge is offered to a profile that *has* an account to merge into — including one whose
+            // cloud session is closed, because the data is still on this device and the link still stands, and
+            // including a build whose configuration has gone missing, because moving rows between two profiles
+            // of this database never contacted Firebase in the first place.
+            val showMigration = state.user?.firebaseUid != null && state.localProfiles.isNotEmpty()
             localDataLabel.isVisible = showMigration
             localProfileLayout.isVisible = showMigration
             migrateLocalDataButton.isVisible = showMigration
+            migrateSafetyNote.isVisible = showMigration
             if (showMigration) bindLocalProfiles(state)
         }
     }

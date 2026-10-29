@@ -2,8 +2,9 @@
 
 Offline-first task manager for Android. Tasks, categories, topic groups, an archive and a lifecycle
 (`TODO → IN_PROGRESS → PAUSED → DONE`), repeating tasks with series management, deadline reminders
-that survive a reboot, optional Google sign-in and cloud sync that never has to be used for the app
-to work.
+that survive a reboot, and optional Google sign-in with cloud sync that never has to be used for the app
+to work — **no build of this repository has a Firebase project, so every build of it is local-only**
+(see *Known limitations* below and `docs/FIREBASE_SETUP.md`).
 
 ## Build and test
 
@@ -78,8 +79,16 @@ waking up to an empty list.
   storage permission is asked for anywhere. The figures are the report repository's, unchanged: the screen
   counts nothing, sums nothing and fills in nothing (see `docs/REPORT_EXPORT.md`).
 - **Accounts**: Google Credential Manager + Firebase Auth. The Firebase UID, never the e-mail, is
-  the identity anchor. Signing out ends the session and deletes no data. A local profile can be
-  moved onto a Google account explicitly, from Settings.
+  the identity anchor. Settings shows which of the four account states the build is in — not configured,
+  not signed in, linked but signed out, signed in — and on a build with no project the sign-in row is
+  **visible and disabled with the reason beside it**, not hidden. Signing out ends the cloud session and
+  leaves the reader on their own profile with their data reachable. A local profile can be moved onto a
+  Google account explicitly, from Settings: that move covers all sixteen tables that carry a `user_id`
+  (tasks, categories, topics, patterns and lead times, tracking sessions, measured intervals and their
+  corrections, goals with their task sets and change history, habits with their marks and their
+  correction history, insights and achievements), runs in one transaction, and takes a verified copy of
+  the whole database before it writes anything. See `docs/FIREBASE_SETUP.md` §6 for the merge rule and
+  §7 for what proves each claim.
 - **Sync**: an offline queue of pending writes with stable uuids, timestamps, tombstones and sync
   states, pushed and pulled by WorkManager when a network is available. One document per entity in
   `users/{uid}/{tasks|categories|groups|recurrence_rules|reminders}/{uuid}`, so a series and the
@@ -396,11 +405,16 @@ on a real screen — is still open.
   not carry it. It stays out of the file rather than in it as an unreviewed shape: carrying the tracking
   tables through backup and sync is a later stage's work.
 - Cloud sync and Google sign-in are untested against a live Firebase project: no project
-  configuration is committed, by design. The code paths degrade to local-only when the placeholders
-  in `gradle.properties` are unset, and the local paths are what the test suite covers. The same
-  caution applies to `firebase/firestore.rules`: it has not been deployed or evaluated by the rules
-  emulator either, so the required-field checks it adds for the two new collections are reviewed by
-  reading, not executed.
+  configuration is committed, by design. The code paths degrade to local-only while the placeholders are
+  unset — and `gradle.properties` is committed, so a real value belongs in `local.properties`, in `-P`
+  flags, or in CI secrets, never there. The local paths are what the test suite covers, including the local
+  half of a sign-in: everything a credential is *used for* (`linkProfile`, the handover, the session, the
+  safety copy) runs on real Room in `AccountAttachTest` and on the device in
+  `SignInDataPreservationInstrumentedTest`. What no automated test here can reach is the credential itself —
+  Credential Manager, the Google ID token and the Firebase exchange — because that needs a project and an
+  OAuth Web client id this repository does not have. The same caution applies to
+  `firebase/firestore.rules`: it has not been deployed or evaluated by the rules emulator either, so the
+  required-field checks it adds for the two new collections are reviewed by reading, not executed.
 - Conflict resolution is rule-based, not a merge: a local row with unsynced edits is never
   overwritten by the incoming copy, a deletion marker beats an older remote update, and a remote
   copy that is not newer than the local one is ignored. Two devices that edited the same field

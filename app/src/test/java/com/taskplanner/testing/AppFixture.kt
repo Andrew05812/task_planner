@@ -5,6 +5,10 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.room.Room
 import com.taskplanner.data.auth.AuthRepository
+import com.taskplanner.data.auth.GoogleSignInTransport
+import com.taskplanner.data.auth.ProfileSafetyCopy
+import com.taskplanner.data.auth.SessionEnd
+import com.taskplanner.data.auth.SignInAttempt
 import com.taskplanner.data.backup.BackupRepository
 import com.taskplanner.data.calendar.CalendarRepository
 import com.taskplanner.data.habit.HabitReminderCoordinator
@@ -16,6 +20,7 @@ import com.taskplanner.data.local.GoalDao
 import com.taskplanner.data.local.GroupDao
 import com.taskplanner.data.local.HabitDao
 import com.taskplanner.data.local.InsightDao
+import com.taskplanner.data.local.ProfileAttachDao
 import com.taskplanner.data.local.RecurrenceDao
 import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
@@ -56,6 +61,7 @@ import com.taskplanner.data.tracking.MonotonicReference
 import com.taskplanner.data.tracking.WorkTicker
 import com.taskplanner.data.sync.SyncAppliers
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import org.robolectric.Shadows.shadowOf
@@ -90,7 +96,39 @@ class AppFixture(val context: Context) : AutoCloseable {
     private val queryExecutor = FixtureExecutor("fixture-query-thread")
     private val transactionExecutor = FixtureExecutor("fixture-transaction-thread")
 
-    val database: AppDatabase = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+    /**
+     * A file database, in a directory whose path is short on purpose.
+     *
+     * This used to be `inMemoryDatabaseBuilder`, and the change is not cosmetic: `ProfileSafetyCopy` takes the
+     * copy the handover depends on by copying the SQLite file the app is running on, so an in-memory fixture
+     * cannot exercise the guarantee that matters most — "a verified copy exists before anything is deleted".
+     * A file-backed fixture is also the storage the app actually ships with (`AppDatabase.NAME` through the
+     * Hilt module), so the WAL checkpoint, the reopen and the `integrity_check` the snapshot runs are the same
+     * calls production makes.
+     *
+     * One path serves two limits, and the second is what moved the file out of the app's own data directory.
+     * The name is unique per fixture, because Robolectric keeps one temp files directory for a whole test class
+     * and two fixtures on the same path would inherit each other's rows — the failure the in-memory builder was
+     * quietly protecting against. And the *root* is short: the first version lived under
+     * `context.getDatabasePath(…)`, whose Robolectric directory is named after the test class *and* the test
+     * method, so with a method like
+     * `a business key the account already holds does not destroy either side's record` the resulting
+     * `…\databases\fixture-….db-wal` passed Windows' 260-character limit and SQLite answered "unable to open
+     * database file" on `PRAGMA journal_mode=WAL` — a harness path length reported as a database that cannot be
+     * opened. Under the JVM's own temp directory there is room for the write-ahead log's sidecars; the snapshot
+     * itself is written under `filesDir/safety/`, which is long-named, and `ProfileSafetyCopyTest` is where that
+     * budget is asserted.
+     */
+    private val databaseFile: File = File(
+        java.nio.file.Files.createTempDirectory("tp").toFile().apply { deleteOnExit() },
+        "f${System.nanoTime()}.db"
+    )
+
+    // The absolute path is passed as the database *name*: SQLiteOpenHelper opens a name that is already a
+    // path, and `ProfileSafetyCopy` resolves the same string back to the same file either way.
+    val database: AppDatabase = Room.databaseBuilder(
+        context, AppDatabase::class.java, databaseFile.absolutePath
+    )
         .allowMainThreadQueries()
         .setQueryExecutor(queryExecutor)
         .setTransactionExecutor(transactionExecutor)
@@ -272,9 +310,17 @@ class AppFixture(val context: Context) : AutoCloseable {
         sessionRepository, recurrenceRepository, reminderRepository
     )
     // Firebase is never contacted in these tests: only the local half of AuthRepository runs.
+    //
+    // The safety copy runs against this fixture's database file. `inMemoryDatabaseBuilder` gives Room a
+    // database with no file on disk, so the copy would refuse to start and every handover test would fail on
+    // the guard instead of on the move; the fixture therefore uses a real file in a directory it deletes
+    // afterwards. See [databaseFile] for why that file lives under a short path.
+    val profileAttachDao: ProfileAttachDao = database.profileAttachDao()
+    val safetyCopy = ProfileSafetyCopy(context, database)
     val authRepository = AuthRepository(
         context,
         dagger.Lazy { throw UnsupportedOperationException("Firebase is not configured in tests") },
+        RefusingSignInTransport,
         sessionRepository,
         userDao,
         taskDao,
@@ -282,6 +328,8 @@ class AppFixture(val context: Context) : AutoCloseable {
         groupDao,
         recurrenceDao,
         reminderDao,
+        profileAttachDao,
+        safetyCopy,
         database
     )
     /** The cloud-side merge rules, wired to this device's database: what a pull hands to Room. */
@@ -386,6 +434,11 @@ class AppFixture(val context: Context) : AutoCloseable {
         queryExecutor.awaitTermination(5, TimeUnit.SECONDS)
         transactionExecutor.awaitTermination(5, TimeUnit.SECONDS)
         database.close()
+        // The file is the fixture: leaving it behind would let a later test in the same class find rows it
+        // never wrote. `-wal` and `-shm` are removed too, because a checkpoint that did not run leaves them.
+        listOf("", "-wal", "-shm").forEach { suffix ->
+            File(databaseFile.absolutePath + suffix).delete()
+        }
     }
 
     /**
@@ -407,6 +460,27 @@ class AppFixture(val context: Context) : AutoCloseable {
 
         override fun close() {
             closed = true
+        }
+    }
+
+    /**
+     * A sign-in transport that refuses to be used.
+     *
+     * The credential exchange is not part of a JVM test — there is no activity, no Google account and no Firebase
+     * project, and `AuthRepositoryTest` installs its own scripted transport where it needs to drive the state
+     * machine. What this fixture needs is for the *rest* of `AuthRepository` to be reachable, and for an accidental
+     * call into the credential half to be a loud failure rather than a silent success.
+     */
+    object RefusingSignInTransport : GoogleSignInTransport {
+        override suspend fun signIn(activity: androidx.fragment.app.FragmentActivity): SignInAttempt =
+            throw UnsupportedOperationException(
+                "Credential Manager is not part of a JVM test; use a scripted transport instead"
+            )
+
+        override suspend fun endSession(): SessionEnd {
+            // Nothing was ever started, so there is nothing to end. Signing out of a session that does not exist
+            // must not throw: `AuthRepository` calls this on a refusal path that a test does exercise.
+            return SessionEnd.NotConfigured
         }
     }
 }

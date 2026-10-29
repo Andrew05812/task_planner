@@ -217,6 +217,39 @@
     <string name="export_data">Export data</string>
     <string name="import_data">Import data</string>
     <string name="sign_in_google">Sign in with Google</string>
+    <!-- The four states the account section can be in, named on the screen. Stage 8a left this section
+         hidden when the build had no Firebase configuration, so a reader could not tell "not installed" from
+         "not signed in" from "signed in" — or even that the feature existed. The words are the state, not a
+         decoration: the button is disabled by the first one, offered by the second, closed by the third, and
+         replaced by the fourth. `AccountUiStateTest` fails if any two of these stop being distinct. -->
+    <string name="account_state_not_configured">Not configured</string>
+    <string name="account_state_not_signed_in">Not signed in</string>
+    <string name="account_state_signed_in">Signed in</string>
+    <string name="account_state_linked_signed_out">Linked to this Google account, currently signed out</string>
+    <!-- Reader-facing, and it stays that way: the file a builder needs is named in docs/FIREBASE_SETUP.md, not
+         in a sentence a reader has to decode on a phone. -->
+    <string name="sign_in_not_configured_explanation">Signing in to Google is not available in this build: it was assembled without a cloud project. Everything on this device works as it is, and nothing changes until a sign-in is possible.</string>
+    <!-- Said before the move, not after, and about the data rather than the file: the copy is what makes the
+         merge reversible, and a reader deciding whether to press has to know that a duplicate is dropped
+         somewhere recoverable. The path is deliberately not quoted — it is app-private storage nothing can open
+         from a handset, and a sentence pointing at it would promise a way out that does not exist. -->
+    <string name="migrate_local_data_message">Everything the selected profile holds moves into your account: tasks, categories, topics, repeat patterns and reminders, tracked and measured time, goals, habits with their history, insights and awards. Nothing is deleted before a copy of the whole profile is written to this device, and a record your account already holds is merged into that copy rather than dropped.</string>
+    <string name="migrate_local_data_moved_format">Moved %1$d record(s) into your account; %2$d duplicate(s) merged; %3$d link(s) re-pointed. The copy holds the %4$d record(s) this profile had.</string>
+    <string name="migrate_local_data_nothing_to_move">That profile is the one you are already using, so nothing was moved.</string>
+    <string name="local_profile_picker_hint">Which profile\'s data should move?</string>
+    <string name="account_linked_profile_format">%1$s — this device\'s copy of your Google account</string>
+    <string name="sign_in_email_taken_session_open">That Google address (%1$s) already belongs to another profile here, and the cloud session could not be closed either. Your data has not moved; sign in again, or rename the other profile.</string>
+    <!-- The generic sign-in failure, in the case where closing the cloud session failed with it: the reader is
+         told both facts, because the second one is what makes the first actionable on the next start. -->
+    <string name="sign_in_failed_session_open">Sign-in failed: %1$s — and the cloud session could not be closed either (%2$s). This device may still be signed in to Google; your own profile and its data were not changed.</string>
+    <!-- The move committed and its numbers were shown; only the sync attempt afterwards failed. Named apart from
+         the handover\'s own failures, all of which mean nothing was moved. -->
+    <string name="migrate_local_data_sync_failed">Your records were moved, but the sync that should follow failed: %1$s. Nothing about the move was undone; use Sync now when you are online.</string>
+    <string name="sign_out_session_left_open">You are still on this profile and your data is untouched, but the cloud session could not be closed: %1$s</string>
+    <string name="error_safety_copy_unavailable">Nothing was moved: the app could not make a verified copy of your data first. %1$s</string>
+    <string name="error_database_refused_move">Nothing was moved: the database refused a change it cannot make. %1$s</string>
+    <string name="error_session_unread">The current profile could not be read from storage: %1$s</string>
+    <string name="error_profiles_unread">The list of profiles on this device could not be read, so nothing can be moved right now: %1$s</string>
     <string name="sign_out">Sign out</string>
     <string name="signed_in_as">Signed in as %1$s</string>
     <string name="local_only_account">Local profile (not signed in)</string>
@@ -261,7 +294,6 @@
     <string name="error_no_profile_first">Create a profile first</string>
     <string name="settings_local_data">Local data</string>
     <string name="migrate_local_data">Move local data into this account</string>
-    <string name="migrate_local_data_message">Tasks, categories and topics of the selected profile will be attached to your Google account in one step. Nothing is deleted before the move succeeds.</string>
     <string name="sync_state_idle">Not synced yet</string>
     <string name="sync_state_running">Synchronizing…</string>
     <string name="sync_state_done">Pushed %1$d, pulled %2$d at %3$s</string>
@@ -276,7 +308,6 @@
     <string name="sign_in_email_taken">That Google address (%1$s) already belongs to another profile on this
         device, so nothing was changed. Open that profile and give it a different e-mail first; then sign in
         again and move its data into the account.</string>
-    <string name="migrate_local_data_done">Local data is now attached to your account</string>
     <string name="error_generic">Operation failed</string>
     <string name="backup_scope_hint">Backup contains tasks, categories, topics, statuses, dates and ordering. It never contains passwords or sign-in tokens.</string>
     <string name="action_import">Import</string>
