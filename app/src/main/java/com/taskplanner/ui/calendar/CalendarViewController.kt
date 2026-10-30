@@ -21,6 +21,7 @@ import com.taskplanner.data.calendar.CalendarAggregator.DayCell
 import com.taskplanner.data.calendar.CalendarAggregator.DayPlan
 import com.taskplanner.data.calendar.CalendarAggregator.MINUTES_PER_DAY
 import com.taskplanner.data.calendar.CalendarMath
+import com.taskplanner.data.report.export.ReportFormatting
 import com.taskplanner.data.model.Task
 import com.taskplanner.ui.calendar.CalendarDayLayout.Cluster
 import com.taskplanner.databinding.FragmentCalendarBinding
@@ -352,8 +353,12 @@ class CalendarViewController(
     ).joinToString(SEPARATOR)
 
     private fun titleOf(state: CalendarState): String = when (state.mode) {
-        CalendarMode.MONTH ->
-            SimpleDateFormat("MMMM yyyy", locale).format(wallClockDate(state.anchor, 0))
+        // The shared heading rather than a pattern of its own. `SimpleDateFormat("MMMM yyyy")` gives the
+        // genitive in Russian — "октября 2026" — because the year beside the month makes the locale data pick
+        // the form a dated phrase uses, and a month title has no date in it. `ReportFormatting.month` explains
+        // the choice; the week and day labels below keep their patterns because both carry a day number, which
+        // is exactly where the genitive is right.
+        CalendarMode.MONTH -> ReportFormatting.month(state.anchor)
 
         CalendarMode.WEEK -> {
             val days = CalendarMath.weekGrid(state.anchor)

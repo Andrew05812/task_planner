@@ -5,10 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.TaskRepository
+import com.taskplanner.ui.util.LocalisedNames
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @HiltViewModel
 class CategoriesViewModel @Inject constructor(
@@ -32,12 +33,17 @@ class CategoriesViewModel @Inject constructor(
                     categoryRepository.getAllCategories(),
                     taskRepository.getAllTasks()
                 ) { categories, tasks ->
+                    // The row order a reader sees. `CategoryDao` asks SQLite for `ORDER BY name ASC`, which is
+                    // binary collation — for Cyrillic that puts every capital before every small letter and
+                    // `ё` above `а`, so it is a stable storage order and not an alphabet. The screen knows the
+                    // language, so the alphabet is applied here and the stored order is left alone for the sync
+                    // engine and the export, which have no use for either.
                     categories.map { category ->
                         CategoryWithTaskCount(
                             category = category,
                             taskCount = tasks.count { it.categoryId == category.id }
                         )
-                    }
+                    }.sortedWith(LocalisedNames.byKey<CategoryWithTaskCount> { it.category.name })
                 }.collect { categoriesWithCount ->
                     _categoriesState.value = if (categoriesWithCount.isEmpty()) {
                         CategoriesState.Empty

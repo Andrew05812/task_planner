@@ -1,5 +1,6 @@
 package com.taskplanner.data.calendar
 
+import com.taskplanner.ui.util.LocalisedNames
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
@@ -249,7 +250,9 @@ object CalendarAggregator {
                 val category = categoriesById[categoryId] ?: return@mapNotNull null
                 CategoryChip(categoryId, category.name, category.color, group.size)
             }
-            .sortedWith(compareBy({ it.name.lowercase() }, { it.categoryId }))
+            // The legend's own order is the reader's alphabet, with the id behind it so two categories a
+            // collator calls equal still arrive in a stable order.
+            .sortedWith(LocalisedNames.byKey<CategoryChip> { it.name }.thenBy { it.categoryId })
 
     /**
      * Past due. Only a deadline can be passed: a task the user planned by a start time alone has

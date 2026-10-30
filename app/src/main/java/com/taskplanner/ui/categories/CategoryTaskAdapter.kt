@@ -29,6 +29,17 @@ class CategoryTaskAdapter(
     private val onComplete: (TaskWithCategory) -> Unit
 ) : ListAdapter<TaskWithCategory, CategoryTaskAdapter.Holder>(DIFF) {
 
+    /**
+     * The due-date column, read from the language the app is in right now.
+     *
+     * This was a `companion object` value, which made it one formatter per process: chosen once, it kept
+     * answering "Oct 15, 2026" after a reader switched to Русский and the rest of the row went Russian. On the
+     * adapter it is built again with every adapter, and the adapter is built again when a language change
+     * recreates the window — the same lifetime `ArchiveAdapter` and `TaskDetailFragment` already give theirs.
+     * `LocaleStateSourceTest` is the gate that keeps it here.
+     */
+    private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder =
         Holder(ItemTaskBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
@@ -97,8 +108,6 @@ class CategoryTaskAdapter(
     }
 
     companion object {
-        private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-
         private val DIFF = object : DiffUtil.ItemCallback<TaskWithCategory>() {
             override fun areItemsTheSame(o: TaskWithCategory, n: TaskWithCategory): Boolean =
                 o.task.id == n.task.id

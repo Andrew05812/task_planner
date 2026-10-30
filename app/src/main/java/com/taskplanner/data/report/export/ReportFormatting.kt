@@ -41,9 +41,23 @@ object ReportFormatting {
     fun shortDay(date: LocalDate): String =
         DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()).format(date)
 
-    /** A month as a heading: "June 2026". */
-    fun month(date: LocalDate): String =
-        DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()).format(date)
+    /**
+     * A month as a heading: "June 2026", "Октябрь 2026".
+     *
+     * Not `ofPattern("MMMM yyyy")`, which is what this was. In Russian that pattern answers "октября 2026" —
+     * the genitive, the form a date *with a day* takes ("5 октября 2026"), chosen by the locale data because a
+     * year sits in the pattern beside the month. A heading has no day, so the genitive reads as a sentence with
+     * the beginning missing, and the Calendar screen showed it on every Russian month until Stage 14 measured
+     * it on a device. `FULL_STANDALONE` is the nominative the reader would write — the name Android's `java.time` uses, which is the Java 8 spelling and the one the platform still carries, and the first letter is
+     * raised with the same locale rather than `capitalize()`, which would fold to the title case of whichever
+     * language happened to be the default.
+     */
+    fun month(date: LocalDate): String {
+        val locale = Locale.getDefault()
+        val name = date.month.getDisplayName(java.time.format.TextStyle.FULL_STANDALONE, locale)
+        return name.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() } +
+            " " + date.year
+    }
 
     /**
      * The moment the report was written, in the locale's own date-and-time style.

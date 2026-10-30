@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.taskplanner.ui.util.LocalisedNames
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -256,8 +257,11 @@ class TasksViewModel @Inject constructor(
             SortOrder.DATE_DESC -> visible.sortedByDescending { it.dueDate ?: Long.MIN_VALUE }
             SortOrder.PRIORITY_ASC -> visible.sortedBy { it.priority.rank() }
             SortOrder.PRIORITY_DESC -> visible.sortedByDescending { it.priority.rank() }
-            SortOrder.NAME_ASC -> visible.sortedBy { it.title.lowercase() }
-            SortOrder.NAME_DESC -> visible.sortedByDescending { it.title.lowercase() }
+            // The reader's alphabet rather than the code-point order: `sortedBy { it.title.lowercase() }` put
+            // "Ёлка" above "Афиша" because U+0451 is a lower number than U+0430, which is not a fact about
+            // Russian and not an order anyone reads. `LocalisedNames` explains the strength choice.
+            SortOrder.NAME_ASC -> visible.sortedWith(LocalisedNames.byKey<Task> { it.title })
+            SortOrder.NAME_DESC -> visible.sortedWith(LocalisedNames.byKey<Task> { it.title }.reversed())
             else -> visible
         }
 
