@@ -5632,3 +5632,91 @@ The clean-tree run before the last two edits was 1575 tests; the identity-and-qu
   not ride in on a data-safety commit.
 
 The full ledger — every finding, the check that settled it, and its status — is `docs/AUTH_SYNC_ENGINEERING.md` §8.
+
+
+---
+
+## 20s — Stage 14 executed: the app in a second language, and what a photograph caught that a test could not
+
+**What was asked.** Every string in the app in Russian, a language the reader chooses in Settings and keeps
+across a process death, a force-stop, a relaunch and an update, with the profile, the data and the navigation
+untouched. And the part that is not translation: the week starting where the reader's week starts, numbers and
+dates written the way that reader writes them, a csv their spreadsheet opens in columns, names sorted in their
+alphabet — all of it following the language chosen *in the app*, on releases where the framework does not do
+that by itself.
+
+### The recon, which set the order of work
+
+* 897 English strings against 892 Russian, five of the former marked `translatable="false"`; 48 `<plurals>`
+  blocks, none of which had `few` or `many` — so a Russian reader would have seen "1 задача" correctly and
+  "2 задача" wrong on every screen, and no existing test could have noticed, because each one asked for
+  `one` and `other`.
+* Roughly thirty production sites asked `Locale.getDefault()` for a decision that is now the reader's. This is
+  the part the brief was really about: a translated app whose arithmetic still runs in the handset's language
+  is the half-translated app it told me not to ship.
+* Stage 13's four `AccountUiState` strings were the only Russian in the repository. They stayed, and the
+  `BLOCKED — Firebase project / OAuth configuration required` status was not touched.
+
+**The order that came out of it:** contracts first (completeness, plurals, format arguments) so the translation
+had a gate to land on; then the toggle; then the arithmetic; then the device proof.
+
+### Tests first, and the failures that were seen
+
+`StringCompletenessTest`, `PluralsContractTest`, `StringFormatContractTest`, `AppLanguageTest`,
+`AppLocaleTest`, `AppLocaleContextTest`, `LocalisedNamesTest`, `LocalisedDatesTest`, `LocaleStateSourceTest`,
+`EnglishLiteralAssertionTest`, `HardcodedFailureTextTest` on the JVM; `LanguageSwitchInstrumentedTest`,
+`CalendarLocaleTest`, `CsvLocaleTest`, `Stage14LanguageFramesInstrumentedTest` on the device. Each was written
+before the thing it tests, and each was seen failing for the reason it was written for.
+
+Three of the REDs were wrong in a way worth recording, because a wrong test is worse than no test:
+
+* `LocalisedNamesTest` asserted that Russian and English order two titles differently. In the JDK's collation
+  they do not — both keep Latin before Cyrillic — so the test could only ever have passed by accident.
+  Replaced with the claim that actually holds: the sort follows the locale object it was given.
+* `CsvLocaleTest` first never launched an activity and called `setApplicationLocales` from the instrumentation
+  thread. The locale refused to move — `getApplicationLocales()` kept answering `""` — and four methods failed
+  on that one premise. The delegate stores the choice through an AppCompat host; with no window there is
+  nothing to store it in, and it fails **silently**. That finding is now in the KDoc of every class that
+  changes a locale, and it is the reason `AppLocale` exists.
+* `EnglishLiteralAssertionTest` first reported forty findings, thirty-nine of them false: it read JUnit's
+  message argument as an expectation and flagged fixture data. Rewritten to compare against translatable
+  resource values, which is also what turned it from a grep into a gate.
+
+### What the device caught that no test did
+
+Five screens carried `SimpleDateFormat("MMM dd, yyyy")`. A literal pattern is an American word order written
+into every language, and it survived the whole translation because the month *word* did change: the Russian
+task card read **«нояб. 01, 2026»**. The test that existed for exactly this — `a date line follows the locale
+the device is on`, whose own KDoc says a card must not print "Nov 22, 2026" to somebody whose phone says
+"22 nov. 2026" — passed, because it compared French to English and never asked either what its own order is.
+`LocalisedDates` now holds no date pattern at all, and the frames show «1 нояб. 2026 г.» beside
+"Oct 27, 2026".
+
+Then the same thing happened to my own evidence, twice:
+
+* A `ru` directory held an English screen, and `01-tasks.png` was a photograph of Settings. The shutter now
+  refuses a frame whose named view is not on the window, and checks the device's own width, theme and font
+  scale rather than trusting the argument that named them.
+* The Statistics frame was a blank panel in **both** languages. `findViewById` answers a container the
+  renderer had left `GONE` while the first snapshot loaded, so `settled()` asked the view whether it is
+  *shown*, and the seed grew two measured intervals. The frame now carries «3 ч 15 мин», «2 отрезка»,
+  «3 задачи», «0 задач» — the plural contract, on a screen, in Russian.
+* The matrix script fed `font_scale 13` and got a refusal; it pulled with Git-Bash paths and got silence. The
+  guard caught the first, the frame count caught the second, and both are fixed in the script rather than in
+  the way I type.
+
+### The review passes, honestly counted
+
+Two passes were dispatched as independent subagents. Both ended without a report — one on a credit limit, one
+on a server error — so the silent-failure pass and the documentation-accuracy pass were done in this session by
+reading the complete files. That is weaker than an independent reviewer and is written down as such rather than
+described as eight independent passes. What the reading found: `ReminderNotifier` resolving seventeen strings
+from the application context (the one context AppCompat does not wrap, so a Russian app posts English
+notifications below API 33); `run-instrumented-classes.sh` discovering classes by `*InstrumentedTest.kt` and so
+never running `CalendarLocaleTest` or `CsvLocaleTest` while printing a clean twenty-class table; a new KDoc
+pointing at `AppLocaleTest` for a proof that lives in `AppLocaleContextTest`; and `check-localization.py`
+already carrying the verbatim-copy rule I was about to add, which an independent scan of the 24 identical
+entries then confirmed are all specifier-only joiners.
+
+The full ledger — every finding, the check that settled it, and its status, including the three this stage
+leaves open — is `docs/LOCALIZATION.md` §Review ledger.

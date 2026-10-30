@@ -7,6 +7,7 @@ import com.taskplanner.data.model.Insight
 import com.taskplanner.data.model.InsightAction
 import com.taskplanner.data.model.InsightKind
 import com.taskplanner.data.tracking.WorkTimeMath
+import com.taskplanner.ui.util.LocalisedDates
 import java.text.DateFormat
 import java.time.ZoneId
 import java.util.Locale
@@ -131,7 +132,7 @@ object InsightCard {
         if (showHistory) R.string.insights_empty_history else R.string.insights_empty_current
 
     private fun dayText(epochDay: Long): String = DateFormat
-        .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+        .getDateInstance(DateFormat.MEDIUM, LocalisedDates.locale())
         .format(
             WorkTimeMath.toDate(epochDay).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         )

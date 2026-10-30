@@ -186,7 +186,7 @@
     <string name="migrate_local_data_sync_failed">Записи перенесены, но синхронизация сразу после них не удалась: %1$s. Перенос не отменён; нажмите «Синхронизировать», когда появится сеть.</string>
     <string name="sign_out_session_left_open">Вы остались в этом профиле, данные не тронуты, но облачный сеанс не удалось закрыть: %1$s</string>
     <string name="error_safety_copy_unavailable">Ничего не перенесено: сначала не удалось создать проверенную копию ваших данных. %1$s</string>
-    <string name="error_database_refused_move">Ничего не перенесено: база данных отклонила изменение, которого не может выполнить. %1$s</string>
+    <string name="error_database_refused_move">Ничего не перенесено: база данных отклонила изменение, которое не может выполнить. %1$s</string>
     <string name="error_session_unread">Не удалось прочитать текущий профиль из хранилища: %1$s</string>
     <string name="error_profiles_unread">Не удалось прочитать список профилей на устройстве, поэтому сейчас ничего нельзя перенести: %1$s</string>
     <string name="sign_out">Выйти</string>
@@ -238,7 +238,7 @@
     <string name="sync_state_disabled">Облачная синхронизация отключена: Firebase не настроен. Локальные данные работают как обычно.</string>
     <string name="export_file_name">taskplanner-резервная-копия.json</string>
     <string name="account_local_profile_format">Локальный профиль: %1$s</string>
-    <string name="google_account_missing">Вы не вошли</string>
+    <string name="google_account_missing">Вы не входили в аккаунт</string>
     <string name="sign_in_canceled">Вход отменён</string>
     <string name="sign_in_failed">Вход не выполнен: %1$s</string>
     <string name="sign_in_email_taken">Этот адрес Google (%1$s) уже закреплён за другим профилем на этом устройстве, поэтому ничего не изменилось. Откройте тот профиль и укажите в нём другую почту, затем войдите снова и перенесите его данные в аккаунт.</string>
@@ -289,7 +289,7 @@
     <string name="repeat_scope_hint_new">С повторением эта задача станет первой в серии. Следующие создаются по одной, когда предыдущая готова.</string>
     <string name="repeat_scope_hint_start">Эта задача начинает серию. Её дата станет первым повторением.</string>
     <string name="repeat_scope_hint_this">Изменится только эта задача. Серия сохранит свой график и создаст следующую задачу от намеченной даты.</string>
-    <string name="repeat_scope_hint_future">Эта задача и все, что серия создаст после неё, перейдут на новый график. Архивные задачи не тронуты.</string>
+    <string name="repeat_scope_hint_future">Эта задача и всё, что серия создаст после неё, перейдут на новый график. Уже убранные в архив задачи не тронуты.</string>
     <string name="repeat_scope_hint_stops">Серия остановится после этой задачи. Уже архивные задачи останутся в архиве.</string>
     <string name="series_status_running">Идёт серия задач</string>
     <string name="series_status_paused">Серия на паузе: новые задачи не создаются</string>
@@ -334,7 +334,7 @@
     <string name="plan_clear">Убрать время по плану</string>
     <string name="plan_hint_none">Без плана задача видна только в день срока — время само ниоткуда не возьмётся.</string>
     <string name="plan_hint_block">В календаре задача — с %1$s до %2$s.</string>
-    <string name="plan_hint_estimate">В календаре задача — с %1$s на %2$d мин.</string>
+    <string name="plan_hint_estimate">В календаре задача начнётся в %1$s и продлится %2$d мин.</string>
     <string name="plan_hint_marker">В календаре задача отмечена в %1$s: длительность не указана.</string>
     <string name="plan_hint_from_deadline">Календарь отсчитывает это от срока; укажите начало, чтобы поставить самому.</string>
     <string name="error_plan_needs_instant">Плану нужно время начала или срок: длительность должна отсчитываться от момента.</string>
@@ -362,7 +362,7 @@
     <string name="work_remaining_format">По плану осталось %1$s</string>
     <string name="work_overrun_format">На %1$s больше плана</string>
     <string name="work_intervals_title">Замеренные отрезки</string>
-    <string name="work_no_intervals">На этой задаче ещё ничего не замерено</string>
+    <string name="work_no_intervals">По этой задаче ещё ничего не замерено</string>
     <string name="work_interval_row_format">%1$s — %2$s, %3$s</string>
     <string name="work_interval_manual">внесено вручную</string>
     <string name="work_interval_open">ещё идёт</string>
@@ -462,7 +462,7 @@
     <string name="reminder_body_category_format">Категория: %1$s</string>
     <string name="reminder_deadline_format">%1$s, %2$s</string>
     <string name="habit_reminder_channel_name">Напоминания о привычках</string>
-    <string name="habit_reminder_channel_description">Напоминает о привычке на день в выбранное время</string>
+    <string name="habit_reminder_channel_description">Напоминает в выбранное время, что привычку нужно отметить сегодня</string>
     <string name="habit_reminder_subtitle">Привычка</string>
     <string name="habit_reminder_content">Пора отметить сегодня</string>
     <string name="habit_reminder_body_time_format">Напомнили в %1$s</string>
@@ -518,11 +518,11 @@
         <item quantity="many">%1$d дней подряд</item>
         <item quantity="other">%1$d дня подряд</item>
     </plurals>
-    <plurals name="dashboard_open">
-        <item quantity="one">%1$d активная задача</item>
-        <item quantity="few">%1$d активные задачи</item>
-        <item quantity="many">%1$d активных задач</item>
-        <item quantity="other">%1$d активные задачи</item>
+        <plurals name="dashboard_open">
+        <item quantity="one">%1$d открытая задача</item>
+        <item quantity="few">%1$d открытые задачи</item>
+        <item quantity="many">%1$d открытых задач</item>
+        <item quantity="other">%1$d открытые задачи</item>
     </plurals>
     <plurals name="dashboard_rate_tasks">
         <item quantity="one">%1$d задача из %2$d</item>
@@ -627,7 +627,7 @@
     <string name="title_habit_editor">Привычка</string>
     <string name="habits_scope_open">Активные</string>
     <string name="habits_scope_archived">В архиве</string>
-    <string name="habits_empty_open">Привычек пока нет. Начните одну — и дни начнут заполняться.</string>
+    <string name="habits_empty_open">Заведите одну — и дни начнут заполняться.</string>
     <string name="habits_empty_archived">Убранных привычек нет.</string>
     <string name="habit_add">Создать привычку</string>
     <string name="habit_edit">Изменить расписание</string>
@@ -762,12 +762,12 @@
     <string name="insight_estimate_gap_basis">Самый большой разрыв у задачи «%1$s»: план — %2$s, замерено — %3$s.</string>
     <string name="insight_completion_weekday_title">%1$s — день, когда чаще всего завершают задачи</string>
     <string name="insight_completion_weekday_body">%1$d из %2$d выполненных задач — это %3$s.</string>
-    <string name="insight_completion_weekday_basis">Считано за %3$d дней; %1$s — это %2$s завершений.</string>
+    <string name="insight_completion_weekday_basis">Подсчитано за %3$d дней; %1$s — это %2$s завершений.</string>
     <string name="insight_completion_hours_title">Чаще всего задачи завершают в промежутке %1$s</string>
     <string name="insight_completion_hours_body">%1$d из %2$d выполненных задач — в эти два часа.</string>
     <string name="insight_completion_hours_basis">Промежуток %3$s — это %1$s завершений за %2$d дней.</string>
     <string name="insight_habit_miss_title">Привычка «%1$s»: на этой неделе есть неотмеченные дни</string>
-    <string name="insight_habit_miss_body">%1$s из %2$d запрошенных.</string>
+    <string name="insight_habit_miss_body">%1$s из %2$d нужных дней.</string>
     <string name="insight_habit_miss_basis">Отмечено %1$d из %2$d запланированных дней — это %3$s.</string>
     <string name="insight_goal_pace_title">Цель «%1$s»: примерно %2$s в день</string>
     <string name="insight_goal_pace_body">Ещё %1$s до цели — и %2$s, чтобы это сделать.</string>
@@ -932,7 +932,7 @@
     <string name="achievement_first_project_title">Первая закрытая тема</string>
     <string name="achievement_first_project_condition">Завершите все задачи в одной теме.</string>
     <string name="achievement_active_days_3_title">Три дня с замерами</string>
-    <string name="achievement_active_days_3_condition">Замерьте работу в 3 разных дня.</string>
+    <string name="achievement_active_days_3_condition">Замерьте работу в 3 разных днях.</string>
     <string name="achievement_active_days_7_title">Неделя с замерами</string>
     <string name="achievement_active_days_7_condition">Замерьте работу в 7 разных днях.</string>
     <string name="achievement_active_days_14_title">Две недели с замерами</string>
@@ -1014,10 +1014,10 @@
     <string name="report_metric_achievements">Получено наград</string>
     <string name="report_note_standing">Всё, что перечислено выше, произошло внутри периода. Строки ниже описывают аккаунт по состоянию на день, когда составлен отчёт: приложение хранит события, а не снимки состояния, поэтому уже не подсчитать то, что было открыто в прошлом месяце.</string>
     <string name="report_note_goals_standing">Цель показана по состоянию на день, когда составлен отчёт. Приложение записывает, что в цели менялось, а не в какой день она была достигнута, поэтому для прошедшего периода можно указать, сколько работы пошло в цель, но нельзя сказать, достигнута ли она в этом периоде.</string>
-    <string name="report_note_set_goal">Цель, которая называет набор, либо выполнена, либо нет — в ней нечего показать внутри периода, который отчёт мог бы назвать.</string>
-    <string name="report_note_habit_series">Серия привычки считается назад от последнего дня периода, поэтому серия длиннее самого периода показана как «не короче периода».</string>
+    <string name="report_note_set_goal">Цель, которая считает заданный набор задач, либо достигнута, либо нет — показывать внутри периода нечего.</string>
+    <string name="report_note_habit_series">Серия привычки считается назад от последнего дня периода, поэтому серия, которая длиннее самого периода, показана как «не короче периода».</string>
     <string name="report_note_category_none">Категории нет, либо она удалена</string>
-    <string name="report_note_undated">Выполненная работа без даты учтена здесь и не попала в подневные строки ниже: угадать день значило бы придумать событие.</string>
+    <string name="report_note_undated">Выполненная работа без даты учтена здесь и не попала в строки по дням ниже: угадать день значило бы придумать событие.</string>
     <string name="report_note_dynamics">Дни, в которых ничего не было, оставлены: тренд, который их пропускает, описывает период короче того, что прожили.</string>
     <string name="report_none_completed">В эти дни не выполнено ни одной задачи.</string>
     <string name="report_none_worked">В эти дни не было ни одного замера.</string>
@@ -1026,7 +1026,7 @@
     <string name="report_none_habits">В эти дни ни одна привычка не отмечена.</string>
     <string name="report_none_achievements">В эти дни не получено ни одной награды.</string>
     <string name="report_none_findings">Приложению нечего сказать об этих днях.</string>
-    <string name="report_none_dynamics">В этих днях нет работы для графика.</string>
+    <string name="report_none_dynamics">В эти дни работы для графика нет.</string>
     <string name="report_none_comparison">Прошлый период был пустым — сравнивать не с чем.</string>
     <string name="report_chart_work_unit">замеренные секунды в день</string>
     <string name="report_chart_completions_unit">выполненных задач в день</string>
@@ -1068,7 +1068,7 @@
     <string name="report_finding_kind_fact">Факт</string>
     <string name="report_finding_kind_pattern">Закономерность</string>
     <string name="report_finding_kind_hypothesis">Гипотеза</string>
-    <string name="report_finding_superseded">Такое приложение больше не наблюдает.</string>
+    <string name="report_finding_superseded">Приложение перестало это наблюдать.</string>
     <string name="report_unit_tasks">задач</string>
     <string name="report_unit_goals">целей</string>
     <string name="report_unit_projects">тем</string>
@@ -1138,7 +1138,7 @@
         <item quantity="many">%d строк — все показаны здесь и в файле.</item>
         <item quantity="other">%d строки — все показаны здесь и в файле.</item>
     </plurals>
-    <string name="report_csv_shown_format">Показаны первые %1$d строк из %2$d. В файле — все.</string>
+    <string name="report_csv_shown_format">Строк показано: %1$d из %2$d. В файле — все.</string>
     <plurals name="report_preview_description">
         <item quantity="one">Отчёт как документ в %d страницу. Его цифры есть на соседнем экране и в файле, который сохраняет этот экран.</item>
         <item quantity="few">Отчёт как документ в %d страницы. Его цифры есть на соседнем экране и в файле, который сохраняет этот экран.</item>
@@ -1157,6 +1157,6 @@
     <string name="report_fail_empty">Файл получился пустым: это устройство не смогло нарисовать страницы.</string>
     <string name="report_fail_staging">Копию для отправки не удалось записать. Ничего не передано.</string>
     <string name="report_fail_handover">Копия записана, но передать её другому приложению не удалось.</string>
-    <string name="report_bytes_format">%1$s байт</string>
+    <string name="report_bytes_format">%1$s Б</string>
     <string name="report_saved_format">Записано в выбранный вами файл — %1$s.</string>
 </resources>

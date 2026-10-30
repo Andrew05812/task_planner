@@ -12,6 +12,7 @@ import com.taskplanner.databinding.ItemWorkloadPanelBinding
 import com.taskplanner.databinding.ItemWorkloadDayBinding
 import com.taskplanner.ui.components.ChartLegendView
 import com.taskplanner.ui.util.WorkTimeFormat
+import com.taskplanner.ui.util.LocalisedDates
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -136,14 +137,14 @@ object WorkloadPanel {
     }
 
     /** The row's own day in the reader's calendar: "Thu 4 Jun". */
-    fun dayName(epochDay: Long): String = SimpleDateFormat("EEE d MMM", Locale.getDefault())
+    fun dayName(epochDay: Long): String = SimpleDateFormat("EEE d MMM", LocalisedDates.locale())
         .format(
             LocalDate.ofEpochDay(epochDay).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         )
 
     /** The date the window was counted from, for the heading that has to say which fortnight it means. */
     fun windowDates(context: Context, read: WorkloadRead): String {
-        val format = DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+        val format = DateFormat.getDateInstance(DateFormat.MEDIUM, LocalisedDates.locale())
         return context.getString(
             R.string.workload_window_format,
             format.format(instantOf(read.fromDay)),

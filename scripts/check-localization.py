@@ -209,6 +209,14 @@ def main() -> int:
 
     missing_directory = not (res / "values-ru").is_dir()
     findings = [] if missing_directory else check(default, russian, RUSSIAN_CATEGORIES, "Russian")
+
+    # A pass has to mean two non-empty sets were compared. `values/` parsed to nothing — a moved directory, a
+    # root tag this script does not read, a build that packaged no resources — used to print "0 missing" against
+    # an equally empty `values-ru/` and exit 0. That is the one answer a completeness gate must never give.
+    if not missing_directory and not default:
+        print("  !! values/: no <string>, <plurals> or <string-array> entries parsed at all")
+    if not missing_directory and not russian:
+        print("  !! values-ru/: exists but holds no parsed entries")
     findings += plural_selection(default, russian) if russian else []
 
     strings = sum(1 for e in default.values() if e["type"] == "string")
@@ -230,8 +238,10 @@ def main() -> int:
         print("  - " + finding)
     if len(findings) > 40:
         print(f"  ... and {len(findings) - 40} more")
-    print("RESULT: " + ("pass" if not findings and not missing_directory else "fail"))
-    return 0 if (not findings and not missing_directory) else 1
+    compared = bool(default) and bool(russian)
+    passed = not findings and not missing_directory and compared
+    print("RESULT: " + ("pass" if passed else "fail"))
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 
 /**
  * The notification a reminder arrives as, checked the way the shade shows it: what the line says,
@@ -93,6 +94,86 @@ class ReminderNotifierTest {
             "a deadline reminder has to appear on screen, not only in the shade",
             NotificationManager.IMPORTANCE_HIGH,
             channel.importance
+        )
+    }
+
+    /**
+     * A channel that already exists is still given the language the app is in now.
+     *
+     * The name and description of a notification channel are shown by the system's own notification settings,
+     * not by this app, and Stage 14 made the language something a reader changes while the app is installed.
+     * `ensureChannel` used to answer "the channel exists" and return, so those two lines kept the language of
+     * the very first launch forever: a reader who moved to Русский had Russian reminders arriving under an
+     * English channel they could switch off by a name they did not recognise. Re-creating a channel with the id
+     * it already has is the documented way to refresh the app-defined text; what the user decided for it —
+     * importance, sound, notifications allowed — the framework keeps.
+     *
+     * Robolectric resolves this context's resources from its own configuration, so the Russian qualifier is
+     * what puts the Russian words in front of the same code path — not `Locale.setDefault`, which cannot move
+     * a resource lookup.
+     */
+    @Test
+    @Config(qualifiers = "ru-rRU")
+    fun `an existing channel is re-announced in the language the app is in now`() {
+        val englishWords = "Reminders about deadlines"
+        manager.createNotificationChannel(
+            NotificationChannel(ReminderNotifier.CHANNEL_ID, englishWords, NotificationManager.IMPORTANCE_HIGH)
+        )
+
+        notifier.ensureChannel()
+
+        val channel = shadowOf(manager).notificationChannels
+            .map { it as NotificationChannel }
+            .single { it.id == ReminderNotifier.CHANNEL_ID }
+        val expected = context.getString(R.string.reminder_channel_name)
+        assertTrue(
+            "the test needs the resource to actually be Russian for the claim to mean anything: $expected",
+            expected.any { it.code in 0x0400..0x04FF }
+        )
+        assertEquals("the channel carries the language the app is in, not the one it was first installed in",
+            expected, channel.name.toString())
+        assertEquals(
+            "and the description travels with it",
+            context.getString(R.string.reminder_channel_description),
+            channel.description
+        )
+        assertEquals(
+            "the user's own decision about loudness is left where it was",
+            NotificationManager.IMPORTANCE_HIGH, channel.importance
+        )
+    }
+
+    /**
+     * The habit channel gets the same treatment, and gets it named.
+     *
+     * A first version of the fix changed [ReminderNotifier.ensureChannel] alone, and the habit channel went on
+     * carrying whatever language it was written in — which is the same defect with a different id, in a place
+     * nobody looks after one screen has been fixed. The two channels are also created by two different calls,
+     * so a reader who has never had a habit reminder has no habit channel to re-announce at all; this test
+     * says what happens when there is one.
+     */
+    @Test
+    @Config(qualifiers = "ru-rRU")
+    fun `the habit channel is re-announced too`() {
+        val englishWords = "Habit reminders"
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ReminderNotifier.HABIT_CHANNEL_ID, englishWords, NotificationManager.IMPORTANCE_LOW
+            )
+        )
+
+        notifier.ensureHabitChannel()
+
+        val channel = shadowOf(manager).notificationChannels
+            .map { it as NotificationChannel }
+            .single { it.id == ReminderNotifier.HABIT_CHANNEL_ID }
+        assertEquals(
+            "the name follows the app, and the importance the reader set does not",
+            context.getString(R.string.habit_reminder_channel_name), channel.name.toString()
+        )
+        assertEquals(
+            "a reader who quieted this channel stays quieted",
+            NotificationManager.IMPORTANCE_LOW, channel.importance
         )
     }
 

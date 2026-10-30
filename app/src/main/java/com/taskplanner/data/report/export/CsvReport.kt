@@ -1,5 +1,6 @@
 package com.taskplanner.data.report.export
 
+import com.taskplanner.ui.settings.AppLocale
 import com.taskplanner.BuildConfig
 import com.taskplanner.data.model.Achievement
 import com.taskplanner.data.report.CategoryActivity
@@ -94,7 +95,7 @@ object CsvReport {
 
     /** The delimiter the reader's own locale leads Excel to expect. */
     fun defaultDelimiter(): Char =
-        if (',' == java.text.DecimalFormatSymbols.getInstance(Locale.getDefault()).decimalSeparator) ';' else ','
+        if (',' == java.text.DecimalFormatSymbols.getInstance(AppLocale.current()).decimalSeparator) ';' else ','
 
     /**
      * The file as its writer sees it: one entry per row, each already quoted and joined, with no line ending on

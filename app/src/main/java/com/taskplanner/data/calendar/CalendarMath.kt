@@ -1,5 +1,6 @@
 package com.taskplanner.data.calendar
 
+import com.taskplanner.ui.settings.AppLocale
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -44,7 +45,7 @@ object CalendarMath {
      * here, so a test or a future per-user preference can override one month grid without touching
      * the maths.
      */
-    fun firstDayOfWeek(): DayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+    fun firstDayOfWeek(): DayOfWeek = WeekFields.of(AppLocale.current()).firstDayOfWeek
 
     /**
      * How many days a month has.

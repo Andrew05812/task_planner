@@ -5,9 +5,8 @@ import com.taskplanner.R
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.TaskStatus
-import java.text.SimpleDateFormat
+import com.taskplanner.ui.util.LocalisedDates
 import java.util.Calendar
-import java.util.Locale
 import kotlin.math.abs
 
 /**
@@ -44,15 +43,6 @@ data class CardPresentation(
     val repeatDescriptionRes: Int?
 ) {
     companion object {
-        /**
-         * Patterns, not formatters. A `SimpleDateFormat` is neither thread-safe nor locale-current after
-         * construction, so holding one in a static field would keep printing the locale the process
-         * started in when the reader moves to another one — the finding lint names `ConstantLocale`. The
-         * two objects this needs are cheap to make and are made where they are used.
-         */
-        private const val DAY_PATTERN = "MMM dd, yyyy"
-        private const val TIME_PATTERN = "HH:mm"
-
         /** The category name is drawn only when it has this much room; below it the dot stands alone. */
         const val CATEGORY_NAME_MIN_DP = 48
 
@@ -110,10 +100,21 @@ data class CardPresentation(
             else -> RepeatPreset.of(rule).shortLabelRes
         }
 
+        /**
+         * The line under a title that says when the task is due.
+         *
+         * Neither a pattern nor a formatter is held here, and both omissions are load-bearing. A
+         * `SimpleDateFormat` kept in a static field goes on printing the locale the process started in after
+         * the reader moves to another one — the finding lint names `ConstantLocale`. The `"MMM dd, yyyy"`
+         * literal that used to sit here was the worse half of the same mistake: not a formatter gone stale,
+         * but an American word order written into every language, which survived the Stage 14 translation
+         * because the month *word* did change. A Russian card read «нояб. 01, 2026» until a device photograph
+         * caught it. [LocalisedDates] asks the reader's language for a date pattern on every call.
+         */
         private fun dueLine(context: Context, dueDate: Long?, now: Long, overdue: Boolean): CharSequence {
             if (dueDate == null) return context.getString(R.string.no_due_date)
             val days = daysBetween(now, dueDate)
-            val time = SimpleDateFormat(TIME_PATTERN, Locale.getDefault()).format(java.util.Date(dueDate))
+            val time = LocalisedDates.time(dueDate)
             return when {
                 // A deadline that passed at 09:00 and is read at 18:00 is nine hours late and zero calendar
                 // days late, and "0 days late" is a sentence about nothing. The day count only starts to
@@ -124,8 +125,7 @@ data class CardPresentation(
                 )
                 days == 0L -> context.getString(R.string.task_due_today_format, time)
                 days == 1L -> context.getString(R.string.task_due_tomorrow_format, time)
-                else -> SimpleDateFormat(DAY_PATTERN, Locale.getDefault())
-                    .format(java.util.Date(dueDate))
+                else -> LocalisedDates.date(dueDate)
             }
         }
 

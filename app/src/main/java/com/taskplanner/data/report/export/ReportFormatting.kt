@@ -1,5 +1,6 @@
 package com.taskplanner.data.report.export
 
+import com.taskplanner.ui.settings.AppLocale
 import android.content.Context
 import com.taskplanner.R
 import com.taskplanner.data.report.ReportPeriod
@@ -35,11 +36,11 @@ object ReportFormatting {
 
     /** A day as the reader's locale spells it: "3 Jun 2026", "3 июня 2026 г.". */
     fun day(context: Context, date: LocalDate): String =
-        DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault()).format(date)
+        DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(AppLocale.current()).format(date)
 
     /** A day short enough to sit under one bar of a chart. */
     fun shortDay(date: LocalDate): String =
-        DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()).format(date)
+        DateTimeFormatter.ofPattern("d MMM", AppLocale.current()).format(date)
 
     /**
      * A month as a heading: "June 2026", "Октябрь 2026".
@@ -53,7 +54,7 @@ object ReportFormatting {
      * language happened to be the default.
      */
     fun month(date: LocalDate): String {
-        val locale = Locale.getDefault()
+        val locale = AppLocale.current()
         val name = date.month.getDisplayName(java.time.format.TextStyle.FULL_STANDALONE, locale)
         return name.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() } +
             " " + date.year
@@ -69,7 +70,7 @@ object ReportFormatting {
      */
     fun instant(context: Context, millis: Long, zone: ZoneId): String {
         val text = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-            .withLocale(Locale.getDefault())
+            .withLocale(AppLocale.current())
             .format(Instant.ofEpochMilli(millis).atZone(zone))
         return context.getString(R.string.report_instant_format, text)
     }
@@ -88,13 +89,13 @@ object ReportFormatting {
      * showing through, which is what a float division does and is not the reader's business.
      */
     fun decimal(value: Double, digits: Int): String =
-        NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+        NumberFormat.getNumberInstance(AppLocale.current()).apply {
             minimumFractionDigits = digits
             maximumFractionDigits = digits
         }.format(value)
 
     /** A share of 0f to 1f as the locale's percent, with no decimals: the exact counts are printed beside it. */
-    fun percent(fraction: Float): String = NumberFormat.getPercentInstance(Locale.getDefault()).format(fraction)
+    fun percent(fraction: Float): String = NumberFormat.getPercentInstance(AppLocale.current()).format(fraction)
 
     /**
      * A whole percentage the repository already worked out, in the words the reader's locale uses.
@@ -103,7 +104,7 @@ object ReportFormatting {
      * design — and it is divided back rather than printed with a hand-typed sign, because which side of the
      * number a percent belongs on is the locale's decision and not this report's.
      */
-    fun wholePercent(percent: Int): String = NumberFormat.getPercentInstance(Locale.getDefault())
+    fun wholePercent(percent: Int): String = NumberFormat.getPercentInstance(AppLocale.current())
         .format(percent.toDouble() / 100.0)
 
     /** The way this report shows that it does not know: a dash, not a zero and not an empty cell. */
@@ -121,7 +122,7 @@ object ReportFormatting {
     )
 
     /** A weekday's own name, which is what a reader needs to see to trust a week's bounds. */
-    fun weekday(day: java.time.DayOfWeek): String = day.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault())
+    fun weekday(day: java.time.DayOfWeek): String = day.getDisplayName(java.time.format.TextStyle.FULL, AppLocale.current())
 
-    private fun integer(): NumberFormat = NumberFormat.getIntegerInstance(Locale.getDefault())
+    private fun integer(): NumberFormat = NumberFormat.getIntegerInstance(AppLocale.current())
 }

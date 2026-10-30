@@ -1,5 +1,6 @@
 package com.taskplanner.data.repository
 
+import com.taskplanner.ui.settings.AppLocale
 import com.taskplanner.data.calendar.CalendarMath
 import com.taskplanner.data.local.TaskStatisticsDao
 import com.taskplanner.data.local.TrackingSessionDao
@@ -41,7 +42,7 @@ data class DashboardRequest(
     val heatmapWeeks: Int = DEFAULT_HEATMAP_WEEKS,
     val onDay: LocalDate = LocalDate.now(),
     val zone: ZoneId = CalendarMath.systemZone(),
-    val firstDayOfWeek: DayOfWeek = WeekFields.of(java.util.Locale.getDefault()).firstDayOfWeek
+    val firstDayOfWeek: DayOfWeek = WeekFields.of(AppLocale.current()).firstDayOfWeek
 ) {
     companion object {
         /** Roughly a term of work: enough squares to see a habit, few enough to fit the screen. */

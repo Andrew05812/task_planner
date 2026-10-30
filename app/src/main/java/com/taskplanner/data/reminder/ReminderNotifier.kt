@@ -19,6 +19,7 @@ import com.taskplanner.data.model.Habit
 import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.Task
 import com.taskplanner.ui.MainActivity
+import com.taskplanner.ui.settings.AppLocale
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Date
 import javax.inject.Inject
@@ -37,27 +38,48 @@ class ReminderNotifier @Inject constructor(
         get() = context.getSystemService(NotificationManager::class.java)
 
     /**
+     * The application context, dressed in the language the reader chose.
+     *
+     * Every string below is text the system shows on the app's behalf — a channel name in the notification
+     * settings, a body in the shade, three action labels on the notification itself — and the application
+     * context is the one context AppCompat does *not* wrap. On API 33+ the framework happens to keep it in
+     * step with the app's choice; on API 24 to 32 it answers in the language the device shipped with, which
+     * is how a Russian app came to post a notification that read "Task due" beside a Russian task list.
+     * [AppLocale.localized] is the seam; `AppLocaleContextTest` is the proof it holds, and
+     * `the habit channel is re-announced too` below is the proof the second channel got the same treatment.
+     */
+    private val localized: Context
+        get() = AppLocale.localized(context)
+
+    /**
      * Creates the channel every reminder notification is posted to.
      *
-     * A channel is created once and then belongs to the user: Android ignores a later call that tries
-     * to change its importance, so this only ever *ensures* the channel exists and is called at
-     * start-up rather than tuning it on every notification. The importance is HIGH so a reminder that
-     * arrives while the phone is in use actually appears on screen instead of only landing in the
-     * shade — which is what a deadline notification is for.
+     * A channel belongs to the user: Android ignores a later call that tries to change its importance,
+     * so this only ever *ensures* the channel exists and is called at start-up rather than tuning it on
+     * every notification. The importance is HIGH so a reminder that arrives while the phone is in use
+     * actually appears on screen instead of only landing in the shade — which is what a deadline
+     * notification is for.
+     *
+     * It is re-announced on every call rather than skipped once the id exists, because a channel's name and
+     * description are read by the system's own notification settings, and Stage 14 made the language
+     * something a reader changes with the app already installed. `createNotificationChannel` against an id
+     * that exists refreshes the text the app owns and leaves what the user decided — importance, sound,
+     * whether notifications are allowed at all — untouched, which is what makes the repeat call safe. Skipping
+     * it instead froze those two lines in the language of the first launch, so a reader who moved to Русский
+     * went on switching off a channel named in English.
      */
     fun ensureChannel() {
         val notificationManager = manager ?: return
         // Channels only exist from API 26; below that the notification posts against the legacy bar and
         // the channel id in the builder is ignored, so there is nothing to create.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) return
         notificationManager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                context.getString(R.string.reminder_channel_name),
+                localized.getString(R.string.reminder_channel_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = context.getString(R.string.reminder_channel_description)
+                description = localized.getString(R.string.reminder_channel_description)
             }
         )
     }
@@ -78,7 +100,7 @@ class ReminderNotifier @Inject constructor(
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_reminder_notification)
             .setContentTitle(task.title)
-            .setContentText(context.getString(R.string.reminder_content_format, formatDeadline(deadline)))
+            .setContentText(localized.getString(R.string.reminder_content_format, formatDeadline(deadline)))
             .setStyle(NotificationCompat.BigTextStyle().bigText(buildBody(task, category, deadline)))
             .setSubText(category?.name)
             .setColor(category?.color ?: DEFAULT_ACCENT)
@@ -93,17 +115,17 @@ class ReminderNotifier @Inject constructor(
             .setOnlyAlertOnce(true)
             .addAction(
                 R.drawable.ic_reminder_complete,
-                context.getString(R.string.reminder_action_complete),
+                localized.getString(R.string.reminder_action_complete),
                 actionIntent(reminder, ReminderReceiver.ACTION_COMPLETE, Reminder.Action.COMPLETE)
             )
             .addAction(
                 R.drawable.ic_reminder_snooze,
-                context.getString(R.string.reminder_action_snooze),
+                localized.getString(R.string.reminder_action_snooze),
                 actionIntent(reminder, ReminderReceiver.ACTION_SNOOZE, Reminder.Action.SNOOZE)
             )
             .addAction(
                 R.drawable.ic_reminder_edit,
-                context.getString(R.string.reminder_action_edit),
+                localized.getString(R.string.reminder_action_edit),
                 deepLinkIntent(task, reminder, Reminder.Action.EDIT)
             )
             .build()
@@ -123,7 +145,9 @@ class ReminderNotifier @Inject constructor(
     }
 
     /**
-     * Creates the channel habit reminders post to, once, the same way [ensureChannel] does the task one.
+     * The channel habit reminders post to, re-announced the same way [ensureChannel] does the task one —
+     * which means its name and description are the language the app is in now rather than the language it
+     * happened to be in when the channel was first written to disk.
      *
      * A second channel rather than a second group, because the two asks are silenced differently: a
      * deadline is a promise about a moment and the habit is a nudge about a day, and the user has to be
@@ -132,14 +156,13 @@ class ReminderNotifier @Inject constructor(
     fun ensureHabitChannel() {
         val notificationManager = manager ?: return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        if (notificationManager.getNotificationChannel(HABIT_CHANNEL_ID) != null) return
         notificationManager.createNotificationChannel(
             NotificationChannel(
                 HABIT_CHANNEL_ID,
-                context.getString(R.string.habit_reminder_channel_name),
+                localized.getString(R.string.habit_reminder_channel_name),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = context.getString(R.string.habit_reminder_channel_description)
+                description = localized.getString(R.string.habit_reminder_channel_description)
             }
         )
     }
@@ -164,9 +187,9 @@ class ReminderNotifier @Inject constructor(
         val notification = NotificationCompat.Builder(context, HABIT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_reminder_notification)
             .setContentTitle(habit.title)
-            .setContentText(context.getString(R.string.habit_reminder_content))
+            .setContentText(localized.getString(R.string.habit_reminder_content))
             .setStyle(NotificationCompat.BigTextStyle().bigText(buildHabitBody(clock, week)))
-            .setSubText(context.getString(R.string.habit_reminder_subtitle))
+            .setSubText(localized.getString(R.string.habit_reminder_subtitle))
             .setColor(DEFAULT_ACCENT)
             .setWhen(triggerAt)
             .setShowWhen(true)
@@ -180,7 +203,7 @@ class ReminderNotifier @Inject constructor(
             .setOnlyAlertOnce(true)
             .addAction(
                 R.drawable.ic_reminder_complete,
-                context.getString(R.string.habit_reminder_action_mark),
+                localized.getString(R.string.habit_reminder_action_mark),
                 habitActionIntent(
                     habit, day, ReminderReceiver.ACTION_HABIT_MARK, HabitReminderAction.MARK
                 )
@@ -188,7 +211,7 @@ class ReminderNotifier @Inject constructor(
             .addAction(
                 R.drawable.ic_reminder_snooze,
                 // The same ten minutes a task reminder's button offers, said in the same words.
-                context.getString(R.string.reminder_action_snooze),
+                localized.getString(R.string.reminder_action_snooze),
                 habitActionIntent(
                     habit, day, ReminderReceiver.ACTION_HABIT_SNOOZE, HabitReminderAction.SNOOZE
                 )
@@ -225,9 +248,9 @@ class ReminderNotifier @Inject constructor(
      */
     private fun buildHabitBody(clock: CharSequence, week: HabitAdherence?): String {
         return listOfNotNull(
-            context.getString(R.string.habit_reminder_body_time_format, clock),
+            localized.getString(R.string.habit_reminder_body_time_format, clock),
             week?.takeIf { it.asked > 0 }
-                ?.let { context.getString(R.string.habit_reminder_body_week_format, it.kept, it.asked) }
+                ?.let { localized.getString(R.string.habit_reminder_body_week_format, it.kept, it.asked) }
         ).joinToString("\n")
     }
 
@@ -271,14 +294,14 @@ class ReminderNotifier @Inject constructor(
         listOf(
             task.description.takeIf { it.isNotBlank() },
             category?.name?.takeIf { it.isNotBlank() }
-                ?.let { context.getString(R.string.reminder_body_category_format, it) },
-            context.getString(R.string.reminder_body_due_format, formatDeadline(deadline))
+                ?.let { localized.getString(R.string.reminder_body_category_format, it) },
+            localized.getString(R.string.reminder_body_due_format, formatDeadline(deadline))
         ).filterNotNull().joinToString("\n")
 
     /** The device's own date and clock formats, so 24-hour and 12-hour locales read naturally. */
     private fun formatDeadline(millis: Long): String {
         val date = Date(millis)
-        return context.getString(
+        return localized.getString(
             R.string.reminder_deadline_format,
             DateFormat.getDateFormat(context).format(date),
             DateFormat.getTimeFormat(context).format(date)

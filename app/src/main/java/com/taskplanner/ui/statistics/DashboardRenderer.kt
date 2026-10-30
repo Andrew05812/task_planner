@@ -16,6 +16,7 @@ import com.taskplanner.databinding.ItemDashboardTaskBinding
 import com.taskplanner.ui.components.ChartLegendView
 import com.taskplanner.ui.util.WorkTimeFormat
 import com.taskplanner.ui.util.labelRes
+import com.taskplanner.ui.util.LocalisedDates
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
@@ -392,9 +393,9 @@ object DashboardRenderer {
 
     /** "62%" and not "61.904762%": the share is a glance, and the exact counts sit beside it. */
     private fun percent(): NumberFormat =
-        NumberFormat.getPercentInstance(Locale.getDefault()).apply { maximumFractionDigits = 0 }
+        NumberFormat.getPercentInstance(LocalisedDates.locale()).apply { maximumFractionDigits = 0 }
 
-    private fun number(): NumberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
+    private fun number(): NumberFormat = NumberFormat.getNumberInstance(LocalisedDates.locale())
 
     /**
      * A count in the words the locale asks for.

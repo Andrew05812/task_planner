@@ -9,6 +9,7 @@ import com.taskplanner.data.repository.GoalProgress
 import com.taskplanner.data.repository.GoalRejection
 import com.taskplanner.data.tracking.WorkTimeMath
 import com.taskplanner.ui.util.WorkTimeFormat
+import com.taskplanner.ui.util.LocalisedDates
 import java.text.DateFormat
 import java.time.ZoneId
 import java.util.Locale
@@ -198,7 +199,7 @@ object GoalCard {
     private fun dateText(instant: Long): String = dateFormat().format(instant)
 
     private fun dateFormat(): DateFormat =
-        DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+        DateFormat.getDateInstance(DateFormat.MEDIUM, LocalisedDates.locale())
 
     /** A count the platform can pluralise over; the ceiling is a figure no screen will reach. */
     private fun asCount(value: Long): Int = value.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()

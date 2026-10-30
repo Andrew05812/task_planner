@@ -23,6 +23,7 @@ import com.taskplanner.data.model.Insight
 import com.taskplanner.data.model.InsightFeedback
 import com.taskplanner.data.tracking.TimeBase
 import com.taskplanner.data.tracking.WorkTimeMath
+import com.taskplanner.ui.util.LocalisedDates
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -481,7 +482,7 @@ class InsightRepository @Inject constructor(
         if (asksTasks) quantity(R.plurals.insight_goal_tasks, value) else duration(value)
 
     private fun weekday(day: DayOfWeek): String =
-        day.getDisplayName(TextStyle.FULL, Locale.getDefault())
+        day.getDisplayName(TextStyle.FULL, LocalisedDates.locale())
 
     /**
      * The two-hour stretch as a span: "16:00–18:00".
@@ -491,7 +492,7 @@ class InsightRepository @Inject constructor(
      */
     private fun hourSpan(fromHour: Int): String {
         val formatter =
-            DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(Locale.getDefault())
+            DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(LocalisedDates.locale())
         val from = LocalTime.of(fromHour, 0).format(formatter)
         val to = LocalTime.of((fromHour + SPAN_HOURS) % 24, 0).format(formatter)
         return string(R.string.insight_hour_span, from, to)

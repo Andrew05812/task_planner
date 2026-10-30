@@ -402,8 +402,16 @@ class LanguageSwitchInstrumentedTest {
 
         lateinit var signedIn: SeededProfile.SignedIn
 
+        /**
+         * The *test package's* context, on purpose.
+         *
+         * `targetContext` is the app under test, and on API 33+ its configuration carries the app's chosen
+         * locale — so deriving "what the device would say" from it asks the app what it is already showing and
+         * calls the answer independent. The instrumentation package holds no app locale of its own, so its
+         * configuration really is the system's.
+         */
         private fun instrumentationContext(): Context =
-            InstrumentationRegistry.getInstrumentation().targetContext
+            InstrumentationRegistry.getInstrumentation().context
 
         /**
          * A profile to be signed into. With no current user the app opens on the profile picker rather than on
@@ -413,7 +421,7 @@ class LanguageSwitchInstrumentedTest {
         @BeforeClass
         @JvmStatic
         fun seedAProfile() {
-            val database = SeededProfile.open(instrumentationContext())
+            val database = SeededProfile.open(InstrumentationRegistry.getInstrumentation().targetContext)
             try {
                 SeededProfile.sweepLeftovers(database)
                 signedIn = SeededProfile.signIn(
@@ -428,7 +436,7 @@ class LanguageSwitchInstrumentedTest {
         @JvmStatic
         fun takeTheProfileAway() {
             if (!::signedIn.isInitialized) return
-            val database = SeededProfile.open(instrumentationContext())
+            val database = SeededProfile.open(InstrumentationRegistry.getInstrumentation().targetContext)
             try {
                 SeededProfile.takeAway(database, signedIn)
             } finally {

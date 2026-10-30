@@ -12,9 +12,7 @@ import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.TaskWithCategory
 import com.taskplanner.databinding.ItemTaskBinding
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.taskplanner.ui.util.LocalisedDates
 
 /**
  * Read-only task row for the category screen: no swipe panel, no drag handle and
@@ -28,17 +26,6 @@ class CategoryTaskAdapter(
     private val onResume: (TaskWithCategory) -> Unit,
     private val onComplete: (TaskWithCategory) -> Unit
 ) : ListAdapter<TaskWithCategory, CategoryTaskAdapter.Holder>(DIFF) {
-
-    /**
-     * The due-date column, read from the language the app is in right now.
-     *
-     * This was a `companion object` value, which made it one formatter per process: chosen once, it kept
-     * answering "Oct 15, 2026" after a reader switched to Русский and the rest of the row went Russian. On the
-     * adapter it is built again with every adapter, and the adapter is built again when a language change
-     * recreates the window — the same lifetime `ArchiveAdapter` and `TaskDetailFragment` already give theirs.
-     * `LocaleStateSourceTest` is the gate that keeps it here.
-     */
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder =
         Holder(ItemTaskBinding.inflate(LayoutInflater.from(parent.context), parent, false))
@@ -59,7 +46,7 @@ class CategoryTaskAdapter(
             binding.taskDescription.text = task.description
             binding.taskDescription.visibility =
                 if (task.description.isBlank()) View.GONE else View.VISIBLE
-            binding.taskDueDate.text = task.dueDate?.let { dateFormat.format(Date(it)) }
+            binding.taskDueDate.text = task.dueDate?.let { LocalisedDates.date(it) }
                 ?: context.getString(R.string.no_due_date)
             binding.taskCategory.text = item.category?.name
                 ?: context.getString(R.string.no_category)

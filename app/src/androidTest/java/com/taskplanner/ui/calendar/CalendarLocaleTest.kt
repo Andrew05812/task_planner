@@ -72,6 +72,7 @@ class CalendarLocaleTest {
         // a class that leaves the app Russian hands the rest of the instrumented matrix a screen full of
         // Russian words, and every one of those classes compares what it sees to a resource value.
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+        scenario.close()
     }
 
     @Test

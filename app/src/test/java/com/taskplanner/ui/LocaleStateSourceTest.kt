@@ -153,6 +153,51 @@ class LocaleStateSourceTest {
         )
     }
 
+    /**
+     * The process default is read in exactly one place, and that place is the accessor whose job it is.
+     *
+     * The companion sweep above answers "was a locale-derived value kept too long". This answers the other
+     * question Stage 14 opened: a call that reaches for `Locale.getDefault()` *at the right moment* is still
+     * the wrong moment on API 24 to 32, where the per-app locale changes the resources and leaves the process
+     * default alone. Five reader-facing sites survived the first sweep for exactly that reason — a weekday
+     * name in an insight, a clock reading in a span, the month letter beside a calendar day, and the
+     * dashboard's percent and plain number — each correct on the API 35 device and each answering the handset
+     * rather than the reader below it.
+     *
+     * The rule is therefore not "read the default freshly" but "ask [AppLocale], which decides between the
+     * reader's choice and the device". One file is allowed to read the process default, because one file has
+     * to: `AppLocale.current()` is where the fallback lives.
+     */
+    @Test
+    fun onlyTheAccessorReadsTheProcessDefault() {
+        // `.toList()` on purpose. A `Sequence` compared to a `List` never equals it, so a first version of
+        // this rule failed on its own plumbing and printed `FlatteningSequence@36bc415e` where it should have
+        // named a file — a gate whose failure message cannot be read is a gate that will be deleted rather
+        // than debugged.
+        val offenders: List<String> = sourceRoot().walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .map { file ->
+                file.readLines().withIndex().filter { (_, line) ->
+                    val trimmed = line.trim()
+                    !(trimmed.startsWith("*") || trimmed.startsWith("//")) &&
+                        (line.contains("Locale.getDefault()") || line.contains("LocaleList.getDefault()"))
+                }.map { (index, _) -> "${index + 1}: ${file.name}" }.toList()
+            }
+            .toList().flatten()
+        val outside = offenders.filterNot { it.endsWith("AppLocale.kt") }
+
+        assertEquals(
+            "`Locale.getDefault()` belongs in AppLocale.kt alone — everywhere else, ask AppLocale.current(), " +
+                "which is the same call with the reader's choice in front of it. Found: $outside",
+            emptyList<String>(), outside
+        )
+        assertEquals(
+            "and even there it is one line, the fallback — a second one is a new site that missed this rule. " +
+                "Found: ${offenders.filter { it.endsWith("AppLocale.kt") }}",
+            1, offenders.count { it.endsWith("AppLocale.kt") }
+        )
+    }
+
     // ---------------------------------------------------------------- the sweep
 
     private fun companionHeldLocaleValues(): List<String> {

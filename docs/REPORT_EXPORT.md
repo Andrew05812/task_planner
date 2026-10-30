@@ -104,6 +104,11 @@ separator from the locale, and a locale that writes `3,14` expects `;` between f
 `CsvReport.defaultDelimiter()` follows that rule and the delimiter is also a parameter, for a
 caller writing the file for a parser instead of for a spreadsheet.
 
+Since Stage 14 the locale that decides it is the one **chosen in the app**, not the one the handset was sold
+with: a reader who switches to Русский in Settings gets a `;`-separated file on an English device, because
+the file is for that reader's Excel. `CsvLocaleTest` pins it on a device, together with the other half of the
+promise — that the same figure is not written `1.5` in one section of a report and `1,5` in another.
+
 **Numbers and dates.** `Locale.ROOT`, no grouping separators, a full stop as the decimal mark,
 and a measured duration in whole seconds — the figure the database holds, not a rounded
 "4 h". Dates are ISO-8601. A report's own day-by-day lines are therefore sortable by any tool

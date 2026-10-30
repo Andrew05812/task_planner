@@ -147,10 +147,22 @@ class CsvLocaleTest {
 
     // ---------------------------------------------------------------- the reading
 
-    /** The waits this class shares with [com.taskplanner.ui.calendar.CalendarLocaleTest] — see its KDoc. */
+    /**
+     * The waits are the same discipline as `CalendarLocaleTest`: a locale change recreates the window.
+     *
+     * Applied a second time when the first does not land. Measured on this device: two of this class's four
+     * methods failed with "the app locale never became 'en'/'ru'" while the other two passed in the same run,
+     * and a re-run of the whole class was green — the signature of the early methods racing the app process as
+     * it starts, before the delegate has a host to apply a choice to. Retrying is what a reader who pressed the
+     * row and saw nothing changes do next, and it keeps the assertion about the feature rather than about
+     * startup timing.
+     */
     private fun choose(languageTags: String) {
-        AppCompatDelegate.setApplicationLocales(
-            LocaleListCompat.forLanguageTags(languageTags.ifEmpty { null })
+        apply(languageTags)
+        if (!settles(languageTags)) apply(languageTags)
+        assertTrue(
+            "the app locale never became '$languageTags' across two attempts",
+            settles(languageTags)
         )
         val deadline = System.currentTimeMillis() + WAIT_MILLIS
         while (System.currentTimeMillis() < deadline &&
@@ -158,10 +170,6 @@ class CsvLocaleTest {
         ) {
             Thread.sleep(100)
         }
-        assertEquals(
-            "the app locale never became '$languageTags'",
-            languageTags, AppCompatDelegate.getApplicationLocales().toLanguageTags()
-        )
         // The premise this whole class rests on: the figures are read from the process default, so the process
         // default has to be the chosen language. Asserted rather than assumed because it is the framework's
         // behaviour, not this repository's.
@@ -173,6 +181,21 @@ class CsvLocaleTest {
                 "still being made in the old language",
             languageTags, Locale.getDefault().language
         )
+    }
+
+    private fun apply(languageTags: String) {
+        AppCompatDelegate.setApplicationLocales(
+            LocaleListCompat.forLanguageTags(languageTags.ifEmpty { null })
+        )
+    }
+
+    private fun settles(languageTags: String): Boolean {
+        val deadline = System.currentTimeMillis() + WAIT_MILLIS
+        while (System.currentTimeMillis() < deadline) {
+            if (AppCompatDelegate.getApplicationLocales().toLanguageTags() == languageTags) return true
+            Thread.sleep(100)
+        }
+        return false
     }
 
     private companion object {

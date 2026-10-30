@@ -28,7 +28,7 @@ import com.taskplanner.databinding.FragmentCalendarBinding
 import com.taskplanner.databinding.ItemCalendarBlockBinding
 import com.taskplanner.databinding.ItemCalendarCellTaskBinding
 import com.taskplanner.databinding.ItemCalendarMarkerBinding
-import java.text.SimpleDateFormat
+import com.taskplanner.ui.util.LocalisedDates
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.Date
@@ -60,7 +60,7 @@ class CalendarViewController(
 
     private val context get() = binding.root.context
     private val inflater: LayoutInflater = LayoutInflater.from(context)
-    private val locale: Locale = Locale.getDefault()
+    private val locale: Locale get() = LocalisedDates.locale()
     private val timeFormat = DateFormat.getTimeFormat(context)
 
     /** The grid's adapter, public so a cell can be bound and read the way the grid binds it. */
@@ -356,22 +356,22 @@ class CalendarViewController(
         // The shared heading rather than a pattern of its own. `SimpleDateFormat("MMMM yyyy")` gives the
         // genitive in Russian — "октября 2026" — because the year beside the month makes the locale data pick
         // the form a dated phrase uses, and a month title has no date in it. `ReportFormatting.month` explains
-        // the choice; the week and day labels below keep their patterns because both carry a day number, which
-        // is exactly where the genitive is right.
+        // the choice. The week and day labels below carry a day number, which is exactly where the genitive is
+        // right — but they used to carry a written-down American order beside it («нояб. 30», «нояб. 30,
+        // 2026»), and Stage 14 gave them [LocalisedDates], which asks the language instead of being told.
         CalendarMode.MONTH -> ReportFormatting.month(state.anchor)
 
         CalendarMode.WEEK -> {
             val days = CalendarMath.weekGrid(state.anchor)
-            val label = SimpleDateFormat("MMM d", locale)
             context.getString(
                 R.string.calendar_week_format,
-                label.format(wallClockDate(days.first(), 0)),
-                label.format(wallClockDate(days.last(), 0))
+                LocalisedDates.dayAndMonth(wallClockDate(days.first(), 0).time),
+                LocalisedDates.dayAndMonth(wallClockDate(days.last(), 0).time)
             )
         }
 
         CalendarMode.DAY ->
-            SimpleDateFormat("EEEE, MMM d, yyyy", locale).format(wallClockDate(state.selected, 0))
+            LocalisedDates.dateWithWeekday(wallClockDate(state.selected, 0).time)
     }
 
     /**

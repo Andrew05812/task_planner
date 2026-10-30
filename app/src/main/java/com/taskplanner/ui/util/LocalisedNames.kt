@@ -1,5 +1,6 @@
 package com.taskplanner.ui.util
 
+import com.taskplanner.ui.settings.AppLocale
 import java.text.Collator
 import java.util.Locale
 
@@ -37,7 +38,7 @@ object LocalisedNames {
      * adjacent instead of being split across the alphabet by their case. The default argument is read at call
      * time, which is the whole point of the object existing in this shape.
      */
-    fun byString(locale: Locale = Locale.getDefault()): Comparator<String> {
+    fun byString(locale: Locale = AppLocale.current()): Comparator<String> {
         val collator = Collator.getInstance(locale).apply { strength = Collator.SECONDARY }
         return Comparator { first, second -> collator.compare(first, second) }
     }
@@ -48,7 +49,7 @@ object LocalisedNames {
      * A manual order is a different question and this does not touch it: the caller picks which rows it hands
      * over, and reordering them by name changes no stored value.
      */
-    fun <T> byKey(locale: Locale = Locale.getDefault(), key: (T) -> String): Comparator<T> {
+    fun <T> byKey(locale: Locale = AppLocale.current(), key: (T) -> String): Comparator<T> {
         val byName = byString(locale)
         return Comparator { first, second -> byName.compare(key(first), key(second)) }
     }

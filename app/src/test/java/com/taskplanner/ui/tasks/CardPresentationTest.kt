@@ -256,4 +256,44 @@ class CardPresentationTest {
         /** Named here rather than imported: the fixture states its own arithmetic. */
         const val DAY = 86_400_000L
     }
+
+    /**
+     * The *order* of a date belongs to the locale, and the test above does not see it.
+     *
+     * `a date line follows the locale the device is on` compares one locale to another, so it passes while the
+     * card prints «nov. 22, 2026» to a French reader and «нояб. 22, 2026» to a Russian one — the month word
+     * travels, the American word order stays. It was caught by looking at a Russian task card on the device
+     * during the Stage 14 frame matrix, which is what a frame is for: `docs/images/ui-redesign/after/s14/
+     * s14-ru-393-light-10/01-tasks.png` showed «нояб. 01, 2026» while the reader above it had chosen Russian.
+     *
+     * The claim is therefore about position, not vocabulary: in a locale whose own medium date writes the day
+     * first, the line has to *begin* with the day. English is checked in the same breath, because a fix that
+     * made every locale day-first would pass the Russian half of this test and be wrong anyway.
+     */
+    @Test fun `a date line opens with the day in a locale that writes the day first`() {
+        val due = midnight + 30 * DAY
+        // Derived, not written down: `midnight` is today, so the day this fixture points at moves every day,
+        // and a literal "22" would be a test that passes for one day a year.
+        val dayOfMonth = Calendar.getInstance().apply { timeInMillis = due }.get(Calendar.DAY_OF_MONTH)
+            .toString()
+        val previous = Locale.getDefault()
+        try {
+            for (tag in listOf("ru", "fr")) {
+                Locale.setDefault(Locale.forLanguageTag(tag))
+                val line = present(due = due).dueLine.toString()
+                assertTrue(
+                    "a $tag reader writes the day before the month; the card wrote '$line'",
+                    line.trim().startsWith(dayOfMonth)
+                )
+            }
+            Locale.setDefault(Locale.forLanguageTag("en-US"))
+            val english = present(due = due).dueLine.toString()
+            assertTrue(
+                "and an American reader still gets the month first: '$english'",
+                english.trim().first().isLetter() && english.contains(dayOfMonth)
+            )
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
 }

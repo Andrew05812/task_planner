@@ -42,13 +42,13 @@ import com.taskplanner.data.repository.WorkStatisticsRepository
 import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.databinding.FragmentTaskDetailBinding
 import com.taskplanner.databinding.ItemWorkIntervalBinding
+import com.taskplanner.ui.util.LocalisedDates
 import com.taskplanner.ui.util.WorkAdjustmentUi
 import com.taskplanner.ui.util.WorkConflictDialog
 import com.taskplanner.ui.util.WorkTimeFormat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.*
 
 @AndroidEntryPoint
@@ -57,7 +57,6 @@ class TaskDetailFragment : Fragment() {
     private val binding get() = _binding!!
     private val args: TaskDetailFragmentArgs by navArgs()
     private val viewModel: TasksViewModel by viewModels()
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
     /** The deadline being edited, as a calendar so the date and the clock are one instant. */
     private var dueCalendar: Calendar? = null
@@ -280,7 +279,7 @@ class TaskDetailFragment : Fragment() {
     private fun renderDueFields() {
         val calendar = dueCalendar
         binding.taskDueDate.setText(
-            calendar?.let { dateFormat.format(it.time) } ?: ""
+            calendar?.let { LocalisedDates.date(it.timeInMillis) } ?: ""
         )
         binding.taskDueTime.setText(
             when {
@@ -395,7 +394,7 @@ class TaskDetailFragment : Fragment() {
         val start = startCalendar
         val end = endCalendar
 
-        binding.planStartDate.setText(start?.let { dateFormat.format(it.time) } ?: "")
+        binding.planStartDate.setText(start?.let { LocalisedDates.date(it.timeInMillis) } ?: "")
         binding.planStartTime.setText(
             when {
                 start == null -> ""
@@ -405,7 +404,7 @@ class TaskDetailFragment : Fragment() {
         )
         binding.planStartTime.isEnabled = start != null
 
-        binding.planEndDate.setText(end?.let { dateFormat.format(it.time) } ?: "")
+        binding.planEndDate.setText(end?.let { LocalisedDates.date(it.timeInMillis) } ?: "")
         binding.planEndTime.setText(
             when {
                 end == null -> ""
@@ -452,7 +451,7 @@ class TaskDetailFragment : Fragment() {
     }
 
     private fun momentLabel(calendar: Calendar): String =
-        "${dateFormat.format(calendar.time)} ${DateFormat.getTimeFormat(requireContext()).format(calendar.time)}"
+        "${LocalisedDates.date(calendar.timeInMillis)} ${DateFormat.getTimeFormat(requireContext()).format(calendar.time)}"
 
     /** The typed length, or null for "no length given". A blank field is not zero minutes. */
     private fun planEstimate(): Int? =

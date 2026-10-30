@@ -1,5 +1,6 @@
 package com.taskplanner.data.statistics
 
+import com.taskplanner.ui.settings.AppLocale
 import com.taskplanner.data.model.DailyCompletionCount
 import com.taskplanner.data.model.DailyWorkSummary
 import com.taskplanner.data.model.TaskHealthCounts
@@ -194,7 +195,7 @@ object DashboardMath {
         completed: List<DailyCompletionCount>,
         today: LocalDate,
         weeks: Int,
-        firstDay: DayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        firstDay: DayOfWeek = WeekFields.of(AppLocale.current()).firstDayOfWeek
     ): HeatmapGrid {
         val seconds = worked.associate { it.localDay to it.seconds }
         val completions = completed.associate { it.localDay to it.count }

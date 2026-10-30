@@ -50,8 +50,12 @@ printf 'note: %s java.exe alive (1 = the Gradle daemon idling; more than that me
 
 # ---------------------------------------------------------------- the classes, read off the source
 # Discovered rather than listed, because a class added to the tree and not to this file is a class that never
-# runs and nobody notices.
-ALL=$(cd "$ROOT/app/src/androidTest/java" && find . -name '*InstrumentedTest.kt' -o -name '*CleanupTest.kt' \
+# runs and nobody notices. The pattern is `*Test.kt` and not the `*InstrumentedTest.kt` it used to be: Stage 14
+# added `CalendarLocaleTest` and `CsvLocaleTest`, which are on-device classes that do not carry the word
+# "Instrumented" in their names, and the narrower pattern let the script report a clean twenty-class matrix
+# while silently never running those two. A discovery rule that can miss a class is a list with the list's
+# weakness and none of the list's visibility.
+ALL=$(cd "$ROOT/app/src/androidTest/java" && find . -name '*Test.kt' \
       | sed 's|^\./||; s|\.kt$||; s|/|.|g' | sort)
 CLASSES=""
 for c in $ALL; do
@@ -71,7 +75,15 @@ for c in $CLASSES; do
   log="$OUT/$short.log"
   adb -s "$SERIAL" shell am force-stop "$TARGET" >/dev/null 2>&1
   adb -s "$SERIAL" shell am force-stop "$PKG" >/dev/null 2>&1
-  adb -s "$SERIAL" shell am instrument -w -e class "$c" "$PKG/$RUNNER" > "$log" 2>&1
+  # `clearPackageData` is what Gradle's own connected-test task passes, and a raw `am instrument` does not get
+  # it from `build.gradle.kts` — the argument lives in the build script, not in the runner. Without it the app
+  # keeps the task the previous class left: a force-stop kills the process but not the record, so the next
+  # launch restores the screen the last class ended on, the bottom bar restores its selection along with it,
+  # and the first tab press of the next class is a re-selection that navigates nowhere. That is how
+  # `Stage8aScreensInstrumentedTest` came to fail with "the tab did not draw its screen" only in a run that
+  # followed the Stage 14 frame walk, whose last screen is a task detail behind a bar holding Profile.
+  adb -s "$SERIAL" shell am instrument -w -e class "$c" -e clearPackageData true \
+    "$PKG/$RUNNER" > "$log" 2>&1
   code=$?
   # `OK (N tests)` when all of them passed; `Tests run: N, Failures: F, Errors: E` when they did not.
   tests=$(grep -oE "OK \(([0-9]+) test" "$log" | grep -oE "[0-9]+" | head -1)

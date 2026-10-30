@@ -78,5 +78,5 @@ object WorkInstantInput {
      * outlives a locale change is a label nobody asked for.
      */
     fun formatDayLong(day: LocalDate): String =
-        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()).format(day)
+        DateTimeFormatter.ofPattern("d MMM yyyy", LocalisedDates.locale()).format(day)
 }

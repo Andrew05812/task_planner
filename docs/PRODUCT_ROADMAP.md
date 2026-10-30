@@ -342,6 +342,73 @@ arguments, no literal in code) and how the completeness gate works.
 A Russian reader can use every screen, including the ones built at runtime from plurals, and the app's own
 tests pass in both languages without a single assertion about an English word.
 
+## 14.13 State after the Stage 14 work of 2026-10-30
+
+**Status: DONE, with three named openings.** A reader chooses a language in Settings, the whole app speaks it,
+the arithmetic follows it, and the choice survives everything a reader does to an app except uninstalling it.
+
+Against what 14.9 asked for:
+
+| 14.9 criterion | state now |
+|---|---|
+| 1 — `values-ru` holds every key `values` holds, CI fails on a new one | **met.** 897 English strings against 892 Russian, the five absent ones marked `translatable="false"`; 48 plurals each side; `check-localization.py` runs first in CI and now also refuses to pass on two empty files |
+| 2 — every plural has `one`/`few`/`many`, `MissingQuantity` unsuppressed | **met.** `PluralsContractTest` walks each of the 48 through 0, 1, 2, 4, 5, 11, 14, 21, 22, 25, 101, 111 |
+| 3 — the language changes the visible UI without a reinstall, photographed before and after | **met** on `taskplanner_avd` (API 35): apply, recreate, force-stop, relaunch — 42 frames in six configurations |
+| 4 — the choice survives process death and app update | **met, and stronger than asked:** it survives `pm clear`, because the record is held by the framework, not the app. Only an uninstall clears it. Measured, not read from documentation |
+| 5 — no test compares a rendered string to an English literal | **met for `androidTest`** and gated against new ones; **open for `app/src/test`**, where a literal is often the fixture's own data and needs a per-case rule — recorded in `EnglishLiteralAssertionTest` |
+| 6 — nothing truncated in Russian that is not truncated in English | **not met.** Two Russian-only cuts survive: the plan-time field hint «Время окончан…» at 393dp/1.0 and 320dp/1.3, and «СОХРАНИТЬ» wrapping mid-word in the editor footer at 320dp/1.3. Both are in the ledger with their frames; both need a wording or layout decision that changes approved English baselines, so neither was made silently |
+| 7 — the week starts Monday in Russian, dashboard boundaries asserted for both locales | **met and visible:** `s14-ru-320-light-13/02-calendar.png` opens on Пн, `s14-en-320-light-13/02-calendar.png` on Sun, same build, same width, same font |
+
+**What was measured, on the tree this section describes.** JVM: 129 classes, 1637 tests, 0 failures, 0 skipped.
+Lint: 0 errors, 149 warnings (144 at Stage 13; the three in files this stage touched are one
+`AppBundleLocaleChanges` — both locales ship inside the APK, there is no Play language split to download — and
+two pre-existing `SetTextI18n` joins in `ArchiveAdapter`, which belong to the runtime-string row below).
+`assembleDebug` and `assembleDebugAndroidTest` both produced and both installed on `taskplanner_avd`, with the
+device copy sha256-matched against `/data/app` before a frame was taken.
+
+**Two builds, and which frames each one backs — said rather than smoothed over.** The matrix was shot twice.
+Build `d774e5a2e6b8eabc…` produced `en-320-light-13`, `ru-393-light-10` and `ru-320-light-13`; the final build
+`c329b3defa70bd26…`, which differs only in five `Locale.getDefault()` reads moved to `AppLocale`, produced
+`en-393-light-10`, `en-393-dark-10` and `ru-393-dark-10`. On API 35 the two accessors answer the same locale —
+that is the measured behaviour `CalendarLocaleTest` records — so no rendered string can differ between them;
+the claim is stated as an argument, not as a measurement, because the attempt to measure it ran into the next
+paragraph.
+
+**The instrumented gate could not be completed on the final build, and the emulator is why.** All 22 classes
+were run in isolation against `d774e5a2e6b8eabc…`: 19 green, three (`Stage8aScreensInstrumentedTest`,
+`ReportScreenInstrumentedTest`, `TasksFabClearanceInstrumentedTest`) ending with no verdict line. After the
+final build was installed, every device run failed — including `SeededProfileCleanupTest`, which had passed
+twice earlier the same day and presses no tabs at all, and which is therefore the control that says the
+device changed and not the code. `logcat -b crash` reports `DeadSystemException: The system died` across six
+processes and a Bluetooth stack restarting every two minutes with `com.taskplanner` absent from it;
+`dumpsys window` reports `mCurrentFocus=Window{… Application Not Responding: com.android.systemui}` while
+`ps` shows the app alive. Two reboots and disabling the unused stack did not clear it. **No claim is made
+that the instrumented suite is green on the committed build**; the frames above are the device evidence this
+stage can stand behind, and re-running the 22-class matrix on a healthy emulator is the first task of the next
+session.
+
+**The stage's own gate caught the stage's own evidence.** The first two matrices were wrong in the same way —
+a `ru` directory holding English screens, and a `01-tasks.png` that was a photograph of Settings — and the fix
+was not a more careful operator but a shutter that refuses: every frame now checks the device's own width,
+theme and font scale, the language the window is resolving, and that the view it is named after is actually
+**shown**. That last clause was earned: `findViewById` answers a container the renderer left `GONE`, so the
+Statistics screen was photographed mid-load as a blank panel in both languages, and the seed had to grow two
+measured intervals before the frame showed a Russian figure at all.
+
+**What Stage 14 found in the arithmetic and fixed.** Dates were the big one: five screens carried a literal
+`"MMM dd, yyyy"`, which is an American word order written into every language, and the test that existed for
+exactly that defect passed, because it compared French to English and never asked either what its own order
+is. A Russian card read «нояб. 01, 2026» until a photograph said so. Also fixed: a `SimpleDateFormat` held in
+a companion object, code-point ordering of displayed names instead of a `Collator`, a genitive month heading
+(«октября 2026») on a screen with no day in it, notification channels frozen in the install-time language, and
+seventeen notification strings resolved from the one context AppCompat does not wrap.
+
+Three openings this stage leaves, each named in `docs/LOCALIZATION.md` rather than in a commit message: the
+two Russian-only truncations above, twenty-nine failure sentences still built in code (a ratchet refuses a
+thirtieth), and the stale-Profile-tab defect that predates the stage and has a control test recording it.
+
+**Stage 15 (import from Google Keep) is next. Stage 8b is not scheduled and was not started.**
+
 ---
 
 # Stage 15 — Import from Google Keep

@@ -26,6 +26,7 @@ import com.taskplanner.databinding.FragmentHabitDetailBinding
 import com.taskplanner.databinding.ItemHabitChangeBinding
 import com.taskplanner.databinding.ItemHabitDayBinding
 import com.taskplanner.databinding.ItemHabitWeekdayBinding
+import com.taskplanner.ui.util.LocalisedDates
 import dagger.hilt.android.AndroidEntryPoint
 import java.text.DateFormat
 import java.time.LocalDate
@@ -234,7 +235,7 @@ class HabitDetailFragment : Fragment() {
         binding.weekLabel.text = if (state.isCurrentWeek) {
             getString(R.string.habit_this_week)
         } else {
-            val formatter = DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+            val formatter = DateFormat.getDateInstance(DateFormat.MEDIUM, LocalisedDates.locale())
             getString(
                 R.string.habit_week_format,
                 formatter.format(WorkTimeMath.toDate(from)),
@@ -258,7 +259,7 @@ class HabitDetailFragment : Fragment() {
         state.cells.forEach { cell ->
             val label = ItemHabitWeekdayBinding.inflate(inflater, binding.habitDayLabels, true)
             label.root.text = LocalDate.ofEpochDay(cell.day)
-                .dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                .dayOfWeek.getDisplayName(TextStyle.SHORT, LocalisedDates.locale())
             val day = ItemHabitDayBinding.inflate(inflater, binding.habitDayCells, true)
             day.root.text = LocalDate.ofEpochDay(cell.day).dayOfMonth.toString()
             bindDay(day, cell)

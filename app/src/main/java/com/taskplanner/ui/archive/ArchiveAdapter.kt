@@ -10,9 +10,7 @@ import com.taskplanner.R
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.databinding.ItemArchiveBinding
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.taskplanner.ui.util.LocalisedDates
 
 /**
  * The rows of the archive, and the only place allowed to say what an archived row is.
@@ -54,8 +52,6 @@ class ArchiveAdapter(
 ) {
     class VH(val binding: ItemArchiveBinding) : RecyclerView.ViewHolder(binding.root)
 
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
         VH(ItemArchiveBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
@@ -76,7 +72,7 @@ class ArchiveAdapter(
             // list). Repeating the `when` here is the fourth copy; the shared helper belongs to a stage that
             // is allowed to change those two files, and this one is not.
             archiveStateMark.setText(statusLabelRes(item.task.status))
-            val archived = item.task.archivedAt?.let { dateFormat.format(Date(it)) } ?: "—"
+            val archived = item.task.archivedAt?.let { LocalisedDates.dateTime(it) } ?: "—"
             val category = item.category?.name ?: root.context.getString(R.string.no_category)
             archiveMeta.text = root.context.getString(R.string.archive_archived_at, archived) +
                 " · $category"

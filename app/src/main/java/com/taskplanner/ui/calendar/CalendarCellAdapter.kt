@@ -13,6 +13,7 @@ import com.taskplanner.data.calendar.CalendarAggregator
 import com.taskplanner.data.model.Task
 import com.taskplanner.databinding.ItemCalendarCellTaskBinding
 import com.taskplanner.databinding.ItemCalendarDayBinding
+import com.taskplanner.ui.util.LocalisedDates
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -144,7 +145,7 @@ class CalendarCellAdapter(
             binding.cellDayNumber.text = cell.date.dayOfMonth.toString()
             binding.cellMonthLabel.isVisible = item.mode == CalendarMode.WEEK
             binding.cellMonthLabel.text = cell.date.month.getDisplayName(
-                TextStyle.SHORT, Locale.getDefault()
+                TextStyle.SHORT, LocalisedDates.locale()
             )
 
             bindChips(cell, shown)

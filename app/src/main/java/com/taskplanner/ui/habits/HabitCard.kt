@@ -13,6 +13,7 @@ import com.taskplanner.data.model.HabitFrequency
 import com.taskplanner.data.repository.HabitFigures
 import com.taskplanner.data.repository.HabitRejection
 import com.taskplanner.data.tracking.WorkTimeMath
+import com.taskplanner.ui.util.LocalisedDates
 import java.text.DateFormat
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -61,7 +62,7 @@ object HabitCard {
         HabitFrequency.DAILY -> null
         HabitFrequency.DAYS_OF_WEEK -> HabitMath.daysOf(habit.daysMask)
             .joinToString(context.getString(R.string.habit_weekday_joiner)) {
-                it.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                it.getDisplayName(TextStyle.SHORT, LocalisedDates.locale())
             }
         HabitFrequency.TIMES_PER_WEEK -> context.resources.getQuantityString(
             R.plurals.habit_times_per_week,
@@ -184,13 +185,13 @@ object HabitCard {
     /** The day the habit began, always worth one word: nothing before it counts. */
     fun dayText(context: Context, day: Long): String = DateFormat.getDateInstance(
         DateFormat.MEDIUM,
-        Locale.getDefault()
+        LocalisedDates.locale()
     ).format(WorkTimeMath.toDate(day).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
 
     /** A minute of the day, written the way the reader's locale writes a time. */
     fun timeText(minuteOfDay: Int): String =
         LocalTime.ofSecondOfDay(minuteOfDay * 60L).format(
-            DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(Locale.getDefault())
+            DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(LocalisedDates.locale())
         )
 
     /**
@@ -214,7 +215,7 @@ object HabitCard {
     /** When the mark was corrected, and why the user said it was — or the words for "they did not say". */
     fun changeWhen(context: Context, change: HabitCheckChange): String = context.getString(
         R.string.habit_change_when_format,
-        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.getDefault())
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, LocalisedDates.locale())
             .format(change.createdAt),
         change.reason?.takeIf { it.isNotBlank() }
             ?: context.getString(R.string.habit_change_no_reason)

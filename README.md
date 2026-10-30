@@ -12,7 +12,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 1372 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 1637 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
@@ -93,6 +93,23 @@ waking up to an empty list.
   states, pushed and pulled by WorkManager when a network is available. One document per entity in
   `users/{uid}/{tasks|categories|groups|recurrence_rules|reminders}/{uuid}`, so a series and the
   lead times set on a task reach the other device too.
+
+## Languages
+
+English and Russian, chosen in **Profile → Settings → Язык / Language** and applied on the spot. The choice
+survives a recreate, a force-stop, a relaunch and an app update, and changes nothing else: no profile is
+signed out, no row moves.
+
+A language here is more than the words. Plurals carry all four Russian forms and are tested at 0, 1, 11, 21
+and 111; format arguments are positional, because Russian moves them inside a sentence; the calendar's first
+day of the week, the shape of a date, the separators in a figure, the delimiter of a csv and the collation
+order of a list of names are all read from the language chosen in the app rather than from the language the
+handset was sold with. `docs/LOCALIZATION.md` is the contract, what proves each part, and what is knowingly
+left undone.
+
+```
+python scripts/check-localization.py   # fails, naming the exact entries, if the two files disagree
+```
 
 ## Recurring tasks
 
@@ -396,6 +413,8 @@ on a real screen — is still open.
   history screen is allowed to read.
 - `docs/REPORT_EXPORT.md` — the report screen's path, the csv and pdf the same figures become, where a
   file goes, what has been measured on a device and what has not.
+- `docs/LOCALIZATION.md` — the language switch, what a language is allowed to change, the gates that keep
+  the two resource files honest, and the parts deliberately left open.
 
 ## Known limitations
 
