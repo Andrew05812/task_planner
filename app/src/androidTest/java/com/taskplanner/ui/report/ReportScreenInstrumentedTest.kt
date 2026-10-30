@@ -408,7 +408,7 @@ class ReportScreenInstrumentedTest {
     }
 
     private fun chooseAWeek() {
-        onView(withText(WEEK_CHIP)).perform(click())
+        onView(withText(context.getString(R.string.report_period_week))).perform(click())
         assertTrue("the week's pages", waitUntil("the week's pages") {
             shown(R.id.reportPagesScroll) && (findView(R.id.reportPages)?.height ?: 0) > MIN_SHEET
         })
@@ -791,7 +791,6 @@ class ReportScreenInstrumentedTest {
         const val TIMEOUT_MILLIS = 60_000L
 
         /** The chip that asks for a week, in the language the test device speaks. */
-        const val WEEK_CHIP = "A week"
 
         /** A sheet below this height was never laid out. */
         const val MIN_SHEET = 400

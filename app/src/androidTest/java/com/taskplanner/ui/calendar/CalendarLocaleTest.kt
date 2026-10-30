@@ -62,8 +62,12 @@ class CalendarLocaleTest {
     }
 
     @After
-    fun closeTheWindow() {
-        scenario.close()
+    fun handTheLanguageBack() {
+        // The reset happens *before* the window is closed, because a locale applied with no AppCompat host
+        // alive is the silent no-op this class measures elsewhere: the first version closed the scenario first,
+        // the reset did nothing, and every instrumented class that ran afterwards found a Russian app and
+        // false-failed on its own English expectations. `build/stage14-device/report-screen-probe.log` is that
+        // failure — a report screen reading "Месяц: 1 окт. 2026 г." under a test written in English.
         // The language goes back to the device on the way out, in every method's success *and* failure path:
         // a class that leaves the app Russian hands the rest of the instrumented matrix a screen full of
         // Russian words, and every one of those classes compares what it sees to a resource value.

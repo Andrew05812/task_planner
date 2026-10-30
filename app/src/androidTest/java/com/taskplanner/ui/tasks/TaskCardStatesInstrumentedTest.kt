@@ -180,8 +180,10 @@ class TaskCardStatesInstrumentedTest {
     @Test
     fun aLateRowSaysHowLateItIsAndPaintsTheRuleRed() {
         assertEquals(context.resources.getQuantityString(R.plurals.task_late_days, 3, 3), dueText(LATE))
-        assertTrue("the sentence carries it, so colour is not the only signal: '${dueText(LATE)}'",
-            dueText(LATE).contains("late"))
+        assertTrue(
+            "the sentence carries its words, so colour is not the only signal: '${dueText(LATE)}'",
+            dueText(LATE).contains(lateWords())
+        )
         assertEquals(ContextCompat.getColor(context, R.color.ink_error), dueView(LATE).currentTextColor)
         val rule = part<View>(LATE, R.id.priorityIndicator)
         assertEquals("a LOW priority, so the rule is red for one reason only", View.VISIBLE, rule.visibility)
@@ -191,11 +193,27 @@ class TaskCardStatesInstrumentedTest {
         shot("s4-card-overdue")
     }
 
+    /**
+     * The words the overdue sentence adds to a date, taken from the resource rather than written out.
+     *
+     * The row is asked for three days, so the plural the app renders is the plural this derives — and the words
+     * after the count are what "lateness is said, not only painted" means. Written as `"late"` it was an
+     * English word in a test that a Russian reader's build renders as "дней просрочки", which is exactly the
+     * false failure `EnglishLiteralAssertionTest` now refuses.
+     */
+    private fun lateWords(): String = context.resources
+        .getQuantityString(R.plurals.task_late_days, LATE_DAYS, LATE_DAYS)
+        .trim()
+        .substringAfter(' ')
+        .trim()
+
     /** A finished task whose deadline also passed is not late: lateness is a claim about open work. */
     @Test
     fun aFinishedTaskWithAPastDeadlineIsNotPaintedLate() {
-        assertTrue("the date is a date, not an accusation: '${dueText(DONE)}'",
-            !dueText(DONE).contains("late"))
+        assertTrue(
+            "the date is a date, not an accusation: '${dueText(DONE)}'",
+            !dueText(DONE).contains(lateWords())
+        )
         assertEquals("and it is not coloured as one either",
             ContextCompat.getColor(context, R.color.ink_text_secondary), dueView(DONE).currentTextColor)
         assertLifecycleRow(DONE)
@@ -680,6 +698,9 @@ class TaskCardStatesInstrumentedTest {
     }
 
     companion object {
+        /** The days the overdue fixture is late by: the count both the render and the words are asked for. */
+        const val LATE_DAYS = 3
+
         const val PLAIN = "Позвонить в деканат"
         const val LATE = "Отправить главу на проверку"
         const val PROGRESS = "Собрать источники для второй главы"
