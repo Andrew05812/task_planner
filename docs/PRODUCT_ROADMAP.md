@@ -416,9 +416,11 @@ thirtieth), and the stale-Profile-tab defect that predates the stage and has a c
 **Status: the four acceptance criteria are DONE; the instrumented matrix is `BLOCKED — emulator/system
 instability`, with one real defect found underneath it that survives a healthy device.** Stage 14 shipped with
 those four criteria unmet; this pass closed them, then spent longer on the proof than on the fixes, and what the
-proof turned up is recorded here rather than smoothed over. CI is green on the pass's published SHA `9bee875`
-(run 41249031777, all 13 steps, `workflow_dispatch`), which is a JVM-plus-lint-plus-localization green; the
-device verdict is the paragraph below it, not that one.
+proof turned up is recorded here rather than smoothed over. CI is green on this pass's published SHAs — run
+41249031777 on `9bee875`, run 41250642319 on the documentation commits after it, each one job with 16 of 16 steps
+successful, dispatched by hand because a feature-branch push does not trigger the workflow (the branch's Actions
+page is the live list). That green is JVM-plus-lint-plus-localization; the device verdict is the paragraph below
+it, not that one.
 
 | The finding | What it turned out to be | What closed it |
 |---|---|---|
@@ -448,8 +450,9 @@ the other 23 classes are still owed a healthy-device pass on these bytes.
 What is *not* an environment story: one reproduction held through everything — a bottom tab pressed changes
 nothing, with the window focused, the activity identity held steady, a clean install, and a load of 6 — and it
 survived the machine becoming healthy. The fifth run, on a device reading load **1.77** with 1,169,944 kB
-`MemAvailable`, no crash line and no ANR line in the whole logcat capture, and the APK's SHA-256 read back from
-`/data/app`, produced it twice more: once inside `ProfileNavigationRestorationTest`, where
+`MemAvailable`, no crash line in either logcat capture and no `ANR in com.taskplanner` in either (the second
+capture does hold one foreign `ANR in com.android.chrome` — `No response to onStopJob`, killed at `adj 905`), and
+the APK's SHA-256 read back from `/data/app`, produced it twice more: once inside `ProfileNavigationRestorationTest`, where
 `everyTabIsStillItselfAfterTheActivityIsRebuilt` passed in the same process, and once with the failing method run
 alone in its own process (`1 test, 1 failure`, 430 s, the same Categories leg, the same sentence). The stack
 places both failures inside `go()` — the press, before that iteration's language change — so this is the tab that

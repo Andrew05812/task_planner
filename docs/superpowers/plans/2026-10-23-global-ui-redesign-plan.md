@@ -5849,14 +5849,17 @@ lives — the frame walk, whose `am force-stop` between the choosing run and the
 
 ### 20t.1 The quiet-machine run, 2026-11-01
 
-CI reached green on the pass's published SHA `9bee875c89a86bad871c43ad3b89a948e1886743` — run 41249031777, all 13
-steps, dispatched by hand because a feature-branch push does not trigger the workflow. That verdict is
-JVM + lint + localization; it says nothing about the device. The device got one more chance while it was actually
-quiet, and the chance is why the last bullet above had to be re-read rather than re-quoted.
+CI reached green on the pass's published SHA `9bee875c89a86bad871c43ad3b89a948e1886743` — run 41249031777, one
+job, 16 of 16 steps, dispatched by hand because a feature-branch push does not trigger the workflow. That verdict
+is JVM + lint + localization; it says nothing about the device. The device got one more chance while it was
+actually quiet, and the chance is why the last bullet above had to be re-read rather than re-quoted.
 
 `taskplanner_avd` / `emulator-5584`, APK SHA-256 read back from `/data/app` and equal to the built
-`08838047e26e0d16…`, load average **1.77**, `MemAvailable` 1,169,944 kB, and a full `logcat` capture for the run
-with no `ANR` line and no crash line in it. `ProfileNavigationRestorationTest` was run whole, then its failing
+`08838047e26e0d16…`, load average **1.77**, `MemAvailable` 1,169,944 kB, and a full `logcat` capture for the class
+run — 4,294 lines with no `ANR` line and no crash line in it. The method-alone run's capture is not as clean and
+is quoted honestly rather than rounded up: 11,982 lines, no crash line, no `ANR in com.taskplanner`, but one
+foreign `ANR in com.android.chrome` with `Reason: No response to onStopJob`, killed at `adj 905`.
+`ProfileNavigationRestorationTest` was run whole, then its failing
 method was run alone in its own process:
 
 * `everyTabIsStillItselfAfterTheActivityIsRebuilt` — **passes**, five tabs through a bare `recreate()`, each
