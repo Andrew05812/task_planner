@@ -12,7 +12,7 @@ Requirements: JDK 17, Android SDK 34. The Gradle wrapper pins everything else.
 
 ```
 ./gradlew assembleDebug        # build the debug APK
-./gradlew testDebugUnitTest    # 1637 JVM tests (Robolectric + real Room + real SQLite migrations)
+./gradlew testDebugUnitTest    # 1640 JVM tests (Robolectric + real Room + real SQLite migrations)
 ./gradlew lintDebug            # Android Lint
 ./gradlew assembleDebugAndroidTest   # compile the on-device tests
 ./gradlew connectedDebugAndroidTest  # run them — needs a device or emulator
