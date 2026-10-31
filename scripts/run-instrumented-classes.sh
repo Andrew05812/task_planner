@@ -140,11 +140,11 @@ for c in $CLASSES; do
   tests=$(grep -oE "OK \(([0-9]+) test" "$log" | grep -oE "[0-9]+" | head -1)
   failed=""
   if [ -z "$tests" ]; then
-    summary=$(grep -oE "^Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+" "$log" | head -1)
+    summary=$(grep -oE "^Tests run: [0-9]+,[[:space:]]+Failures: [0-9]+(,[[:space:]]+Errors: [0-9]+)?" "$log" | head -1)
     if [ -n "$summary" ]; then
       tests=$(echo "$summary" | sed 's/Tests run: \([0-9]*\).*/\1/')
       f=$(echo "$summary" | sed 's/.*Failures: \([0-9]*\).*/\1/')
-      e=$(echo "$summary" | sed 's/.*Errors: \([0-9]*\).*/\1/')
+      e=$(echo "$summary" | sed -n 's/.*Errors: \([0-9]*\).*/\1/p'); [ -z "$e" ] && e=0
       failed=$((f + e))
     fi
   fi
