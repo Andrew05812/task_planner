@@ -19,6 +19,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.taskplanner.R
+import com.taskplanner.testing.AppWindow
 import com.taskplanner.testing.SeededProfile
 import com.taskplanner.ui.MainActivity
 import org.junit.After
@@ -63,10 +64,31 @@ class LanguageSwitchInstrumentedTest {
             "the app opens on Tasks",
             waitUntil("the tasks header") { findView(R.id.tasksHeader) != null }
         )
+        // Every test here presses a tab, and a tap only reaches an app whose window the system is sending
+        // input to. This run failed without that premise: `pressing navigation_profile left the app on
+        // navigation_tasks, and the bar's selection is navigation_tasks` — a press that did nothing at all,
+        // which is what a drawn-but-unfocused window looks like from inside a test. See [AppWindow].
+        val focused = AppWindow.awaitFocus(scenario)
+        assertTrue(
+            AppWindow.focusMessage("the Tasks screen", AppWindow.focused(scenario)),
+            focused
+        )
     }
 
+    /**
+     * Hand the language back, then close the window.
+     *
+     * Every test here opens with [startFromSystemDefault], so a *passing* run leaves nothing behind — but a run
+     * that fails halfway through a language walk leaves exactly the language it was in the middle of, and the
+     * next instrumented class then reads Russian words against English resources. That is not a hypothesis:
+     * `ProfileNavigationRestorationTest` had no teardown at all, and the frame run after it failed with "the
+     * run asked for 'en' and the window is resolving 'ru'". The hand-back happens while the window is alive,
+     * because a locale applied with no AppCompat host is a silent no-op — the same order `CsvLocaleTest` and
+     * `CalendarLocaleTest` record.
+     */
     @After
     fun closeTheWindow() {
+        runCatching { AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList()) }
         scenario.close()
     }
 
@@ -246,10 +268,22 @@ class LanguageSwitchInstrumentedTest {
      */
     private fun pressTab(id: Int) {
         val from = destination()
-        onView(withId(id)).perform(click())
+        // Focus before the press, every time, not only at launch: a locale change recreates the activity, and
+        // a tap injected into the window that is on its way out does not arrive at the one that replaces it.
+        val focused = AppWindow.awaitFocus(scenario)
         assertTrue(
-            "pressing ${name(id)} left the app on ${name(from)}, and the bar's selection is ${name(selection())}",
-            waitUntil("the tab") { destination() == id }
+            AppWindow.focusMessage("the screen before ${name(id)}", AppWindow.focused(scenario)),
+            focused
+        )
+        onView(withId(id)).perform(click())
+        // Assembled after the wait expires, so it says where the app ended up — with the focus reading beside
+        // it, because "nothing moved" and "nothing moved while the window was not the one receiving input" are
+        // different findings, and only the second one is the device's to answer for.
+        val arrived = runCatching { waitUntil("the tab") { destination() == id } }.getOrDefault(false)
+        assertTrue(
+            "pressing ${name(id)} left the app on ${name(destination())} (it was on ${name(from)}), and the " +
+                "bar's selection is ${name(selection())} — window focused=${AppWindow.focused(scenario)}",
+            arrived
         )
     }
 
@@ -417,13 +451,6 @@ class LanguageSwitchInstrumentedTest {
          * and this class is the one place the feature is proved.
          */
         const val WAIT_MILLIS = 60_000L
-
-        /**
-         * Long enough for a navigation transaction to have happened if it was going to, and short enough that a
-         * test which waits this is not polling for a state it cannot reach. Only [theDeadTabIsDeadWithoutAnyLanguageChange]
-         * uses it, because that method's claim is about a tap that does nothing — there is no arrival to watch.
-         */
-        const val TAP_SETTLE_MILLIS = 3_000L
 
         lateinit var signedIn: SeededProfile.SignedIn
 

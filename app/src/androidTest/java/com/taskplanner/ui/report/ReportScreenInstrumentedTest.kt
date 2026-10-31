@@ -11,6 +11,7 @@ import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.TextView
 import androidx.lifecycle.Lifecycle
+import androidx.navigation.fragment.NavHostFragment
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso
@@ -25,6 +26,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.taskplanner.R
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.AppMigrations
@@ -32,6 +34,7 @@ import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.User
+import com.taskplanner.testing.AppWindow
 import com.taskplanner.ui.MainActivity
 import java.io.File
 import java.time.LocalDate
@@ -149,6 +152,15 @@ class ReportScreenInstrumentedTest {
         }
         database.close()
         scenario = ActivityScenario.launch(MainActivity::class.java)
+        // The path this class walks is made of tab presses, and a tap only reaches an app whose window the
+        // system is currently sending input to. Under a loaded emulator a window can be resumed, drawn and
+        // unfocused at the same time, which reads from inside a test as a press that did nothing; [AppWindow]
+        // carries the run that failed on this premise rather than on the report screen.
+        val focused = AppWindow.awaitFocus(scenario)
+        assertTrue(
+            AppWindow.focusMessage("the screen it launched on", AppWindow.focused(scenario)),
+            focused
+        )
     }
 
     @After
@@ -732,7 +744,29 @@ class ReportScreenInstrumentedTest {
             append(" window=").append(text(R.id.reportWindowLabel))
             append(" zone=").append(text(R.id.reportZoneLabel))
             append(" note=").append(text(R.id.reportViewNote))
+            // Where the app actually is, and whether the system is sending input to it. This run failed with
+            // "the account screen did not happen within 60000 ms" and the line above could only say the report
+            // views were absent — it could not say the app was still on Tasks, nor that a tab press had
+            // nowhere to arrive. See [AppWindow] on why the second half matters.
+            append(' ').append(navState())
         }
+    }
+
+    /** The bottom bar's selection, the controller's destination, and the window's focus, in one line. */
+    private fun navState(): String {
+        var reading = "no activity"
+        runCatching {
+            scenario.onActivity { activity ->
+                val bar = activity.findViewById<BottomNavigationView>(R.id.bottom_navigation)
+                val host = activity.supportFragmentManager.findFragmentById(R.id.nav_host_fragment)
+                    as? NavHostFragment
+                fun entry(id: Int?) = if (id == null || id == 0) "nothing" else
+                    runCatching { activity.resources.getResourceEntryName(id) }.getOrDefault("$id")
+                reading = "bar=${entry(bar?.selectedItemId)} controller=" +
+                    entry(host?.navController?.currentDestination?.id)
+            }
+        }
+        return "$reading focused=${AppWindow.focused(scenario)}"
     }
 
     /** Dark pixels of a view as it would be drawn — "did the report appear", asked of pixels. */

@@ -16,6 +16,7 @@ import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.User
+import com.taskplanner.testing.DeviceLanguage
 import com.taskplanner.ui.MainActivity
 import java.io.File
 import java.util.UUID
@@ -58,6 +59,17 @@ class TaskCardWidthBudgetInstrumentedTest {
     @Before
     fun openTheScreenTheWorstRowWasSeededFor() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
+        // The allowances compared below are budgets for *English* strings — 84dp is "Oct 25, 2026", 82dp is
+        // "In progress" — so the row has to be drawn in English for the comparison to mean what it says. The
+        // language is a reader's choice now, and the framework keeps it outside the app's own files, so the
+        // runner's data clear between classes does not hand it back. A completion-pass matrix found this class
+        // measuring 136px against a 115px allowance after a class that had chosen Russian, and both numbers
+        // were correct: the card was drawing "25 окт. 2026 г.". See [DeviceLanguage].
+        val restored = DeviceLanguage.restore(scenario)
+        assertTrue(
+            DeviceLanguage.message("the app would not give its language back to the device"),
+            restored
+        )
         assertTrue("the card is drawn", waitUntil("the card") { view(R.id.taskCard) != null })
     }
 

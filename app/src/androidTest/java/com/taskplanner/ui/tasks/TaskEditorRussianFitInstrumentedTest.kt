@@ -57,8 +57,12 @@ class TaskEditorRussianFitInstrumentedTest {
 
     @Before
     fun openTheApp() {
-        AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+        // The hand-back goes *after* the launch, not before it. With no AppCompat host alive
+        // `setApplicationLocales` is the silent no-op `CsvLocaleTest` measures — the first version of this
+        // method wrote it above the launch, which did nothing at all, and a run that followed a class which
+        // left the app Russian came up Russian while believing it had put the language back.
         scenario = ActivityScenario.launch(MainActivity::class.java)
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
         // The editor is *not* opened here: choosing a language recreates the activity, and a recreation on a
         // detail screen comes back on that detail screen, which has no bottom bar and no FAB to reopen from.
         // Each language therefore opens its own editor, from the list, the way a reader does.

@@ -97,6 +97,37 @@ class Stage14LanguageFramesInstrumentedTest {
         // keeps the window unfocused a while longer, so focus is waited for where it is needed and named as
         // the environment condition it is when it does not come.
         waitForWindowFocus()
+        handTheLanguageBackToTheDeviceIfTheRunWantsEnglish()
+    }
+
+    /**
+     * A run that photographs English has to *make* the app English, not assume nobody left it Russian.
+     *
+     * Measured: this class failed with "the run asked for 'en' and the window is resolving 'ru'" — the class
+     * before it changed the language and had no teardown, and the language is not in the app's own storage, so
+     * the runner's `clearPackageData` does not take it back (`LanguageSwitchInstrumentedTest` records the same
+     * finding). The English frames are the baseline half of the matrix, and a baseline shot in the wrong
+     * language is not a baseline. A Russian run needs nothing here: its language is chosen through the Settings
+     * row, which is the feature under review, so the only hand-back worth doing from a test is the one that
+     * restores the device default.
+     */
+    private fun handTheLanguageBackToTheDeviceIfTheRunWantsEnglish() {
+        if (InstrumentationRegistry.getArguments().getString("language", "en") != "en") return
+        if (AppCompatDelegate.getApplicationLocales().isEmpty) return
+        // After the window, never before it: a locale applied with no AppCompat host alive is the silent no-op
+        // `CsvLocaleTest` measures.
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+        val empty = waitUntil { AppCompatDelegate.getApplicationLocales().isEmpty }
+        assertTrue(
+            "the run asked for English and the app would not come back to the device's language: the delegate " +
+                "still answers '${AppCompatDelegate.getApplicationLocales().toLanguageTags()}'",
+            empty
+        )
+        // The reset recreates, and the walk presses tabs from here — so the window has to be back before the
+        // first press or the press lands on a window that is on its way out.
+        val back = waitUntil { findView(R.id.tasksHeader) != null }
+        assertTrue("the app never came back to Tasks after the language reset", back)
+        waitForWindowFocus()
     }
 
     /**
