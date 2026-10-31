@@ -237,13 +237,12 @@ class LanguageSwitchInstrumentedTest {
      * bar's selection along with its state, so the assignment arrived at the item the bar already believed was
      * selected, was refused for that reason, and left the app on the screen it was already showing.
      *
-     * A reader's tap has the same blind spot, and that is a defect rather than a fixture detail: while the
+     * A reader's tap has the same blind spot, and that was a defect rather than a fixture detail: while the
      * screen is on Settings the bar still holds `navigation_profile`, because Settings is reached from the
      * account screen and is not a bottom-bar destination of its own, and a tap on the tab the bar already holds
-     * is a re-selection that navigates nowhere. [theDeadTabIsDeadWithoutAnyLanguageChange] records it in
-     * English, with no locale touched; it is open in the Stage 14 ledger and belongs to navigation, not to
-     * this stage. A test that needs to leave Settings finds its way out the way the screen offers — the
-     * account row is where the reader came from — and never relies on the dead tab.
+     * was a re-selection that navigated nowhere. `MainActivity` answers re-selections now, so this helper is
+     * the plain click it always wanted to be, and [theTabThatOwnsTheScreenCarriesTheReaderBackToIt] is the
+     * proof that a reader on Settings can leave by the tab they can see lit.
      */
     private fun pressTab(id: Int) {
         val from = destination()
@@ -255,17 +254,20 @@ class LanguageSwitchInstrumentedTest {
     }
 
     /**
-     * The control: the same dead tap with no locale touched at all.
+     * The screen a reader is on, and the tab that owns it, have to agree about how to leave.
      *
-     * Recorded while Stage 14 was proving the language row, because the first failure looked like language
-     * switching had broken navigation. It had not: the app was already in this state before the row was added,
-     * and this method never chooses a language — its one call hands the language back to the device, which is
-     * the English state the defect needs. The claim asserted here is the *current* behaviour, not an approved
-     * one — the defect is logged as open in the Stage 14 findings ledger, and this method must be rewritten to
-     * expect navigation as soon as the navigation fix lands.
+     * Recorded by Stage 14 as an open defect and fixed by the completion pass. The state it establishes first is
+     * not the defect: Settings is reached *from* the account screen, so the bar holding `navigation_profile`
+     * while Settings is drawn is the Material convention, and the destination the reader was on survives the
+     * recreation — which is the part the brief asks to be preserved rather than forced back to a tab. The
+     * defect was the tap: the lit tab is the only control on the bar that looks like a way out, and pressing it
+     * did nothing at all, leaving the system back gesture as the only exit.
+     *
+     * It never had anything to do with language. This method chooses no language; its one call hands the choice
+     * back to the device. It is kept here because the row is where a reader actually arrives at this state.
      */
     @Test
-    fun theDeadTabIsDeadWithoutAnyLanguageChange() {
+    fun theTabThatOwnsTheScreenCarriesTheReaderBackToIt() {
         startFromSystemDefault()
         openSettings()
         assertEquals(
@@ -279,20 +281,43 @@ class LanguageSwitchInstrumentedTest {
             waitUntil("settings again") { findView(R.id.settingsTitleText) != null }
         )
         assertEquals(
-            "the screen restored to Settings",
+            "the screen restored to Settings, which is where the reader was",
             R.id.navigation_settings, destination()
         )
         assertEquals(
-            "while the bar restored its selection as Profile — which is the stale pair the defect needs",
+            "and the bar holds the tab that owns it",
             R.id.navigation_profile, selection()
         )
 
-        onView(withId(R.id.navigation_profile)).perform(click())
-        Thread.sleep(TAP_SETTLE_MILLIS)
+        // The reader's own action, on the row this screen exists to offer. Choosing a language is the moment
+        // the pair above is most likely to come apart, and it is the moment the completion pass was asked
+        // about: the app must stay on Settings, keep Profile lit as its owner, and still let the reader leave.
+        onView(withId(R.id.languageRussian)).perform(scrollTo(), click())
+        assertTrue(
+            "the bar never became Russian; it reads ${tabLabels()}",
+            waitUntil("russian tabs") { tabLabels() == russianTabs }
+        )
         assertEquals(
-            "tapping the tab the bar already holds navigated, so the defect this method records is gone; " +
-                "delete this method and the route-around in pressTab",
+            "choosing Russian moved the reader out of the screen they were using",
             R.id.navigation_settings, destination()
+        )
+        assertEquals(
+            "and the bar still holds the tab that owns it",
+            R.id.navigation_profile, selection()
+        )
+
+        pressTab(R.id.navigation_profile)
+        assertTrue(
+            "the account screen did not draw after its own tab was pressed",
+            waitUntil("profile") { findView(R.id.openSettingsButton) != null }
+        )
+        assertEquals(
+            "leaving Settings by the tab left the bar somewhere else",
+            R.id.navigation_profile, selection()
+        )
+        assertEquals(
+            "the reader is back on the account screen, still in Russian",
+            russianTabs, tabLabels()
         )
     }
 

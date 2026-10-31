@@ -79,8 +79,19 @@ class MainActivity : AppCompatActivity() {
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
 
-        findViewById<BottomNavigationView>(R.id.bottom_navigation)
-            .setupWithNavController(navController)
+        val bar = findViewById<BottomNavigationView>(R.id.bottom_navigation)
+        bar.setupWithNavController(navController)
+        // A tap on the tab the bar already holds is a re-selection, and `setupWithNavController` installs no
+        // handler for one. That is not a corner of this app: Settings, Goals, Habits, Insights and Reports are
+        // reached from the account screen and are not tabs of their own, so the bar keeps `navigation_profile`
+        // lit while one of them is drawn — the convention, and the right one, because the reader is still in the
+        // account's part of the app — and the lit tab is then the only control on the bar that looks like a way
+        // back. Pressing it did nothing at all, which left the system gesture as the only exit and made the tab
+        // read as broken. Re-selecting the tab that owns the screen now pops back to that tab, which is what the
+        // highlight has been promising the whole time.
+        bar.setOnItemReselectedListener { item ->
+            navController.popBackStack(item.itemId, false)
+        }
 
         setupWorkBar(navController)
     }
