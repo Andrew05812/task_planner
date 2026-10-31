@@ -1,5 +1,7 @@
 package com.taskplanner.data.backup
 
+import androidx.annotation.StringRes
+import com.taskplanner.R
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.RecurrenceRule
 import com.taskplanner.data.model.Reminder
@@ -43,7 +45,23 @@ data class BackupSummary(
     val reminderCount: Int
 )
 
-open class BackupValidationException(message: String) : Exception(message)
+/**
+ * A backup the app will not restore, named by the resource that says why.
+ *
+ * The sentence is not carried here: `@StringRes Int` plus the arguments it needs is, so the screen
+ * that shows the refusal can show it in the language the reader is reading in. `Exception`'s own
+ * message stays a machine note -- it is what a log line and a debugger read, and it is deliberately
+ * not what a Snackbar prints.
+ */
+open class BackupValidationException(
+    @StringRes val messageRes: Int,
+    val formatArgs: Array<out Any> = emptyArray(),
+    detail: String? = null
+) : Exception(detail ?: "backup refused (#$messageRes)")
 
 class BackupUnsupportedVersionException(val version: String) :
-    BackupValidationException("Unsupported backup format version: $version")
+    BackupValidationException(
+        R.string.error_backup_unsupported_version,
+        formatArgs = arrayOf(version),
+        detail = "Unsupported backup format version: $version"
+    )

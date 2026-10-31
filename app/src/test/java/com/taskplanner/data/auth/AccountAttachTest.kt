@@ -2,6 +2,7 @@ package com.taskplanner.data.auth
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.R
 import com.taskplanner.data.model.Achievement
 import com.taskplanner.data.model.AchievementCategory
 import com.taskplanner.data.model.AchievementUnit
@@ -690,7 +691,7 @@ class AccountAttachTest {
         val failure = outcome.exceptionOrNull()
         assertTrue(
             "the handover accepted a profile with a running clock: $failure",
-            failure is IllegalStateException && (failure.message ?: "").contains("Stop the timer")
+            failure is ReaderRefusal && failure.messageRes == R.string.error_stop_timer_first
         )
         assertEquals(
             "the local profile is exactly as it was", beforeSource,

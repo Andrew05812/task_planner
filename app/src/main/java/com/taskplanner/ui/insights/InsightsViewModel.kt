@@ -1,7 +1,10 @@
 package com.taskplanner.ui.insights
 
+import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.R
 import com.taskplanner.data.insight.WorkloadRead
 import com.taskplanner.data.model.Insight
 import com.taskplanner.data.model.InsightFeedback
@@ -46,7 +49,8 @@ data class InsightsState(
     val readingsArrived: Boolean = false,
     /** Whether the pass this screen started is over. See [isLoading]. */
     val passFinished: Boolean = false,
-    val error: String? = null,
+    /** A resource, not a sentence: see `CategoriesState.Error`. */
+    @StringRes val error: Int? = null,
     /**
      * The complaint about the analysis, kept apart from [error]'s complaint about the read.
      *
@@ -55,7 +59,7 @@ data class InsightsState(
      * real and has to stay on screen. Merged into one field, the good frame that follows would wipe the
      * failure out and the reader would be shown yesterday's notebook with no hint it did not update today.
      */
-    val passError: String? = null,
+    @StringRes val passError: Int? = null,
     /**
      * A tap the repository would not record, waiting for the screen to say so once.
      *
@@ -140,7 +144,10 @@ class InsightsViewModel @Inject constructor(
                     // The catch belongs to this question's flow rather than to the whole subscription: one read
                     // that failed is one list the screen cannot show, and it must not end the screen's ability
                     // to answer the next thing the reader switches to or asks for again.
-                    emit(Frame.Failed(history, failure.message ?: READ_FAILED))
+                    // The complaint about the read, in the reader's language; the reason behind it
+                    // is for whoever has a log to look at, not for whoever has a screen to read.
+                    Log.w(TAG, "the insights reading refused", failure)
+                    emit(Frame.Failed(history, R.string.error_insights_unread))
                 }
             }
             .collect { frame ->
@@ -166,7 +173,7 @@ class InsightsViewModel @Inject constructor(
                             insights = emptyList(),
                             workload = null,
                             readingsArrived = true,
-                            error = frame.message
+                            error = frame.messageRes
                         )
                     }
                 }
@@ -181,7 +188,8 @@ class InsightsViewModel @Inject constructor(
             // what is on screen, and the cards it left there stay drawn. The message lands in its own field so
             // the next good frame cannot erase it the way it erases a read that has since succeeded.
             onFailure = { failure ->
-                _state.update { it.copy(passFinished = true, passError = failure.message ?: PASS_FAILED) }
+                Log.w(TAG, "the insights pass refused", failure)
+                _state.update { it.copy(passFinished = true, passError = R.string.error_insights_incomplete) }
             }
         )
     }
@@ -249,14 +257,10 @@ class InsightsViewModel @Inject constructor(
             val workload: WorkloadRead
         ) : Frame
 
-        data class Failed(val history: Boolean, val message: String) : Frame
+        data class Failed(val history: Boolean, @StringRes val messageRes: Int) : Frame
     }
 
     private companion object {
-        // A screen has no resources to read, so the words it can fall back to when a failure carries no
-        // message of its own are written here; the fragment prints the exception's own text whenever there is
-        // one, which is what the reader of a storage complaint wants to see.
-        private const val READ_FAILED = "Insights could not be read"
-        private const val PASS_FAILED = "The reading could not be finished"
+        private const val TAG = "InsightsViewModel"
     }
 }

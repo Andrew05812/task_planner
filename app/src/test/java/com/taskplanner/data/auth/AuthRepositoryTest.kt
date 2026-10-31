@@ -109,7 +109,7 @@ class AuthRepositoryTest {
         val outcome = repository.signInWithGoogle(activity())
 
         assertTrue(
-            "expected Success, got ${outcome.javaClass.simpleName}: ${(outcome as? SignInOutcome.Failed)?.message}",
+            "expected Success, got ${outcome.javaClass.simpleName}: ${(outcome as? SignInOutcome.Failed)?.detail}",
             outcome is SignInOutcome.Success
         )
         val user = (outcome as SignInOutcome.Success).user
@@ -141,7 +141,7 @@ class AuthRepositoryTest {
 
         assertEquals(
             "the message the transport carried has to reach the screen, or the reader sees a generic error",
-            "no resolvable activity", (outcome as SignInOutcome.Failed).message
+            "no resolvable activity", (outcome as SignInOutcome.Failed).detail
         )
         assertEquals("and the session is where it was", local.id, fixture.sessionRepository.currentUserId())
     }
@@ -179,7 +179,7 @@ class AuthRepositoryTest {
         val failure = outcome as SignInOutcome.Failed
         assertEquals(
             "the reason the sign-in stopped is the first thing the reader is told",
-            "Firebase returned no usable uid", failure.message
+            "Firebase returned no usable uid", failure.detail
         )
         assertEquals(
             "and the session that would not close is carried alongside it, not swallowed by it",

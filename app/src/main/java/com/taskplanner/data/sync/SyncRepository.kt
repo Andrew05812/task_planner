@@ -1,6 +1,7 @@
 package com.taskplanner.data.sync
 
 import android.content.SharedPreferences
+import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.taskplanner.data.auth.CloudConfig
 import com.taskplanner.data.local.CategoryDao
@@ -32,7 +33,15 @@ sealed class SyncStatus {
     object Idle : SyncStatus()
     object Running : SyncStatus()
     data class Done(val pushed: Int, val pulled: Int, val finishedAt: Long) : SyncStatus()
-    data class Failed(val message: String) : SyncStatus()
+    /**
+     * The machine's complaint, kept apart from the reader's sentence about it.
+     *
+     * Nullable because most sync failures arrive as a Firebase exception whose message no reader could act on
+     * anyway. The settings line then says the one sentence the app owns — in the reader's language — and the
+     * detail stays with the log, where it can be looked up. The old shape wrote `"Sync failed"` into a Russian
+     * sentence as its interpolation argument, which is the half-translated screen this stage exists to close.
+     */
+    data class Failed(val detail: String? = null) : SyncStatus()
 }
 
 /**
@@ -93,7 +102,8 @@ class SyncRepository @Inject constructor(
             } catch (e: Exception) {
                 // Nothing is lost on failure: rows keep sync_state PENDING/DELETING and the
                 // watermark only advances over documents that were actually applied.
-                SyncStatus.Failed(e.message ?: "Sync failed").also { _status.value = it }
+                Log.w(TAG, "a sync pass failed", e)
+                SyncStatus.Failed(detail = e.message).also { _status.value = it }
             }
         }
     }
@@ -203,6 +213,7 @@ class SyncRepository @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "SyncRepository"
         private const val KEY_WATERMARK = "sync_watermark_"
         private const val KEY_LAST_SYNC_AT = "sync_last_at_"
     }

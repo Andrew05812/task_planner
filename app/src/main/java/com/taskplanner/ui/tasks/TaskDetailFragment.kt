@@ -1103,7 +1103,7 @@ class TaskDetailFragment : Fragment() {
                         binding.saveTask.isEnabled = true
                         binding.progressBar.visibility = View.INVISIBLE
                         setFieldsEnabled(true)
-                        showSnackbar(state.message)
+                        showSnackbar(getString(state.messageRes))
                     }
                     is TaskSaveState.Initial -> {
                         binding.saveTask.isEnabled = true

@@ -166,7 +166,7 @@ class ProfileFragment : Fragment() {
                         }
                         is ProfileState.Error -> {
                             binding.progressBar.visibility = View.GONE
-                            showError(state.message)
+                            showError(getString(state.messageRes))
                         }
                     }
                 }

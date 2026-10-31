@@ -97,8 +97,8 @@ class StatisticsFragment : Fragment() {
                 viewModel.state.collect { state ->
                     renderChips(state)
                     DashboardRenderer.render(binding, state, navigation())
-                    state.error?.let {
-                        Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG)
+                    state.error?.let { errorRes ->
+                        Snackbar.make(binding.root, getString(errorRes), Snackbar.LENGTH_LONG)
                             .setAction(R.string.action_retry) { viewModel.retry() }
                             .show()
                         viewModel.clearError()

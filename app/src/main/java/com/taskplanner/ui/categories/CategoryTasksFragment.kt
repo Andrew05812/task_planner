@@ -97,7 +97,9 @@ class CategoryTasksFragment : Fragment() {
                         is CategoryTasksState.Error -> {
                             binding.progressBar.visibility = View.GONE
                             binding.emptyView.visibility = View.GONE
-                            Snackbar.make(binding.root, state.message, Snackbar.LENGTH_LONG).show()
+                            Snackbar.make(
+                                binding.root, getString(state.messageRes), Snackbar.LENGTH_LONG
+                            ).show()
                             // No viewModel.clearError() here as it doesn't exist in CategoryTasksViewModel
                         }
                     }

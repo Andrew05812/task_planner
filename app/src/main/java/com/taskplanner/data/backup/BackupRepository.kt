@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
+import com.taskplanner.R
 import com.taskplanner.BuildConfig
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
@@ -44,7 +45,7 @@ class BackupRepository @Inject constructor(
 
     suspend fun buildBackupJson(): String {
         val userId = sessionRepository.currentUserId()
-            ?: throw BackupValidationException("No active profile")
+            ?: throw BackupValidationException(R.string.error_no_profile_first)
         val tasks = tasksWithIdentity(taskDao.getAllTasksOnce(userId))
         val data = BackupData(
             tasks = tasks,
@@ -69,19 +70,19 @@ class BackupRepository @Inject constructor(
         context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
             out.write(json.toByteArray(Charsets.UTF_8))
             out.flush()
-        } ?: throw BackupValidationException("Cannot open the selected location")
+        } ?: throw BackupValidationException(R.string.error_backup_location)
     }
 
     fun readAndValidate(uri: Uri): BackupFile {
         val text = context.contentResolver.openInputStream(uri)?.use { stream ->
             BufferedReader(stream.reader()).readText()
-        } ?: throw BackupValidationException("Cannot open the selected file")
+        } ?: throw BackupValidationException(R.string.error_backup_file)
 
         val file = try {
             gson.fromJson(text, BackupFile::class.java)
-                ?: throw BackupValidationException("Empty backup file")
+                ?: throw BackupValidationException(R.string.error_backup_empty)
         } catch (e: JsonParseException) {
-            throw BackupValidationException("This file is not a valid Task Planner backup")
+            throw BackupValidationException(R.string.error_backup_invalid)
         }
 
         val version = SemanticVersion.parse(file.formatVersion)
@@ -102,7 +103,7 @@ class BackupRepository @Inject constructor(
             file.data.groups.map { it.uuid } + file.data.recurrenceRules.map { it.uuid } +
             file.data.reminders.map { it.uuid }).filter { it.isNotBlank() }
         if (uuids.size != uuids.distinct().size) {
-            throw BackupValidationException("Backup contains duplicated entity identifiers")
+            throw BackupValidationException(R.string.error_backup_duplicate_ids)
         }
         val groupUuids = file.data.groups.map { it.uuid }.toSet()
         val taskUuids = file.data.tasks.map { it.uuid }.filter { it.isNotBlank() }.toSet()
@@ -110,7 +111,8 @@ class BackupRepository @Inject constructor(
             category.parentCategoryId?.let {
                 if (it != 0L && it !in categoryIds) {
                     throw BackupValidationException(
-                        "Category '${category.name}' references a missing parent category"
+                        R.string.error_backup_missing_parent,
+                        formatArgs = arrayOf(category.name)
                     )
                 }
             }
@@ -119,14 +121,16 @@ class BackupRepository @Inject constructor(
             task.categoryId?.let {
                 if (it != 0L && it !in categoryIds) {
                     throw BackupValidationException(
-                        "Task '${task.title}' references a missing category"
+                        R.string.error_backup_missing_category,
+                        formatArgs = arrayOf(task.title)
                     )
                 }
             }
             task.groupId?.let {
                 if (it !in groupUuids) {
                     throw BackupValidationException(
-                        "Task '${task.title}' references a missing topic"
+                        R.string.error_backup_missing_topic,
+                        formatArgs = arrayOf(task.title)
                     )
                 }
             }
@@ -141,14 +145,14 @@ class BackupRepository @Inject constructor(
             // never notify and that the editor cannot show or untick either.
             if (reminder.taskUuid.isBlank() || reminder.taskUuid !in taskUuids) {
                 throw BackupValidationException(
-                    "Reminder references a task missing from the backup"
+                    R.string.error_backup_orphan_reminder
                 )
             }
         }
         val identities = file.data.reminders.map { it.taskUuid to it.offsetMinutes }
         if (identities.size != identities.distinct().size) {
             throw BackupValidationException(
-                "Backup contains several reminders for the same lead time on one task"
+                R.string.error_backup_duplicate_reminders
             )
         }
     }
@@ -178,7 +182,7 @@ class BackupRepository @Inject constructor(
         safetyCopyBeforeReplace: Boolean = true
     ) {
         val userId = sessionRepository.currentUserId()
-            ?: throw BackupValidationException("No active profile")
+            ?: throw BackupValidationException(R.string.error_no_profile_first)
         // Validated again here: import() has to stay safe even if a caller skips the preview step.
         validateRelations(file)
         if (replaceExisting && safetyCopyBeforeReplace) {

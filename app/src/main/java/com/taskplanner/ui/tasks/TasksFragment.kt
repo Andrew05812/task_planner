@@ -260,8 +260,8 @@ class TasksFragment : Fragment() {
 
         if (!swipeRefreshLayoutGuard()) binding.swipeRefreshLayout.isRefreshing = false
 
-        state.error?.let { error ->
-            Snackbar.make(binding.root, error, Snackbar.LENGTH_LONG).show()
+        state.error?.let { errorRes ->
+            Snackbar.make(binding.root, getString(errorRes), Snackbar.LENGTH_LONG).show()
             viewModel.clearError()
         }
         renderCategoryChips(state)

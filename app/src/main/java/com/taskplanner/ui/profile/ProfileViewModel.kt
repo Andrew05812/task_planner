@@ -1,7 +1,10 @@
 package com.taskplanner.ui.profile
 
+import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.R
 import com.taskplanner.data.model.User
 import com.taskplanner.data.repository.ProfileCreation
 import com.taskplanner.data.repository.SessionRepository
@@ -46,8 +49,8 @@ class ProfileViewModel @Inject constructor(
             try {
                 sessionRepository.restore()
             } catch (e: Exception) {
-                _profileState.value =
-                    ProfileState.Error(e.message ?: "Failed to load user profile")
+                Log.w(TAG, "profile could not be read", e)
+                _profileState.value = ProfileState.Error(R.string.error_load_profile)
             }
         }
     }
@@ -78,7 +81,7 @@ class ProfileViewModel @Inject constructor(
                 // field the reader has to fix. It is not what protects the data — the unique index is, and the
                 // repository turns its refusal into the same message for the two-request case this one misses.
                 if (userRepository.isEmailTaken(trimmedEmail)) {
-                    _profileState.value = ProfileState.Error(EMAIL_TAKEN)
+                    _profileState.value = ProfileState.Error(R.string.error_email_taken)
                     return@launch
                 }
                 createProfile(User(
@@ -88,8 +91,8 @@ class ProfileViewModel @Inject constructor(
                     avatarColor = generateAvatarColor(name)
                 ))
             } catch (e: Exception) {
-                _profileState.value =
-                    ProfileState.Error(e.message ?: "Failed to create user")
+                Log.w(TAG, "profile could not be created", e)
+                _profileState.value = ProfileState.Error(R.string.error_create_profile)
             }
         }
     }
@@ -105,7 +108,7 @@ class ProfileViewModel @Inject constructor(
         when (val creation = userRepository.createUser(user)) {
             is ProfileCreation.Created -> sessionRepository.setCurrentUser(creation.user)
             ProfileCreation.EmailTaken ->
-                _profileState.value = ProfileState.Error(EMAIL_TAKEN)
+                _profileState.value = ProfileState.Error(R.string.error_email_taken)
         }
     }
 
@@ -113,7 +116,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val existingUser = userRepository.getUserById(userId) ?: run {
-                    _profileState.value = ProfileState.Error("User not found")
+                    _profileState.value = ProfileState.Error(R.string.error_profile_missing)
                     return@launch
                 }
                 val trimmedEmail = email.trim()
@@ -121,7 +124,7 @@ class ProfileViewModel @Inject constructor(
                     trimmedEmail != existingUser.email &&
                     userRepository.isEmailTaken(trimmedEmail, userId)
                 ) {
-                    _profileState.value = ProfileState.Error(EMAIL_TAKEN)
+                    _profileState.value = ProfileState.Error(R.string.error_email_taken)
                     return@launch
                 }
                 userRepository.updateUser(
@@ -135,8 +138,8 @@ class ProfileViewModel @Inject constructor(
                 )
                 sessionRepository.restore()
             } catch (e: Exception) {
-                _profileState.value =
-                    ProfileState.Error(e.message ?: "Failed to update user")
+                Log.w(TAG, "profile could not be updated", e)
+                _profileState.value = ProfileState.Error(R.string.error_update_profile)
             }
         }
     }
@@ -151,8 +154,8 @@ class ProfileViewModel @Inject constructor(
                 }
                 sessionRepository.restore()
             } catch (e: Exception) {
-                _profileState.value =
-                    ProfileState.Error(e.message ?: "Failed to delete profile")
+                Log.w(TAG, "profile could not be deleted", e)
+                _profileState.value = ProfileState.Error(R.string.error_delete_profile)
             }
         }
     }
@@ -162,8 +165,8 @@ class ProfileViewModel @Inject constructor(
             try {
                 sessionRepository.setCurrentUser(user)
             } catch (e: Exception) {
-                _profileState.value =
-                    ProfileState.Error(e.message ?: "Failed to switch user")
+                Log.w(TAG, "profile could not be switched", e)
+                _profileState.value = ProfileState.Error(R.string.error_switch_profile)
             }
         }
     }
@@ -179,9 +182,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     private companion object {
-
-        /** Said by the check before the write and by the index after it, and it is the same sentence. */
-        const val EMAIL_TAKEN = "Email is already taken"
+        const val TAG = "ProfileViewModel"
     }
 }
 
@@ -189,5 +190,6 @@ sealed class ProfileState {
     object Loading : ProfileState()
     object NoUser : ProfileState()
     data class Success(val user: User) : ProfileState()
-    data class Error(val message: String) : ProfileState()
+    /** The sentence lives in resources; see `CategoriesState.Error` for why the id travels. */
+    data class Error(@StringRes val messageRes: Int) : ProfileState()
 }

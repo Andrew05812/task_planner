@@ -1,7 +1,10 @@
 package com.taskplanner.ui.statistics
 
+import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.R
 import com.taskplanner.data.calendar.CalendarMath
 import com.taskplanner.data.repository.DashboardSnapshot
 import com.taskplanner.data.repository.DashboardRepository
@@ -37,7 +40,8 @@ data class DashboardState(
     val onDay: LocalDate = LocalDate.now(),
     val snapshot: DashboardSnapshot? = null,
     val isLoading: Boolean = true,
-    val error: String? = null
+    /** A resource, not a sentence: see `CategoriesState.Error`. */
+    @StringRes val error: Int? = null
 ) {
     /**
      * Whether the screen has nothing to draw.
@@ -97,6 +101,9 @@ class StatisticsViewModel @Inject constructor(
                             )
                         }
                         .catch { failure ->
+                            // The reader is told the dashboard could not be read, in their language; the reason
+                            // it could not is a storage complaint, and it goes to the log.
+                            Log.w(TAG, "the dashboard could not be read", failure)
                             emit(
                                 DashboardState(
                                     period = request.period,
@@ -106,8 +113,7 @@ class StatisticsViewModel @Inject constructor(
                                     // since moved on.
                                     snapshot = null,
                                     isLoading = false,
-                                    error = failure.message ?: FALLBACK_ERROR
-                                )
+                                    error = R.string.error_dashboard_unread                                )
                             )
                         }
                 }
@@ -180,6 +186,6 @@ class StatisticsViewModel @Inject constructor(
         LocalDate.ofEpochDay(DashboardMath.epochDayOf(timeBase.wallMillis(), CalendarMath.systemZone()))
 
     private companion object {
-        private const val FALLBACK_ERROR = "Dashboard could not be read"
+        private const val TAG = "StatisticsViewModel"
     }
 }

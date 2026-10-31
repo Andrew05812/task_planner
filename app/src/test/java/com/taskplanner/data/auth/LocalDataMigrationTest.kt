@@ -2,6 +2,7 @@ package com.taskplanner.data.auth
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.R
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.RepeatUnit
 import com.taskplanner.data.model.Task
@@ -208,7 +209,7 @@ class LocalDataMigrationTest {
 
         assertTrue(
             "expected a refusal, got $refused",
-            refused is IllegalArgumentException
+            refused is ReaderRefusal && refused.messageRes == R.string.error_move_target_mismatch
         )
         assertEquals(
             "a refusal must leave the local data exactly where it was",

@@ -1159,4 +1159,48 @@
     <string name="report_fail_handover">Копия записана, но передать её другому приложению не удалось.</string>
     <string name="report_bytes_format">%1$s Б</string>
     <string name="report_saved_format">Записано в выбранный вами файл — %1$s.</string>
+
+    <!-- Stage 14's completion pass: the sentences the app writes about its own failures,
+         which used to live in Kotlin. Each one is named by what it answers, and the code
+        carries the name rather than the words. -->
+    <string name="error_load_categories">Не удалось загрузить категории</string>
+    <string name="error_open_category">Не удалось открыть категорию</string>
+    <string name="error_save_category">Не удалось сохранить категорию</string>
+    <string name="error_delete_category">Не удалось удалить категорию</string>
+    <string name="error_category_missing">Этой категории больше нет</string>
+    <string name="error_load_tasks">Не удалось загрузить задачи</string>
+    <string name="error_update_task">Не удалось обновить задачу</string>
+    <string name="error_delete_task">Не удалось удалить задачу</string>
+    <string name="error_open_task">Не удалось открыть задачу</string>
+    <string name="error_save_task">Не удалось сохранить задачу</string>
+    <string name="error_open_screen">Не удалось открыть этот экран</string>
+    <string name="error_profile_missing">Этого профиля больше нет</string>
+    <string name="error_load_profile">Не удалось прочитать профиль</string>
+    <string name="error_create_profile">Не удалось создать профиль</string>
+    <string name="error_update_profile">Не удалось обновить профиль</string>
+    <string name="error_delete_profile">Не удалось удалить профиль</string>
+    <string name="error_switch_profile">Не удалось переключиться на этот профиль</string>
+    <string name="error_nothing_measured">Ничего не измеряется, поэтому ничего не начато</string>
+    <string name="error_insights_unread">Не удалось прочитать рекомендации</string>
+    <string name="error_insights_incomplete">Не удалось завершить чтение</string>
+    <string name="error_dashboard_unread">Не удалось прочитать панель</string>
+    <string name="error_backup_location">Не удалось открыть выбранное место</string>
+    <string name="error_backup_file">Не удалось открыть выбранный файл</string>
+    <string name="error_backup_empty">Файл резервной копии пуст</string>
+    <string name="error_backup_duplicate_ids">В резервной копии один и тот же идентификатор встречается дважды</string>
+    <string name="error_backup_orphan_reminder">Напоминание в резервной копии ссылается на задачу, которой в ней нет</string>
+    <string name="error_backup_duplicate_reminders">В резервной копии несколько напоминаний на одно и то же время до срока для одной задачи</string>
+    <string name="error_sync_failed">Синхронизация не удалась</string>
+    <string name="error_backup_missing_parent">Категория «%1$s» ссылается на родительскую, которой нет в резервной копии</string>
+    <string name="error_backup_missing_category">Задача «%1$s» ссылается на категорию, которой нет в резервной копии</string>
+    <string name="error_backup_missing_topic">Задача «%1$s» ссылается на тему, которой нет в резервной копии</string>
+    <string name="error_sign_in_failed">Не удалось войти в Google</string>
+    <string name="error_credential_rejected">Google не принял эту попытку входа</string>
+    <string name="error_credential_unread">Не удалось прочитать ответ аккаунта Google</string>
+    <string name="error_account_no_id">Аккаунт не вернул идентификатор</string>
+    <string name="error_sign_in_first">Сначала войдите, чтобы перенести локальные данные</string>
+    <string name="error_move_target_mismatch">Данные можно перенести только в тот профиль, в который вы вошли</string>
+    <string name="error_stop_timer_first">Остановите таймер этого профиля, прежде чем переносить его данные</string>
+    <string name="error_handover_failed">Ничего не перенесено</string>
+    <string name="error_sign_out_incomplete">Выход из аккаунта не завершился</string>
 </resources>

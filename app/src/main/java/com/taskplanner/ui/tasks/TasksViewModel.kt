@@ -1,7 +1,10 @@
 package com.taskplanner.ui.tasks
 
+import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.R
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RecurrenceRule
@@ -86,7 +89,8 @@ data class TasksState(
     val categories: List<Category> = emptyList(),
     val activeTaskCount: Int = 0,
     val isLoading: Boolean = true,
-    val error: String? = null,
+    /** A resource, not a sentence: see `CategoriesState.Error`. */
+    @StringRes val error: Int? = null,
     val selectionMode: Boolean = false,
     val selectedIds: Set<Long> = emptySet(),
     val filterCategoryId: Long? = null,
@@ -510,7 +514,7 @@ class TasksViewModel @Inject constructor(
     private suspend fun askAboutConflict(target: Task) {
         val running = workTrackingRepository.observeRunningSession().first()
         if (running == null) {
-            _state.update { it.copy(error = "Nothing is being measured, so nothing was started") }
+            _state.update { it.copy(error = R.string.error_nothing_measured) }
         } else {
             _workConflict.value = WorkConflict(running.taskId, running.taskTitle, target)
         }
@@ -625,7 +629,7 @@ class TasksViewModel @Inject constructor(
         estimatedMinutes: Int? = null
     ) {
         if (title.isBlank()) {
-            _taskSaveState.value = TaskSaveState.Error("Title cannot be empty")
+            _taskSaveState.value = TaskSaveState.Error(R.string.error_title_required)
             return
         }
         val offsets = reminders?.let { ReminderPreset.normalize(it) }
@@ -666,7 +670,7 @@ class TasksViewModel @Inject constructor(
                     taskRepository.insertTask(task.copy(order = nextOrder()))
                 }
                 if (resultId <= 0 && existing == null) {
-                    _taskSaveState.value = TaskSaveState.Error("Create a profile first")
+                    _taskSaveState.value = TaskSaveState.Error(R.string.error_no_profile_first)
                 } else {
                     // getTaskById is what gives a brand new task the uuid its reminders attach to, and
                     // applying them before the archive step means finishing the task here also
@@ -687,7 +691,8 @@ class TasksViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _taskSaveState.value = TaskSaveState.Error(e.message ?: "Failed to save task")
+                Log.w(TAG, "task could not be saved", e)
+                _taskSaveState.value = TaskSaveState.Error(R.string.error_save_task)
             }
         }
     }
@@ -803,7 +808,8 @@ class TasksViewModel @Inject constructor(
                 _reminderOffsets.value = task?.let { reminderRepository.offsetsFor(it.uuid) }
                     ?: emptyList()
             } catch (e: Exception) {
-                _taskSaveState.value = TaskSaveState.Error(e.message ?: "Failed to load task")
+                Log.w(TAG, "task could not be opened", e)
+                _taskSaveState.value = TaskSaveState.Error(R.string.error_open_task)
             }
         }
     }
@@ -840,7 +846,9 @@ class TasksViewModel @Inject constructor(
     fun clearError() = _state.update { it.copy(error = null) }
 
     private fun setError(e: Exception) {
-        _state.update { it.copy(error = e.message ?: "Unexpected error") }
+        // The reader gets the app's own sentence; the complaint that caused it goes to the log.
+        Log.w(TAG, "the tasks screen hit a failure", e)
+        _state.update { it.copy(error = R.string.error_generic) }
     }
 
     fun retry() {
@@ -852,6 +860,8 @@ class TasksViewModel @Inject constructor(
         fun newTaskUuid(): String = UUID.randomUUID().toString()
     }
 }
+
+private const val TAG = "TasksViewModel"
 
 sealed class TaskSaveState {
     object Initial : TaskSaveState()
@@ -873,5 +883,6 @@ sealed class TaskSaveState {
     /** Nothing was stored: the planned end comes before the planned start. */
     object PlanConflict : TaskSaveState()
 
-    data class Error(val message: String) : TaskSaveState()
+    /** The sentence lives in resources; see `CategoriesState.Error` for why the id travels. */
+    data class Error(@StringRes val messageRes: Int) : TaskSaveState()
 }

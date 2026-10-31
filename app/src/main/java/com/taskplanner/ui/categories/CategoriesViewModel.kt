@@ -1,7 +1,10 @@
 package com.taskplanner.ui.categories
 
+import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.R
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.TaskRepository
@@ -52,7 +55,11 @@ class CategoriesViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _categoriesState.value = CategoriesState.Error(e.message ?: "Failed to load categories")
+                // The reader gets the sentence the app owns, in the language the app is drawn in; the storage
+                // complaint that caused it goes to the log, where a machine can read it. Showing both was the
+                // old shape, and it produced a Russian sentence wrapped around an English SQLite message.
+                Log.w(TAG, "categories could not be loaded", e)
+                _categoriesState.value = CategoriesState.Error(R.string.error_load_categories)
             }
         }
     }
@@ -67,11 +74,26 @@ class CategoriesViewModel @Inject constructor(
             }
         }
     }
+
+    private companion object {
+        const val TAG = "CategoriesViewModel"
+    }
 }
 
 sealed class CategoriesState {
     object Loading : CategoriesState()
     object Empty : CategoriesState()
     data class Success(val categories: List<CategoryWithTaskCount>) : CategoriesState()
-    data class Error(val message: String) : CategoriesState()
+
+    /**
+     * A command that did not go through, named by the resource that says so.
+     *
+     * The id travels rather than the sentence, for two reasons the sentence could not answer. A state object
+     * outlives the moment it was written — it survives the activity recreation that changing the language
+     * causes — so a string put here stays in the language the reader has just left, while an id is read again
+     * by whichever fragment draws the state. And the test can then assert *which* answer the app chose without
+     * asserting what language the process happens to be in, which is the distinction Stage 14's third defect
+     * is about.
+     */
+    data class Error(@StringRes val messageRes: Int) : CategoriesState()
 } 

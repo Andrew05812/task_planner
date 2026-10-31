@@ -3,6 +3,7 @@ package com.taskplanner.ui.settings
 import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
+import android.util.Log
 import androidx.annotation.StringRes
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
@@ -12,6 +13,7 @@ import com.taskplanner.R
 import com.taskplanner.data.auth.AuthRepository
 import com.taskplanner.data.auth.CloudConfig
 import com.taskplanner.data.auth.ProfileSafetyCopy
+import com.taskplanner.data.auth.ReaderRefusal
 import com.taskplanner.data.auth.SessionEnd
 import com.taskplanner.data.auth.SignInOutcome
 import com.taskplanner.data.backup.BackupRepository
@@ -63,6 +65,7 @@ enum class AccountUiState(@StringRes val labelRes: Int) {
     SignedIn(R.string.account_state_signed_in);
 
     companion object {
+
         /**
          * The one rule that answers "which account state is this", from the three facts that decide it.
          *
@@ -235,7 +238,7 @@ class SettingsViewModel @Inject constructor(
                 // rather than left to discover it on the next start.
                 val ended = authRepository.signOut()
                 SignInOutcome.Failed(
-                    message = e.message ?: context.getString(R.string.error_generic),
+                    detail = context.getString(R.string.error_generic),
                     sessionProblem = (ended as? SessionEnd.Failed)?.message
                 )
             }
@@ -254,7 +257,7 @@ class SettingsViewModel @Inject constructor(
                     // both, because the second is what the reader has to go and check.
                     if (outcome.sessionProblem == null) R.string.sign_in_failed
                     else R.string.sign_in_failed_session_open,
-                    outcome.message,
+                    outcome.detail,
                     outcome.sessionProblem.orEmpty()
                 )
             }
@@ -278,7 +281,8 @@ class SettingsViewModel @Inject constructor(
                 // would leave a reader believing a session is closed when the app could not close it — so this
                 // branch reports the failure instead, and the local half stays exactly as safe as it was.
                 throw BackupValidationException(
-                    context.getString(R.string.sign_out_session_left_open, ended.message)
+                    R.string.sign_out_session_left_open,
+                    formatArgs = arrayOf(ended.message.orEmpty())
                 )
             }
             reloadProfiles()
@@ -310,7 +314,7 @@ class SettingsViewModel @Inject constructor(
             _state.value = _state.value.copy(busy = true, error = null, message = null)
             try {
                 val target = sessionRepository.resolveUser()
-                    ?: throw BackupValidationException(context.getString(R.string.error_no_profile_first))
+                    ?: throw BackupValidationException(R.string.error_no_profile_first)
                 val outcome = authRepository.attachLocalDataToAccount(sourceUserId, target)
                 val text = when (outcome) {
                     is AuthRepository.AttachOutcome.Moved -> context.getString(
@@ -349,14 +353,25 @@ class SettingsViewModel @Inject constructor(
 
     /** The handover's failure, in the order a reader can act on. See [migrateLocalProfileData]. */
     private fun describeHandoverFailure(error: Throwable): String = when (error) {
-        is BackupValidationException -> error.message ?: context.getString(R.string.error_generic)
+        // A refusal the app wrote for a reader: the resource is the whole answer.
+        is ReaderRefusal -> context.getString(error.messageRes)
+        is BackupValidationException -> context.getString(
+            error.messageRes,
+            *error.formatArgs
+        )
         is ProfileSafetyCopy.SafetyCopyUnavailable -> context.getString(
             R.string.error_safety_copy_unavailable, error.message ?: ""
         )
         is SQLiteConstraintException -> context.getString(
             R.string.error_database_refused_move, error.message ?: ""
         )
-        else -> error.message ?: context.getString(R.string.error_generic)
+        // Nothing named: a storage engine's sentence, which no reader can act on. The screen says
+        // the one thing that is true and useful -- nothing was moved -- and the log keeps the text
+        // that can actually diagnose it.
+        else -> {
+            Log.w(TAG, "the handover refused", error)
+            context.getString(R.string.error_handover_failed)
+        }
     }
 
     fun consumeMessages() {
@@ -374,17 +389,31 @@ class SettingsViewModel @Inject constructor(
             status.pulled,
             android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date(status.finishedAt))
         )
-        is SyncStatus.Failed -> context.getString(R.string.sync_state_failed, status.message)
+        // A sync failure with no readable detail says only what the app already knows: it did not
+        // go through. The Firebase text behind it, when there is one, is appended because a reader
+        // who is asked to retry deserves to know what was retried.
+        is SyncStatus.Failed -> status.detail?.takeIf { it.isNotBlank() }
+            ?.let { context.getString(R.string.sync_state_failed, it) }
+            ?: context.getString(R.string.error_sync_failed)
     }
 
+    /**
+     * The reader's sentence about a backup the app refused.
+     *
+     * A refusal the repository could name arrives as a resource and is read here, in the language
+     * this screen is drawn in. Anything else -- a JSON parser's complaint, a content resolver's --
+     * is machine text about a file the reader cannot fix, so it gets the app's own sentence and the
+     * log keeps the detail. The previous shape printed the parser's English inside a Russian screen.
+     */
     private fun describeImportError(error: Throwable?): String = when (error) {
-        is BackupUnsupportedVersionException -> context.getString(
-            R.string.error_backup_unsupported_version,
-            error.version
+        is BackupValidationException -> context.getString(
+            error.messageRes,
+            *error.formatArgs
         )
-        is BackupValidationException -> error.message
-            ?: context.getString(R.string.error_backup_invalid)
-        else -> error?.message ?: context.getString(R.string.error_backup_invalid)
+        else -> {
+            Log.w(TAG, "a backup the app refused", error)
+            context.getString(R.string.error_backup_invalid)
+        }
     }
 
     private fun runBusy(successMessage: String, block: suspend () -> Unit) {
@@ -396,11 +425,18 @@ class SettingsViewModel @Inject constructor(
             } catch (e: BackupValidationException) {
                 _state.value = _state.value.copy(busy = false, error = describeImportError(e))
             } catch (e: Exception) {
+                // A refusal the app could not name still gets the sentence the app owns; the exception's own
+                // words are machine text about a storage engine, and they go where machine text is read.
+                Log.w(TAG, "a settings command refused", e)
                 _state.value = _state.value.copy(
                     busy = false,
-                    error = e.message ?: context.getString(R.string.error_generic)
+                    error = context.getString(R.string.error_generic)
                 )
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "SettingsViewModel"
     }
 }

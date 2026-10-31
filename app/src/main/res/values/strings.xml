@@ -1349,4 +1349,48 @@
 
     <string name="report_bytes_format">%1$s bytes</string>
     <string name="report_saved_format">Written to the file you chose — %1$s.</string>
+
+    <!-- Stage 14's completion pass: the sentences the app writes about its own failures,
+         which used to live in Kotlin. Each one is named by what it answers, and the code
+        carries the name rather than the words. -->
+    <string name="error_load_categories">Couldn\'t load your categories</string>
+    <string name="error_open_category">Couldn\'t open that category</string>
+    <string name="error_save_category">Couldn\'t save the category</string>
+    <string name="error_delete_category">Couldn\'t delete the category</string>
+    <string name="error_category_missing">That category is no longer here</string>
+    <string name="error_load_tasks">Couldn\'t load your tasks</string>
+    <string name="error_update_task">Couldn\'t update the task</string>
+    <string name="error_delete_task">Couldn\'t delete the task</string>
+    <string name="error_open_task">Couldn\'t open that task</string>
+    <string name="error_save_task">Couldn\'t save the task</string>
+    <string name="error_open_screen">Couldn\'t open that screen</string>
+    <string name="error_profile_missing">That profile is no longer here</string>
+    <string name="error_load_profile">Couldn\'t read your profile</string>
+    <string name="error_create_profile">Couldn\'t create the profile</string>
+    <string name="error_update_profile">Couldn\'t update the profile</string>
+    <string name="error_delete_profile">Couldn\'t delete the profile</string>
+    <string name="error_switch_profile">Couldn\'t switch to that profile</string>
+    <string name="error_nothing_measured">Nothing is being measured, so nothing was started</string>
+    <string name="error_insights_unread">Recommendations could not be read</string>
+    <string name="error_insights_incomplete">The reading could not be finished</string>
+    <string name="error_dashboard_unread">The dashboard could not be read</string>
+    <string name="error_backup_location">Couldn\'t open the place you picked</string>
+    <string name="error_backup_file">Couldn\'t open the selected file</string>
+    <string name="error_backup_empty">The backup file is empty</string>
+    <string name="error_backup_duplicate_ids">The backup repeats the same identifier twice</string>
+    <string name="error_backup_orphan_reminder">A reminder in the backup points at a task that is not there</string>
+    <string name="error_backup_duplicate_reminders">The backup has several reminders for the same lead time on one task</string>
+    <string name="error_sync_failed">Sync failed</string>
+    <string name="error_backup_missing_parent">The category ‘%1$s’ refers to a parent that is not in the backup</string>
+    <string name="error_backup_missing_category">The task ‘%1$s’ refers to a category that is not in the backup</string>
+    <string name="error_backup_missing_topic">The task ‘%1$s’ refers to a topic that is not in the backup</string>
+    <string name="error_sign_in_failed">Google sign-in failed</string>
+    <string name="error_credential_rejected">Google did not accept this sign-in</string>
+    <string name="error_credential_unread">The Google account response could not be read</string>
+    <string name="error_account_no_id">The account returned no identifier</string>
+    <string name="error_sign_in_first">Sign in before moving local data</string>
+    <string name="error_move_target_mismatch">Data can only move onto the profile you are signed in to</string>
+    <string name="error_stop_timer_first">Stop the timer running on this profile before moving its data</string>
+    <string name="error_handover_failed">Nothing was moved</string>
+    <string name="error_sign_out_incomplete">The account was left signed in</string>
 </resources>

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.util.Log
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -90,7 +91,7 @@ class CategoriesFragment : Fragment() {
                             binding.progressBar.visibility = View.GONE
                             binding.recyclerViewCategories.visibility = View.GONE
                             binding.emptyView.visibility = View.GONE
-                            showError(state.message)
+                            showError(getString(state.messageRes))
                         }
                     }
                 }
@@ -103,7 +104,11 @@ class CategoriesFragment : Fragment() {
             val action = CategoriesFragmentDirections.actionCategoriesToCategoryDetail(category?.id ?: 0L)
             findNavController().navigate(action)
         } catch (e: Exception) {
-            showError("Failed to navigate: ${e.message}")
+            // The navigation graph refusing a destination is a machine complaint about this build,
+            // not a sentence the reader can act on; it belongs in the log, and the screen says the
+            // one thing the reader needs to know.
+            Log.w(TAG, "a category screen could not be opened", e)
+            showError(getString(R.string.error_open_screen))
         }
     }
 
@@ -124,6 +129,10 @@ class CategoriesFragment : Fragment() {
                 viewModel.loadCategories()
             }
             .show()
+    }
+
+    private companion object {
+        const val TAG = "CategoriesFragment"
     }
 
     override fun onDestroyView() {

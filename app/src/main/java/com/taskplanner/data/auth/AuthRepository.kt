@@ -2,10 +2,12 @@ package com.taskplanner.data.auth
 
 import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
+import androidx.annotation.StringRes
 import androidx.fragment.app.FragmentActivity
 import androidx.room.withTransaction
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.taskplanner.R
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.CategoryDao
 import com.taskplanner.data.local.GroupDao
@@ -25,6 +27,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * A refusal the app can explain, and does: the resource is the explanation, the string behind it
+ * is the machine's note about the same event.
+ *
+ * The handover used to refuse in English prose carried by `IllegalStateException.message`, so the
+ * settings screen had one rule for everything -- show the message -- and a Russian reader was told
+ * to stop a timer in a language they had not chosen. A refusal that the reader can act on is now a
+ * different kind of failure from one they cannot, and the type is what says so.
+ */
+class ReaderRefusal(@StringRes val messageRes: Int, detail: String) : Exception(detail)
 
 sealed class SignInOutcome {
     data class Success(val user: User) : SignInOutcome()
@@ -51,7 +64,7 @@ sealed class SignInOutcome {
      * device is then signed in to Google with no profile under it, which the next start will resolve differently
      * from a clean failure.
      */
-    data class Failed(val message: String, val sessionProblem: String? = null) : SignInOutcome()
+    data class Failed(val detail: String, val sessionProblem: String? = null) : SignInOutcome()
 }
 
 @Singleton
@@ -88,7 +101,7 @@ class AuthRepository @Inject constructor(
         when (val attempt = signInTransport.signIn(activity)) {
             SignInAttempt.NotConfigured -> SignInOutcome.NotConfigured
             SignInAttempt.Canceled -> SignInOutcome.Canceled
-            is SignInAttempt.Failed -> SignInOutcome.Failed(attempt.message)
+            is SignInAttempt.Failed -> SignInOutcome.Failed(detail = attempt.message)
             is SignInAttempt.Authenticated -> when (
                 val linked = linkProfile(
                     uid = attempt.identity.uid,
@@ -120,7 +133,7 @@ class AuthRepository @Inject constructor(
                     // cloud session, and whether that worked is a fact the reader is owed rather than a detail.
                     val ended = signInTransport.endSession()
                     SignInOutcome.Failed(
-                        linked.message,
+                        detail = linked.message,
                         sessionProblem = (ended as? SessionEnd.Failed)?.message
                     )
                 }
@@ -306,9 +319,14 @@ class AuthRepository @Inject constructor(
         takeCopy: suspend (String, Long) -> ProfileSafetyCopy.Snapshot
     ): AttachOutcome {
         val activeUserId = sessionRepository.currentUserId()
-            ?: throw IllegalStateException("Sign in before moving local data")
-        require(activeUserId == targetUser.id) {
-            "data may only be moved onto the profile that is currently signed in"
+            ?: throw ReaderRefusal(
+                R.string.error_sign_in_first, "no signed-in profile when a move was asked for"
+            )
+        if (activeUserId != targetUser.id) {
+            throw ReaderRefusal(
+                R.string.error_move_target_mismatch,
+                "the move asked for profile ${targetUser.id} while $activeUserId was signed in"
+            )
         }
         // Moving a profile onto itself would otherwise drop and re-add every row; refusing the
         // no-op is what separates a move from a wipe. Nothing is written, so nothing needs copying.
@@ -323,8 +341,9 @@ class AuthRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             val running = profileAttachDao.openIntervalsOf(sourceUserId)
             if (running > 0) {
-                throw IllegalStateException(
-                    "Stop the timer that is still running on this profile before moving its data"
+                throw ReaderRefusal(
+                    R.string.error_stop_timer_first,
+                    "$running interval(s) still open on profile $sourceUserId"
                 )
             }
 

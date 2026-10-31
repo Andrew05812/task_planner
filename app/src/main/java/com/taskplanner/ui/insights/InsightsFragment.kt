@@ -104,14 +104,18 @@ class InsightsFragment : Fragment() {
                     // two questions, and one snackbar would hide whichever came second.
                     when {
                         state.error != null -> {
-                            Snackbar.make(binding.root, state.error, Snackbar.LENGTH_LONG)
+                            Snackbar.make(
+                                binding.root, getString(state.error), Snackbar.LENGTH_LONG
+                            )
                                 .setAction(R.string.action_retry) { viewModel.retry() }
                                 .show()
                             viewModel.clearError()
                         }
 
                         state.passError != null -> {
-                            Snackbar.make(binding.root, state.passError, Snackbar.LENGTH_LONG)
+                            Snackbar.make(
+                                binding.root, getString(state.passError), Snackbar.LENGTH_LONG
+                            )
                                 .setAction(R.string.action_retry) { viewModel.retry() }
                                 .show()
                             viewModel.clearPassError()

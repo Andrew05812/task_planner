@@ -1,6 +1,7 @@
 package com.taskplanner.data.auth
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -12,6 +13,8 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.GoogleAuthProvider
+import com.taskplanner.R
+import com.taskplanner.ui.settings.AppLocale
 import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.CancellationException
@@ -90,6 +93,17 @@ interface GoogleSignInTransport {
 }
 
 @Singleton
+/**
+ * The reader's own sentence, in the language the reader chose.
+ *
+ * The application context is not wrapped by the per-app locale on the API levels this app supports,
+ * so reading a resource off it can answer in the language the device was set to rather than the one
+ * the app was told to use. `AppLocale.localized` is the seam that does the wrapping, and it is what
+ * `docs/LOCALIZATION.md` says a non-window caller must go through.
+ */
+private fun localized(context: Context, @StringRes res: Int): String =
+    AppLocale.localized(context).getString(res)
+
 class CredentialManagerSignInTransport @Inject constructor(
     @ApplicationContext private val context: Context,
     private val firebaseAuth: Lazy<FirebaseAuth>
@@ -115,7 +129,7 @@ class CredentialManagerSignInTransport @Inject constructor(
         } catch (e: GetCredentialCancellationException) {
             return SignInAttempt.Canceled
         } catch (e: GetCredentialException) {
-            return SignInAttempt.Failed(e.message ?: "Google sign-in failed")
+            return SignInAttempt.Failed(e.message ?: localized(context, R.string.error_sign_in_failed))
         }
 
         return try {
@@ -125,9 +139,13 @@ class CredentialManagerSignInTransport @Inject constructor(
             val result = firebaseAuth.get()
                 .signInWithCredential(GoogleAuthProvider.getCredential(idToken, null))
                 .await()
-            val user = result.user ?: return SignInAttempt.Failed("Firebase returned no user")
+            val user = result.user ?: return SignInAttempt.Failed(
+                    localized(context, R.string.error_account_no_id)
+                )
             val uid = user.uid
-            if (uid.isNullOrBlank()) return SignInAttempt.Failed("Firebase returned no uid")
+            if (uid.isNullOrBlank()) {
+                return SignInAttempt.Failed(localized(context, R.string.error_account_no_id))
+            }
             SignInAttempt.Authenticated(
                 GoogleIdentity(
                     uid = uid,
@@ -142,11 +160,11 @@ class CredentialManagerSignInTransport @Inject constructor(
             // swallow the cancellation the framework is asking for.
             throw e
         } catch (e: FirebaseAuthException) {
-            SignInAttempt.Failed(e.message ?: "Firebase rejected the Google credential")
+            SignInAttempt.Failed(e.message ?: localized(context, R.string.error_credential_rejected))
         } catch (e: IllegalArgumentException) {
             // `GoogleIdTokenCredential.createFrom` answers this for a credential bundle it cannot parse, which is
             // a configuration problem worth naming rather than an NPE wearing its message.
-            SignInAttempt.Failed(e.message ?: "The Google credential could not be read")
+            SignInAttempt.Failed(e.message ?: localized(context, R.string.error_credential_unread))
         }
     }
 

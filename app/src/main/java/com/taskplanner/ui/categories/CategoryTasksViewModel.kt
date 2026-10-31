@@ -1,11 +1,14 @@
 package com.taskplanner.ui.categories
 
+import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.TaskWithCategory
 import com.taskplanner.data.repository.TaskRepository
+import com.taskplanner.R
 import com.taskplanner.data.repository.CategoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -34,7 +37,7 @@ class CategoryTasksViewModel @Inject constructor(
             try {
                 val category = categoryRepository.getCategoryById(categoryId)
                 if (category == null) {
-                    _tasksState.value = CategoryTasksState.Error("Category not found")
+                    _tasksState.value = CategoryTasksState.Error(R.string.error_category_missing)
                     return@launch
                 }
                 _category.value = category
@@ -56,7 +59,8 @@ class CategoryTasksViewModel @Inject constructor(
                         }
                     }
             } catch (e: Exception) {
-                _tasksState.value = CategoryTasksState.Error(e.message ?: "Failed to load tasks")
+                Log.w(TAG, "category tasks could not be loaded", e)
+                _tasksState.value = CategoryTasksState.Error(R.string.error_load_tasks)
             }
         }
     }
@@ -75,7 +79,8 @@ class CategoryTasksViewModel @Inject constructor(
                 block()
                 currentCategoryId?.let { loadCategoryTasks(it) }
             } catch (e: Exception) {
-                _tasksState.value = CategoryTasksState.Error(e.message ?: "Failed to update task")
+                Log.w(TAG, "task could not be updated", e)
+                _tasksState.value = CategoryTasksState.Error(R.string.error_update_task)
             }
         }
     }
@@ -87,15 +92,19 @@ class CategoryTasksViewModel @Inject constructor(
                 // Reload tasks after deletion
                 currentCategoryId?.let { loadCategoryTasks(it) }
             } catch (e: Exception) {
-                _tasksState.value = CategoryTasksState.Error(e.message ?: "Failed to delete task")
+                Log.w(TAG, "task could not be deleted", e)
+                _tasksState.value = CategoryTasksState.Error(R.string.error_delete_task)
             }
         }
     }
 }
 
+private const val TAG = "CategoryTasksViewModel"
+
 sealed class CategoryTasksState {
     object Loading : CategoryTasksState()
     object Empty : CategoryTasksState()
     data class Success(val tasks: List<TaskWithCategory>) : CategoryTasksState()
-    data class Error(val message: String) : CategoryTasksState()
+    /** The sentence lives in resources; see `CategoriesState.Error` for why the id travels. */
+    data class Error(@StringRes val messageRes: Int) : CategoryTasksState()
 } 

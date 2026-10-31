@@ -229,7 +229,7 @@ class CategoryDetailFragment : Fragment() {
                             binding.saveButton.isEnabled = true
                             binding.progressBar.visibility = View.GONE
                             setFieldsEnabled(true)
-                            showSnackbar(state.message)
+                            showSnackbar(getString(state.messageRes))
                         }
                         is CategoryDetailState.Deleted -> {
                             findNavController().navigateUp()

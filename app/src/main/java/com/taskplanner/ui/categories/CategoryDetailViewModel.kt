@@ -1,7 +1,10 @@
 package com.taskplanner.ui.categories
 
+import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.R
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.data.repository.SessionRepository
@@ -39,13 +42,14 @@ class CategoryDetailViewModel @Inject constructor(
                             isValid = true
                         )
                     } else {
-                        _categoryDetailState.value = CategoryDetailState.Error("Category not found")
+                        _categoryDetailState.value = CategoryDetailState.Error(R.string.error_category_missing)
                     }
                 } else {
-                    _categoryDetailState.value = CategoryDetailState.Error("User not found")
+                    _categoryDetailState.value = CategoryDetailState.Error(R.string.error_profile_missing)
                 }
             } catch (e: Exception) {
-                _categoryDetailState.value = CategoryDetailState.Error(e.message ?: "Failed to load category")
+                Log.w(TAG, "category could not be opened", e)
+                _categoryDetailState.value = CategoryDetailState.Error(R.string.error_open_category)
             }
         }
     }
@@ -97,10 +101,11 @@ class CategoryDetailViewModel @Inject constructor(
                     }
                     _categoryDetailState.value = CategoryDetailState.Saved
                 } else {
-                    _categoryDetailState.value = CategoryDetailState.Error("User not found")
+                    _categoryDetailState.value = CategoryDetailState.Error(R.string.error_profile_missing)
                 }
             } catch (e: Exception) {
-                _categoryDetailState.value = CategoryDetailState.Error(e.message ?: "Failed to save category")
+                Log.w(TAG, "category could not be saved", e)
+                _categoryDetailState.value = CategoryDetailState.Error(R.string.error_save_category)
             }
         }
     }
@@ -113,11 +118,14 @@ class CategoryDetailViewModel @Inject constructor(
                 categoryRepository.deleteCategory(category)
                 _categoryDetailState.value = CategoryDetailState.Deleted
             } catch (e: Exception) {
-                _categoryDetailState.value = CategoryDetailState.Error(e.message ?: "Failed to delete category")
+                Log.w(TAG, "category could not be deleted", e)
+                _categoryDetailState.value = CategoryDetailState.Error(R.string.error_delete_category)
             }
         }
     }
 }
+
+private const val TAG = "CategoryDetailViewModel"
 
 sealed class CategoryDetailState {
     object Loading : CategoryDetailState()
@@ -126,7 +134,8 @@ sealed class CategoryDetailState {
         val color: Int = 0xFF000000.toInt(), // Default black color
         val isValid: Boolean = false
     ) : CategoryDetailState()
-    data class Error(val message: String) : CategoryDetailState()
+    /** The sentence lives in resources; see `CategoriesState.Error` for why the id travels. */
+    data class Error(@StringRes val messageRes: Int) : CategoryDetailState()
     object Saved : CategoryDetailState()
     object Deleted : CategoryDetailState()
 } 
