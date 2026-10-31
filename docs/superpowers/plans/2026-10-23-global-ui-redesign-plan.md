@@ -5767,9 +5767,11 @@ evidence until you read what it flags.
 
 ### What the matrix found that the brief did not ask about
 
-The first matrix of the completion pass ran all 24 discovered classes in 24 separate instrumentation processes
-and failed nine of them. Two of the nine were right about the app; the rest were the harness's own doing, and
-the distinction only exists because the failure messages were rebuilt to carry the readings that settle it.
+Seven of the 24 classes the first matrix ran came back without a clean verdict, and every one of its messages
+blamed the app. Reading them found two causes inside the harness — a language one class left behind for the
+classes after it, and a tap whose window was not the one receiving input — and one claim that had been passing
+vacuously. Not one pointed at a localization defect in the app, and the distinction exists only because the
+failure messages were rebuilt to carry the readings that settle it.
 
 * **A class that changes the language has to hand it back on a live window, and a class that measures in a
   language has to establish which one it measures in.** The language is kept by the framework, not in the app's
