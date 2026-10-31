@@ -42,11 +42,13 @@ import org.junit.runner.RunWith
  * expectations below are the Russian forms and the English forms, written out. That is the one place a literal is
  * the honest choice, and it is why the two lists are named for their language rather than for a screen.
  *
- * **What a test inside the process cannot do.** Instrumentation runs in the app's own process, so it cannot
- * force-stop that process and keep going. An activity restart is asserted here; persistence across a real process
- * death is [theChoiceIsStillThereWhenTheAppIsStartedAgain], which is the same class run again after
- * `am force-stop` and asserts the language it finds *before* touching anything. The runner drives the two in that
- * order with the stop between them; one run alone proves less than it looks like it proves.
+ * **What a test inside the process cannot do, and where that part is proved.** Instrumentation runs in the app's
+ * own process, so it cannot force-stop that process and keep going. What is asserted here is that a *new
+ * activity* comes up speaking the language the row was given. That the choice outlives the process being killed
+ * is `Stage14LanguageFramesInstrumentedTest`'s ground: its protocol puts an `am force-stop` between the run that
+ * chooses the language and the run that walks seven screens, and refuses a frame whose language is not the one
+ * its tag claims — and that two-run sequence lives in `scripts/capture-stage14-matrix.sh`, where the stop is
+ * written down, rather than depending on whichever class the matrix happened to run first.
  */
 @RunWith(AndroidJUnit4::class)
 class LanguageSwitchInstrumentedTest {
@@ -87,8 +89,23 @@ class LanguageSwitchInstrumentedTest {
      * `CalendarLocaleTest` record.
      */
     @After
-    fun closeTheWindow() {
-        runCatching { AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList()) }
+    fun handTheLanguageBackThenClose() {
+        if (!AppCompatDelegate.getApplicationLocales().isEmpty) {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+            // Let the recreation the reset causes finish before the window goes away. A teardown that
+            // closes mid-recreate leaves the task holding an activity nobody owns, and the next method's
+            // launch draws a bottom bar whose presses go nowhere: measured in the completion matrix, the
+            // first method of this class passed and the two after it failed on "pressing
+            // navigation_profile left the app on navigation_tasks … window focused=true" — a dead bar,
+            // not a lost tap. The wait is the same one the tests use, so a teardown that cannot settle
+            // says so instead of handing the next run a broken app.
+            assertTrue(
+                "the language hand-back did not reach the screen before the window closed; the bar " +
+                    "reads ${tabLabels()} and the device says ${deviceLanguageTabs()}",
+                runCatching { waitUntil("the device language") { tabLabels() == deviceLanguageTabs() } }
+                    .getOrDefault(false)
+            )
+        }
         scenario.close()
     }
 
@@ -167,31 +184,53 @@ class LanguageSwitchInstrumentedTest {
     }
 
     /**
-     * The second run, after `am force-stop`. Nothing here sets a language before the assertions: the whole point
-     * is what the process found at startup. Run after [choosingRussianTurnsEveryTabAndEveryHeadingAndEnglishTurnsItBack]
-     * with a force-stop between, this is the only assertion in the repository that says the choice survived the
-     * app being killed — which is what the row promises a reader.
+     * The language the row was given is the language the next screen speaks.
      *
-     * It ends on System default, so every other class in the matrix keeps running against the language it was
-     * written in.
+     * This method used to read whatever an earlier run had left in the framework's store and call that
+     * persistence — which is how a leaked language and a passing test became the same event, and how the claim
+     * came to depend on which class happened to run first. It chooses Russian through the row now, closes the
+     * window, opens another, and asserts the second one speaks Russian: the promise made to a reader who leaves
+     * Settings and comes back.
+     *
+     * What a second activity *in the same process* cannot prove is that the choice outlives the process being
+     * killed. That claim belongs to `Stage14LanguageFramesInstrumentedTest`, whose protocol puts an
+     * `am force-stop` between the run that chooses the language and the run that walks the screens, and refuses
+     * a frame whose language is not the one its tag claims.
      */
     @Test
     fun theChoiceIsStillThereWhenTheAppIsStartedAgain() {
-        val stored = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+        startFromSystemDefault()
+        openSettings()
+        onView(withId(R.id.languageRussian)).perform(scrollTo(), click())
         assertTrue(
-            "this method only means something when an earlier run left a choice behind; this process started " +
-                "with '$stored'",
-            stored == "en" || stored == "ru"
+            "the row did not turn the screen Russian; the bar reads ${tabLabels()}",
+            waitUntil("russian tabs") { tabLabels() == russianTabs }
         )
-        val expected = if (stored == "ru") russianTabs else englishTabs
+
+        // A new activity, which is what the reader comes back to.
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        val focused = AppWindow.awaitFocus(scenario)
+        assertTrue(
+            AppWindow.focusMessage("the relaunched screen", AppWindow.focused(scenario)),
+            focused
+        )
+        assertTrue(
+            "the app came back speaking a different language than the row was given: the bar reads " +
+                "${tabLabels()}",
+            waitUntil("russian on the way back") { tabLabels() == russianTabs }
+        )
         scenario.onActivity { activity ->
             assertEquals(
-                "the bar shows the language the process started with",
-                expected, tabLabels()
+                "and the framework still holds the choice the reader made",
+                "ru", AppCompatDelegate.getApplicationLocales().toLanguageTags()
             )
-            assertEquals(stored, activity.resources.configuration.locales[0].language)
+            assertEquals("ru", activity.resources.configuration.locales[0].language)
         }
 
+        // Back to the device's own language through the row, so the class ends clean on purpose rather than by
+        // accident. `@After` hands it back too — the next class in the matrix cannot defend itself against this
+        // one, and the method used to be the reason a language was expected to leak.
         openSettings()
         onView(withId(R.id.languageSystemDefault)).perform(scrollTo(), click())
         assertTrue(
@@ -275,6 +314,15 @@ class LanguageSwitchInstrumentedTest {
             AppWindow.focusMessage("the screen before ${name(id)}", AppWindow.focused(scenario)),
             focused
         )
+        // …and the activity has to be the one that will still be here. A language handed back during the
+        // previous test's teardown is applied by recreating, and AppCompat keeps a change it cannot apply
+        // to a window that is closing to apply to the next one created — so the window that is drawn,
+        // focused, and about to be replaced is a real state here. Measured: with only the focus wait, this
+        // class failed its second and third methods identically twice in a row — `pressing
+        // navigation_profile left the app on navigation_tasks … focused=true` — while its first method,
+        // which is the one that has no teardown behind it yet, passed.
+        val settled = AppWindow.awaitSettledActivity(scenario)
+        assertTrue(AppWindow.settleMessage("${name(id)}"), settled)
         onView(withId(id)).perform(click())
         // Assembled after the wait expires, so it says where the app ended up — with the focus reading beside
         // it, because "nothing moved" and "nothing moved while the window was not the one receiving input" are

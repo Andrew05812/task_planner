@@ -127,7 +127,7 @@ class EnglishLiteralAssertionTest {
      */
     @Test
     fun theDetectorFindsTheShapesItClaimsToFind() {
-        val translated = setOf("tasks", "archive", "a week", "categories")
+        val translated = setOf("tasks", "archive", "a week", "categories", "written to the file you chose —")
         val cases = listOf(
             // An Espresso matcher handed a resource value.
             """onView(withText("Archive")).perform(click())""" to true,
@@ -140,6 +140,14 @@ class EnglishLiteralAssertionTest {
             """assertEquals("the tab changed", "Tasks", text(R.id.tabTitle))""" to true,
             // A stem of a resource value, which is how the destructive-confirmation test checked five rows.
             """assertTrue("says what it deletes", message.contains("categor"))""" to true,
+            // The opening words of a longer sentence, reached through a constant. This is the shape the report
+            // screen’s saved-message assertion was written in, and the one this rule could not see: the words
+            // are neither a whole label nor a word-stem of one, they are the head of a resource value with its
+            // tail — a byte count — cut off.
+            """
+                private const val SAVED_PREFIX = "Written to the file you chose"
+                if (text != null && text.startsWith(SAVED_PREFIX)) found = text
+            """.trimIndent() to true,
             // Seeded data: the app never translates a reader's own title, so this one is legitimate.
             """assertEquals("Pay rent", movedTask.title)""" to false,
             // A resource-based comparison, which is the shape the rule wants instead.
@@ -223,7 +231,12 @@ class EnglishLiteralAssertionTest {
                 val matched = translated.firstOrNull { entry ->
                     if (wholeLabelsOnly) entry == lowered
                     else entry == lowered ||
-                        (lowered.length >= 5 && entry.split(" ").any { it == lowered || it.startsWith(lowered) })
+                        (lowered.length >= 5 && entry.split(" ").any { it == lowered || it.startsWith(lowered) }) ||
+                        // …or the opening of a longer sentence, which is what a truncated label looks like to a
+                        // matcher: the report screen’s saved-message literal was the first twenty-eight characters
+                        // of a resource value that goes on to name the bytes it wrote. The floor of twelve
+                        // characters and a required space keep a short technical word from reading as a sentence.
+                        (lowered.length >= 12 && " " in lowered && entry.startsWith(lowered))
                 }
                 if (matched != null) {
                     findings += "$label:${index + 1} \"$value\" matches the resource text \"$matched\""
@@ -273,9 +286,16 @@ class EnglishLiteralAssertionTest {
     }
 
     private companion object {
-        /** Only lines that are an assertion or an Espresso matcher are read at all. */
+        /**
+         * Only lines that are an assertion, an Espresso matcher or a comparison against rendered text are read
+         * at all. `startsWith` and `equals` joined the list in the completion pass: the report screen decided
+         * "is this the sentence about the file we just wrote" by asking a Snackbar text whether it began with a
+         * constant holding the English opening of a resource value, and a rule that looked only at assertion
+         * calls could not see a line that was not one.
+         */
         val ASSERTION_SHAPE = Regex(
-            """(assertEquals|assertThat|assertTrue|assertFalse|withText|textContains|contains\(|matches\().*"""
+            """(assertEquals|assertThat|assertTrue|assertFalse|withText|textContains|contains\(|matches\(|""" +
+                """startsWith\(|\.equals\().*"""
         )
 
         /**
@@ -302,6 +322,6 @@ class EnglishLiteralAssertionTest {
             Regex("""^(assertEquals|assertNotEquals|assertTrue|assertFalse|waitUntil|assertNull|assertNotNull)\s*\(\s*"""")
 
         /** A bare identifier handed to a text matcher, resolved through the file's constants. */
-        val RESOLVED = Regex("""(withText|textContains|equalTo)\(([A-Z][A-Z0-9_]*)\)""")
+        val RESOLVED = Regex("""(withText|textContains|equalTo|startsWith|endsWith|equals)\(([A-Z][A-Z0-9_]*)\)""")
     }
 }

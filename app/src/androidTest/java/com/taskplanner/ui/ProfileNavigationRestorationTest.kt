@@ -85,7 +85,16 @@ class ProfileNavigationRestorationTest {
      */
     @After
     fun handTheLanguageBack() {
-        runCatching { AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList()) }
+        if (!AppCompatDelegate.getApplicationLocales().isEmpty) {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+            // Finish the recreation this reset causes before the window goes away. A close that lands in the
+            // middle of a recreate leaves the task holding an activity nobody owns — measured in the completion
+            // matrix as the second and third methods of `LanguageSwitchInstrumentedTest` reporting a bottom bar
+            // whose presses did nothing, `focused=true`. The wait is not asserted: the state this class needs is
+            // established and asserted in `@Before`, where it is used, and a teardown that fails on top of a
+            // passing test would only add a second, less readable complaint.
+            runCatching { waitUntil { AppCompatDelegate.getApplicationLocales().isEmpty } }
+        }
         runCatching { scenario.close() }
     }
 

@@ -78,7 +78,12 @@ class TaskEditorRussianFitInstrumentedTest {
         // precisely the state its successor cannot be allowed to inherit.
         runCatching { Espresso.pressBack() }
         runCatching { goTasksList() }
-        AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+        if (!AppCompatDelegate.getApplicationLocales().isEmpty) {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+            // Let the recreate the reset causes land before the window closes: a close in flight leaves the task
+            // holding an activity nobody owns, and the next method draws a bar whose presses go nowhere.
+            runCatching { settle(R.id.tasksHeader) }
+        }
         runCatching { scenario.close() }
     }
 

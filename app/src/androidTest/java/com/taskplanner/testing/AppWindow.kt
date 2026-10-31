@@ -63,6 +63,41 @@ object AppWindow {
     }
 
     /**
+     * Wait for the activity on screen to be the one that stays.
+     *
+     * Focus says the window is receiving input now; it says nothing about the next moment. A per-app language
+     * change is applied by recreating activities, and AppCompat can hold a change to apply to the next activity
+     * created — so a window that is drawn, focused and about to be replaced is a real state, and a tap injected
+     * into it dies with it. The reading that separates the two is the activity's identity held steady: ask twice
+     * a second apart, and only a tap on an instance that is still the same instance is a tap on the screen the
+     * reader is looking at.
+     *
+     * Returns false when the identity keeps changing, which is the app or the framework recreating the activity
+     * under the test — a fact worth a message, not a thing to sleep off.
+     */
+    fun <A : Activity> awaitSettledActivity(
+        scenario: ActivityScenario<A>,
+        holdMillis: Long = 1_500L,
+        withinMillis: Long = SETTLE_DEADLINE_MILLIS
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + withinMillis
+        while (System.currentTimeMillis() < deadline) {
+            val first = identity(scenario)
+            Thread.sleep(holdMillis)
+            val second = identity(scenario)
+            if (first != 0 && first == second && focused(scenario)) return true
+        }
+        return false
+    }
+
+    /** The current activity's identity, or 0 when no activity answers. */
+    fun <A : Activity> identity(scenario: ActivityScenario<A>): Int {
+        var identity = 0
+        runCatching { scenario.onActivity { activity -> identity = System.identityHashCode(activity) } }
+        return identity
+    }
+
+    /**
      * The message for a tap that never arrived.
      *
      * It names the environment rather than a screen so the next reader looks at the device before they look at
@@ -73,6 +108,13 @@ object AppWindow {
         "ENVIRONMENT, not a screen defect: the app drew $where but its window never took focus, so a tap " +
             "injected at its coordinates does not reach it. Read the device's load and crash buffer before " +
             "believing anything else this run says — focused=$focused."
+
+    /** The message for a window that would not stop being replaced. */
+    fun settleMessage(where: String): String =
+        "the activity showing $where kept being recreated: its identity did not hold for one second, so no " +
+            "tap injected into it can be expected to survive. Either the app is recreating itself in a loop " +
+            "or a pending locale change is being applied over and over — neither is a test that should press on."
 }
 
 private const val WAIT_MILLIS = 30_000L
+private const val SETTLE_DEADLINE_MILLIS = 20_000L

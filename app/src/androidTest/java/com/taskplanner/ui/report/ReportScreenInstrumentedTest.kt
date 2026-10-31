@@ -35,6 +35,7 @@ import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.User
 import com.taskplanner.testing.AppWindow
+import com.taskplanner.ui.settings.AppLocale
 import com.taskplanner.ui.MainActivity
 import java.io.File
 import java.time.LocalDate
@@ -457,6 +458,24 @@ class ReportScreenInstrumentedTest {
     }
 
     /**
+     * The zoom control, ready to be pressed.
+     *
+     * `ReportFragment` hides the row while a re-render is in flight — `reportZoomIn.isVisible =
+     * state.showingPages` (`ReportFragment.kt:260`) — so a press issued as soon as the sheet has reached its
+     * new size can land in the window where the screen is drawing that size. On a fast device the row is back
+     * before Espresso looks; on the loaded emulator this pass measured, the second press was refused with "the
+     * target view does not match one or more of the following constraints: is displayed". A reader waits for
+     * the button, and so does the test. `waitUntil` gives up with the screen's own state in the message, which
+     * is what makes "the control never came back" a finding about the screen rather than a retry that hides it.
+     */
+    private fun pressZoom(id: Int) {
+        val name = context.resources.getResourceEntryName(id)
+        waitUntil("the $name control to be displayable again") { findView(id)?.isShown == true }
+        onView(withId(id)).perform(click())
+    }
+
+
+    /**
      * The zoom, taken through every level it offers, and back to where it started.
      *
      * A JVM test can prove the sheet's geometry scales. Only a device shows whether the view underneath the
@@ -474,11 +493,11 @@ class ReportScreenInstrumentedTest {
         val base = sheetSize()
         assertTrue("a sheet to measure", base.width > MIN_SHEET && base.height > MIN_SHEET)
 
-        onView(withId(R.id.reportZoomIn)).perform(click())
+        pressZoom(R.id.reportZoomIn)
         val middle = waitSheet("a sheet $base grown to ${ReportPageFit.factor(1)}") {
             abs(it.width - base.width * ReportPageFit.factor(1)) < SIZE_TOLERANCE && it.height > base.height
         }
-        onView(withId(R.id.reportZoomIn)).perform(click())
+        pressZoom(R.id.reportZoomIn)
         waitSheet("the sheet at its largest") {
             abs(it.width - base.width * ReportPageFit.factor(ReportPageFit.MAX_ZOOM)) < SIZE_TOLERANCE &&
                 it.height > middle.height
@@ -489,11 +508,11 @@ class ReportScreenInstrumentedTest {
         )
         shot("08-zoom-max")
 
-        onView(withId(R.id.reportZoomOut)).perform(click())
+        pressZoom(R.id.reportZoomOut)
         waitSheet("the sheet back down one level") {
             abs(it.width - base.width * ReportPageFit.factor(1)) < SIZE_TOLERANCE
         }
-        onView(withId(R.id.reportZoomOut)).perform(click())
+        pressZoom(R.id.reportZoomOut)
         val back = waitSheet("the sheet back at $base") {
             abs(it.width - base.width) < SIZE_TOLERANCE && abs(it.height - base.height) < SIZE_TOLERANCE
         }
@@ -665,12 +684,18 @@ class ReportScreenInstrumentedTest {
      * library paints it with; the test asks for it repeatedly because it is on screen for a few seconds and the
      * writing it reports on takes longer than a press.
      */
+    /** The opening of the saved sentence, resolved in the language on screen. See the note on the marker. */
+    private fun savedOpening(): String {
+        val sentinel = "\u0000"
+        return AppLocale.localized(context).getString(R.string.report_saved_format, sentinel)
+            .substringBefore(sentinel)
+    }
     private fun savedMessage(): String? {
         var found: String? = null
         scenario.onActivity { activity ->
             val view = activity.findViewById<View>(com.google.android.material.R.id.snackbar_text)
             val text = (view as? TextView)?.text?.toString()
-            if (text != null && text.startsWith(SAVED_PREFIX)) found = text
+            if (text != null && text.startsWith(savedOpening())) found = text
         }
         return found
     }
@@ -853,8 +878,18 @@ class ReportScreenInstrumentedTest {
         /** The button the platform's own save sheet puts the reader's answer behind. */
         const val SAVE_LABEL = "save"
 
-        /** How the screen opens the sentence it says about a file it wrote. */
-        const val SAVED_PREFIX = "Written to the file you chose"
+        /**
+         * The sentence the screen says about a file it wrote, in the language the reader is reading.
+         *
+         * This used to be `const val SAVED_PREFIX = "Written to the file you chose"` — the English head of
+         * `report_saved_format`, copied into the test. It is the exact shape §5 of the completion brief was
+         * about: an assertion about *visible text* that only holds in one language, and one the literal gate
+         * could not see, because the words lived behind a named constant and were compared with `startsWith`
+         * rather than inside an Espresso matcher. A Russian screen says «Записано в выбранный вами
+         * файл — …» and the test called that silence; the gate now flags that shape, and the sentence is
+         * asked of the resource instead — formatted with a character no file name and no sentence contains, cut
+         * where the placeholder was, so what is compared is the opening the app itself would draw.
+         */
 
         /** A report of a real month is tens of kilobytes; below this, nothing was written. */
         const val MIN_REPORT_BYTES = 10_000
