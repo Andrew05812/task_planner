@@ -5846,3 +5846,38 @@ window, opens another, and asserts the new activity speaks Russian; and its KDoc
 activity in one process is not a second *process*, and names the class where the process-death claim actually
 lives — the frame walk, whose `am force-stop` between the choosing run and the walking run is written into
 `scripts/capture-stage14-matrix.sh` instead of being assumed from a schedule.
+
+### 20t.1 The quiet-machine run, 2026-11-01
+
+CI reached green on the pass's published SHA `9bee875c89a86bad871c43ad3b89a948e1886743` — run 41249031777, all 13
+steps, dispatched by hand because a feature-branch push does not trigger the workflow. That verdict is
+JVM + lint + localization; it says nothing about the device. The device got one more chance while it was actually
+quiet, and the chance is why the last bullet above had to be re-read rather than re-quoted.
+
+`taskplanner_avd` / `emulator-5584`, APK SHA-256 read back from `/data/app` and equal to the built
+`08838047e26e0d16…`, load average **1.77**, `MemAvailable` 1,169,944 kB, and a full `logcat` capture for the run
+with no `ANR` line and no crash line in it. `ProfileNavigationRestorationTest` was run whole, then its failing
+method was run alone in its own process:
+
+* `everyTabIsStillItselfAfterTheActivityIsRebuilt` — **passes**, five tabs through a bare `recreate()`, each
+  asserting the destination, the bar's selection and exactly one attached fragment. The restoration the brief
+  asked for is proven for the recreation the brief named.
+* `everyTabIsStillItselfAfterTheLanguageChanges` — **fails at the same leg both times**, the sixth of ten
+  (Categories, `en-US`), with `bar='navigation_calendar' controller='navigation_calendar'
+  attached=[CalendarFragment] nested=0 resumed=true shown=true focused=true`, and the stack reading
+  `settle(:346)` ← `go(:332)` ← `:135`. The failure is in the *press*, before that leg's language change.
+  `Time: 193.382` for the class, `430.296` for the method alone; `2 tests / 1 failure` and `1 test / 1 failure`.
+
+Three things follow, and none of them is comfortable. First, the open defect is **not** the emulator: load 1.77
+and an empty crash buffer produce it twice more, so "the device was busy" no longer covers it and the ledger says
+so. Second, the shape is new information — the previous iterations' assertions ran through the *same* reader and
+reported Categories, while the next iteration's reader reports Calendar and will not move. That is the leaked-bar
+candidate getting sharper, not fading: the window being drawn says one thing, and what the last assertion saw
+says another. Third, the scope of the §6 claim shrinks to what was actually seen: Tasks and Calendar restore
+through a language change in both directions, Categories in one, and Statistics and Profile were never reached, so
+this file does not claim them.
+
+What the next session owes this: a run that reads the *activity identity* alongside the bar in `describe()`, so
+the assertion that passed on Categories and the one that failed on Calendar can be shown to be about the same
+instance or not — which is the single measurement that separates "Espresso tapped a dead window" from "the app
+navigated back on its own". No production change is justified before that reading exists.
