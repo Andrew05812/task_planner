@@ -29,14 +29,15 @@ import org.junit.Test
  * export schema promises, a mime type) is listed in [machineFacing] with the reason, because an exemption nobody
  * has to justify is a way of turning a gate off.
  *
- * **The sweep covers the instrumented sources, and says why it stops there.** `app/src/androidTest` runs on a
+ * **Both source sets are swept, on two rules, and the difference is stated.** `app/src/androidTest` runs on a
  * device in whatever language the app is set to, so an English literal there is a false failure waiting for the
- * next reader who opens Settings. `app/src/test` runs under Robolectric, which resolves resources from the
- * `@Config` qualifiers of the test rather than from the app's locale list — no user choice can move it, and the
- * literals there are comparing English to English by construction. They are a cleanliness debt, recorded as open
- * in the Stage 14 ledger with its count, not a gate: teaching a sweep to distinguish them from the labels a
- * Russian-qualifiers test would one day assert is a wider change than this stage, and pretending otherwise would
- * make the number in this file's failure message mean something it does not.
+ * next reader who opens Settings — and a stem ("categor") counts, because that is how a label gets half-typed
+ * into a matcher. `app/src/test` runs under Robolectric, whose locale comes from the test's own `@Config`
+ * qualifiers, so no user choice can move it: the literals there compare English to English by construction. That
+ * makes them a cleanliness debt rather than a live failure, and the stem rule reports 49 lines of it — 45 of
+ * which are a data-layer test naming a SQLite table, an enum constant, or an ISO timestamp. So the JVM sweep
+ * takes the `ui` package, where a test is about what a reader sees, and matches whole labels only. Both rules
+ * are zero-tolerance; what differs is what each is allowed to see.
  */
 class EnglishLiteralAssertionTest {
 
@@ -72,6 +73,48 @@ class EnglishLiteralAssertionTest {
                 "\nAsk `getString(R.string.…)` / `getQuantityString(…)` instead, or compare the resource id, or " +
                 "compare a number. A literal that really is machine-facing belongs in `machineFacing` with the " +
                 "reason it is not translated.",
+            findings.isEmpty()
+        )
+    }
+
+    /**
+     * The same sweep over the JVM sources, reported as a number rather than as a clean pass.
+     *
+     * `app/src/test` runs under Robolectric, whose locale comes from the `@Config` qualifiers of the test and
+     * not from the reader's choice, so an English literal there cannot produce the false failure an instrumented
+     * one causes. It is still a comparison of English to English by construction, and it is what this stage was
+     * asked to inventory: the count is named, the files are listed, and the number may not grow.
+     *
+     * **The JVM sweep matches whole labels, and says why the two rules differ.** The stem rule the instrumented
+     * sweep needs — "categor" standing for "Categories" — reports 49 lines over 540 JVM test files, and reading
+     * them found four that were about rendered text. `"first"` is not a comparison of a label; it is a word
+     * inside `"date (oldest first)"`, and `"tasks"` is a SQLite table name. A rule tuned to catch a stem in a
+     * UI matcher is the wrong rule for a corpus of data-layer tests, and pretending otherwise would put 45
+     * false findings in front of the 4 real ones every run. The instrumented sweep keeps the loose rule, because
+     * that is where a stem is a label being half-typed against a rendered string.
+     */
+    @Test
+    fun theJvmSourcesCompareNoRenderedLabelToItsEnglishText() {
+        val translated = translatableValues()
+        val findings = ArrayList<String>()
+        sourceRoot("test").walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && "ui${File.separatorChar}" in it.path }
+            .forEach { file ->
+                if (file.name in languageIsTheSubject || file.name in jvmFixtureFiles ||
+                    file.name == "EnglishLiteralAssertionTest.kt"
+                ) {
+                    return@forEach
+                }
+                findings += findingsIn(file, translated, wholeLabelsOnly = true)
+            }
+        assertTrue(
+            "a UI test compares a rendered string to the English text of a resource in ${findings.size} " +
+                "places, and the rule is zero. Robolectric answers in the language of the test's own " +
+                "qualifiers, so this is not the false failure an instrumented literal causes — but a test that " +
+                "names the English words cannot tell that Russian was ever offered, and it will quietly stop " +
+                "checking anything the day a `@Config(qualifiers = \"ru-rRU\")` case is added. Ask " +
+                "getString(...) / getQuantityString(...) for the expectation, or seed and compare your own " +
+                "data and add the file to jvmFixtureFiles with the reason.\n" + findings.joinToString("\n"),
             findings.isEmpty()
         )
     }
@@ -132,8 +175,8 @@ class EnglishLiteralAssertionTest {
 
     // ---------------------------------------------------------------- the reading
 
-    private fun findingsIn(file: File, translated: Set<String>): List<String> =
-        findingsInText(file.readText(), translated, file.name)
+    private fun findingsIn(file: File, translated: Set<String>, wholeLabelsOnly: Boolean = false): List<String> =
+        findingsInText(file.readText(), translated, file.name, wholeLabelsOnly)
 
     /**
      * Every literal on an assertion-shaped line that names a translatable string.
@@ -144,7 +187,12 @@ class EnglishLiteralAssertionTest {
      * files rewritten for this stage were found by reading. The sweep's job is to stop the next one being added
      * by accident.
      */
-    private fun findingsInText(source: String, translated: Set<String>, label: String): List<String> {
+    private fun findingsInText(
+        source: String,
+        translated: Set<String>,
+        label: String,
+        wholeLabelsOnly: Boolean = false
+    ): List<String> {
         val constants = Regex("""(?:const |private |val)\s+(\w+)\s*=\s*"([^"]+)"""")
             .findAll(source)
             .associate { it.groupValues[1] to it.groupValues[2] }
@@ -169,9 +217,12 @@ class EnglishLiteralAssertionTest {
                 if (lowered.contains('%') || lowered.contains('$') || lowered.contains('.')) continue
                 if (machineFacing.keys.any { lowered.startsWith(it) }) continue
                 // A full label, or the stem of one: "categor" is how the destructive-confirmation test reached
-                // "Categories" five times over, and a stem is as English as the word it cuts.
+                // "Categories" five times over, and a stem is as English as the word it cuts. The JVM sweep
+                // turns the stem rule off -- see [theJvmSourcesCompareNoRenderedLabelToItsEnglishText] for what
+                // it reports when it is on.
                 val matched = translated.firstOrNull { entry ->
-                    entry == lowered ||
+                    if (wholeLabelsOnly) entry == lowered
+                    else entry == lowered ||
                         (lowered.length >= 5 && entry.split(" ").any { it == lowered || it.startsWith(lowered) })
                 }
                 if (matched != null) {
@@ -225,6 +276,22 @@ class EnglishLiteralAssertionTest {
         /** Only lines that are an assertion or an Espresso matcher are read at all. */
         val ASSERTION_SHAPE = Regex(
             """(assertEquals|assertThat|assertTrue|assertFalse|withText|textContains|contains\(|matches\().*"""
+        )
+
+        /**
+         * UI-package tests whose English words are the test's own data or a Java identifier, not a label the
+         * app looked up in a resource. Each one matched a resource value by coincidence of wording.
+         */
+        val jvmFixtureFiles = mapOf(
+            "ChartViewDrawTest.kt" to
+                "the legend entries are constructed by the test and read back off the view it built; \"Late\" " +
+                    "is the test's own label, and the resource of the same word never enters the assertion",
+            "HabitsViewModelTest.kt" to
+                "\"Stretch\" is a habit name the test seeds and then asks the ViewModel about. The app never " +
+                    "translates a reader's own name, in either language",
+            "BottomNavigationStyleTest.kt" to
+                "asserts that a destination's `android:name` contains \"Fragment\" — a Java identifier checked " +
+                    "as text, not copy a reader sees"
         )
 
         /** A double-quoted literal on the line. */

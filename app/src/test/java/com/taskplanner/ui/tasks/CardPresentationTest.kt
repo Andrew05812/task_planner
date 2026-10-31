@@ -126,8 +126,12 @@ class CardPresentationTest {
         assertTrue("it is late", morning.isOverdue)
         val line = morning.dueLine.toString()
         assertFalse("[$line] counts zero days late on a task nine hours late", line.startsWith("0"))
-        assertTrue("and it still says the word late", line.contains("late", ignoreCase = true) ||
-            line.contains(context.getString(R.string.task_late_today), ignoreCase = true))
+        // The resource, not the English word: the line is built from `task_late_today`, and a test that
+        // accepted either one would pass in Russian without ever having asked for the Russian sentence.
+        assertTrue(
+            "and it still says the word late: [$line]",
+            line.contains(context.getString(R.string.task_late_today), ignoreCase = true)
+        )
     }
 
     @Test fun `each status gets its own pill, and no two of them share one`() {

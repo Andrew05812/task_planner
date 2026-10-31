@@ -410,7 +410,10 @@ class WorkAdjustmentUiTest {
             "each row is named by the instants it occupies, so the user can tell them apart",
             spoken.contains("2026-06-18 09:00") && spoken.contains("2026-06-18 09:30")
         )
-        assertTrue("and the typed-in one says it was typed in", spoken.contains("entered by hand"))
+        assertTrue(
+            "and the typed-in one says it was typed in",
+            spoken.contains(activity.getString(R.string.work_interval_manual))
+        )
         assertTrue(
             "the count of blocking measurements and the reason the write stopped are both said — a dialog " +
                 "that only lists rows leaves the user guessing whether something already went through",

@@ -156,7 +156,11 @@ class TasksCardRenderTest {
         assertTrue(
             "and the late card says so in words, not only in colour",
             late.single().second.findViewById<TextView>(R.id.taskDueDate).text
-                .toString().contains("late")
+                .toString()
+                .contains(
+                    context.resources.getQuantityString(R.plurals.task_late_days, 1, 1),
+                    ignoreCase = true
+                )
         )
 
         val health = runBlocking {
