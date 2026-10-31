@@ -68,6 +68,24 @@ if [ "$REBOOT" = "--reboot" ]; then
   echo "reboot: boot_completed=$(adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') at $(date +%H:%M:%S)"
 fi
 
+# A stale external files directory owned by a *previous* install of the app imitates an app defect exactly:
+# `/storage/emulated/0/Android/data/com.taskplanner` was left behind by the old uid after an uninstall and
+# reinstall, and `ReportPdfBytesInstrumentedTest` died with `open failed: EACCES (Permission denied)` writing
+# its own proof file inside it — a directory the app owns by definition. The owner and the current uid are
+# compared, and a directory that belongs to somebody who is no longer installed is removed. This deletes only
+# the app's own external scratch area on this project's AVD: proof PDFs and the frame shots, both regenerated
+# by the runs that write them.
+DIR=/storage/emulated/0/Android/data/$TARGET
+OWNER=$(adb -s "$SERIAL" shell stat -c %U "$DIR" 2>/dev/null | tr -d '')
+UID=$(adb -s "$SERIAL" shell dumpsys package "$TARGET" 2>/dev/null | tr -d '' | grep -m1 -oE 'userId=[0-9]+' | cut -d= -f2)
+if [ -n "$OWNER" ] && [ -n "$UID" ] && [ "$OWNER" != "u${UID}" ] && [ "$OWNER" != "root" ]; then
+  echo "stale: $DIR is owned by $OWNER, the app is u$UID — removing it so the app recreates its own"
+  adb -s "$SERIAL" shell am force-stop "$TARGET" >/dev/null 2>&1
+  adb -s "$SERIAL" shell rm -rf "$DIR" >/dev/null 2>&1
+else
+  echo "external files dir: ${OWNER:-absent} agrees with the app's uid ${UID:-?}"
+fi
+
 # The screen has to be awake and unlocked for a tap to reach the app, and after a reboot the keyguard is up.
 adb -s "$SERIAL" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
 adb -s "$SERIAL" shell wm dismiss-keyguard >/dev/null 2>&1

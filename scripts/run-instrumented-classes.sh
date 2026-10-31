@@ -77,15 +77,17 @@ esac
 # of its nine, including one that could not get an accessibility tree inside 20 s. Those are not the app's
 # failures, and a matrix of them is not evidence. So the run waits up to ten minutes for the one-minute load to
 # fall under WAIT_FOR_LOAD, and refuses with the numbers if it does not, rather than spending an hour producing
-# results nobody can read.
-WAIT_FOR_LOAD=${WAIT_FOR_LOAD:-8}
-for _ in $(seq 1 20); do
+# results nobody can read. The default is 12, not 5: this image's one-minute load sits between 8 and 15 while
+# the operator's own tools are working, and a threshold that demands an idle machine turns the gate into a
+# refusal. 20-40 — the numbers this run actually met — is the state that produces fake failures.
+WAIT_FOR_LOAD=${WAIT_FOR_LOAD:-12}
+for attempt in $(seq 1 20); do
   LOAD1=$(adb -s "$SERIAL" shell uptime 2>/dev/null | tr -d '\r' | sed 's/.*load average: //' | cut -d, -f1)
   if awk -v l="${LOAD1:-99}" -v m="$WAIT_FOR_LOAD" "BEGIN{exit !(l+0<=m+0)}"; then
     printf 'device: load average %s is at or under %s — running\n' "${LOAD1:-?}" "$WAIT_FOR_LOAD"
     break
   fi
-  printf 'device: load average %s over %s, waiting 30 s (%s/20)\n' "${LOAD1:-?}" "$WAIT_FOR_LOAD" "$_"
+  printf 'device: load average %s over %s, waiting 30 s (%s/20)\n' "${LOAD1:-?}" "$WAIT_FOR_LOAD" "$attempt"
   sleep 30
 done
 LOAD1=$(adb -s "$SERIAL" shell uptime 2>/dev/null | tr -d '\r' | sed 's/.*load average: //' | cut -d, -f1)
