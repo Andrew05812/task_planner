@@ -26,7 +26,12 @@ set -u
 # variables are what the rest of this script's device paths are written assuming; without them every
 # `shell rm`, `shell ls` and `pull` below operates on the wrong file.
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
-SERIAL=${1:-emulator-5554}
+# This project's AVD is `taskplanner_avd`, which this host answers on emulator-5584; the port it had when this
+# script was written belonged to another project's emulator, and a default that names a foreign device is a
+# default that either does nothing or does damage. The guard below is what makes the argument unforgivable
+# rather than merely wrong: it reads the AVD name off the serial and refuses to touch anything that is not
+# `taskplanner_avd`, so no default, typo or recycled shell can instrument a device that is not this one's.
+SERIAL=${1:-emulator-5584}
 ONLY=${2:-}
 RUNNER=androidx.test.runner.AndroidJUnitRunner
 PKG=com.taskplanner.test
@@ -47,6 +52,29 @@ if [ "$AVD" != "taskplanner_avd" ]; then
   echo "REFUSED: $SERIAL is '$AVD', not taskplanner_avd." >&2
   exit 2
 fi
+
+# ---------------------------------------------------------------- one APK, named by its bytes
+# The matrix is evidence about *a build*, so it has to say which one, and the last matrix did not: its frames
+# came from two different APKs, which makes the set one document about two apps. The fix is not a note in the
+# report but a check that runs before the first shutter — the local APK and the one the package manager is
+# actually running have to be the same bytes, or there is no matrix to shoot.
+APK="app/build/outputs/apk/debug/app-debug.apk"
+if [ ! -f "$APK" ]; then
+  echo "REFUSED: $APK does not exist. Build it; do not photograph whatever is installed." >&2
+  exit 2
+fi
+LOCAL_SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+DEV_PATH=$(adb -s "$SERIAL" shell pm path "$TARGET" 2>/dev/null | head -1 | tr -d '\r' | sed 's/^package://')
+DEV_SHA=$(adb -s "$SERIAL" shell sha256sum "$DEV_PATH" 2>/dev/null | tr -d '\r' | cut -d' ' -f1)
+if [ -z "$DEV_PATH" ] || [ "$LOCAL_SHA" != "$DEV_SHA" ]; then
+  echo "REFUSED: the installed APK is not the one in $APK." >&2
+  echo "  local      $LOCAL_SHA" >&2
+  echo "  installed  ${DEV_SHA:-none} at ${DEV_PATH:-nowhere}" >&2
+  echo "  install it: adb -s $SERIAL install -r -g $APK" >&2
+  exit 2
+fi
+echo "provenance: $DEV_PATH"
+echo "provenance: sha256=$LOCAL_SHA — local and installed agree; every frame below comes from these bytes"
 
 # ---------------------------------------------------------------- one configuration
 # args: language width theme font-scale

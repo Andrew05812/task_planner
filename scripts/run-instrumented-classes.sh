@@ -48,6 +48,55 @@ fi
 JVM=$(tasklist //FI "IMAGENAME eq java.exe" 2>/dev/null | grep -c "java.exe" || true)
 printf 'note: %s java.exe alive (1 = the Gradle daemon idling; more than that means a build is running)\n' "${JVM:-0}"
 
+# ---------------------------------------------------------------- the device's own health, printed
+# A completion-pass matrix failed nine classes and blamed the app for all of them. It was the device: `uptime`
+# read a load average of 19.05 on four cores while nothing of mine was running, `dumpsys window` read
+# `mCurrentFocus=Window{… Application Not Responding: com.android.systemui}`, and dropbox had the reason —
+# "Input dispatching timed out ([Gesture Monitor] edge-swipe (server) is not responding. Waited 12756ms for
+# MotionEvent". A tap injected into that is a tap the system never delivers, and Espresso reports it as a
+# screen that would not open. So the matrix prints what the device says about itself before it spends an hour
+# on it, and the same reading after, and the table is read against those numbers.
+LOAD=$(adb -s "$SERIAL" shell uptime 2>/dev/null | tr -d '\r' | sed 's/.*load average: //')
+MEM=$(adb -s "$SERIAL" shell cat /proc/meminfo 2>/dev/null | tr -d '\r' | awk '/MemAvailable/{print $2}')
+FOCUS=$(adb -s "$SERIAL" shell dumpsys window 2>/dev/null | grep -m1 mCurrentFocus | tr -d '\r' | sed 's/^ *//')
+ANRS=$(adb -s "$SERIAL" shell dumpsys dropbox 2>/dev/null | grep -cE "_anr" || true)
+printf 'device: load average %s, MemAvailable %s kB, %s ANR records in dropbox\n' "${LOAD:-?}" "${MEM:-?}" "${ANRS:-?}"
+printf 'device: %s\n' "${FOCUS:-no window reported}"
+case "$FOCUS" in
+  *"Application Not Responding"*|*"not responding"*)
+    echo "REFUSED: an error dialog holds the device's input focus. Every tap this run injects would land on it," >&2
+    echo "  and the matrix would report the app's screens as broken. Clear the dialog (or reboot the AVD: 2-7 min" >&2
+    echo "  to sys.boot_completed=1, then \`settings put global hide_error_dialogs 1\`) and run again." >&2
+    exit 5
+    ;;
+esac
+
+# Wait for the device to be quiet enough to measure something. The threshold is not a style: at load 15 on this
+# four-core image, `am start -W com.taskplanner/.ui.MainActivity` reported `WaitTime: 17612` — seventeen and a
+# half seconds to show a screen — and a class that was green at load ~10 an hour earlier (nine tests) failed six
+# of its nine, including one that could not get an accessibility tree inside 20 s. Those are not the app's
+# failures, and a matrix of them is not evidence. So the run waits up to ten minutes for the one-minute load to
+# fall under WAIT_FOR_LOAD, and refuses with the numbers if it does not, rather than spending an hour producing
+# results nobody can read.
+WAIT_FOR_LOAD=${WAIT_FOR_LOAD:-8}
+for _ in $(seq 1 20); do
+  LOAD1=$(adb -s "$SERIAL" shell uptime 2>/dev/null | tr -d '\r' | sed 's/.*load average: //' | cut -d, -f1)
+  if awk -v l="${LOAD1:-99}" -v m="$WAIT_FOR_LOAD" "BEGIN{exit !(l+0<=m+0)}"; then
+    printf 'device: load average %s is at or under %s — running\n' "${LOAD1:-?}" "$WAIT_FOR_LOAD"
+    break
+  fi
+  printf 'device: load average %s over %s, waiting 30 s (%s/20)\n' "${LOAD1:-?}" "$WAIT_FOR_LOAD" "$_"
+  sleep 30
+done
+LOAD1=$(adb -s "$SERIAL" shell uptime 2>/dev/null | tr -d '\r' | sed 's/.*load average: //' | cut -d, -f1)
+if ! awk -v l="${LOAD1:-99}" -v m="$WAIT_FOR_LOAD" "BEGIN{exit !(l+0<=m+0)}"; then
+  echo "REFUSED: after ten minutes the device still reports load average $LOAD1 on $(adb -s "$SERIAL" shell cat /proc/cpuinfo 2>/dev/null | grep -c processor) cores." >&2
+  echo "  A matrix run into that measures the machine: taps time out, screenshots catch a screen mid-animation," >&2
+  echo "  and classes that passed an hour ago fail. Look at what is busy on the device (adb shell top) and on the" >&2
+  echo "  host, let it settle, and run again. Nothing was cleared and no process was killed to get here." >&2
+  exit 6
+fi
+
 # ---------------------------------------------------------------- the classes, read off the source
 # Discovered rather than listed, because a class added to the tree and not to this file is a class that never
 # runs and nobody notices. The pattern is `*Test.kt` and not the `*InstrumentedTest.kt` it used to be: Stage 14
@@ -107,3 +156,9 @@ for c in $CLASSES; do
   fi
 done
 echo "=== per-class logs in $OUT ==="
+# The same reading as the pre-flight, taken after the work, because a run that starts healthy and degrades is
+# exactly the run whose failures must not be read as defects. dropbox timestamps are the device's own clock,
+# which on this emulator runs three hours behind the machine that drives it.
+printf 'device after: load average %s, %s ANR records in dropbox\n' \
+  "$(adb -s "$SERIAL" shell uptime 2>/dev/null | tr -d '\r' | sed 's/.*load average: //')" \
+  "$(adb -s "$SERIAL" shell dumpsys dropbox 2>/dev/null | grep -cE '_anr' || true)"
