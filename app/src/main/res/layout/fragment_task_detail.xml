@@ -185,14 +185,13 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/spacing_small"
                         android:baselineAligned="false"
-                        android:orientation="horizontal">
+                        android:orientation="vertical">
 
                         <com.google.android.material.textfield.TextInputLayout
                             android:id="@+id/plan_start_date_layout"
                             style="@style/Widget.TaskPlanner.Field"
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:hint="@string/plan_start_date">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -209,10 +208,9 @@
                         <com.google.android.material.textfield.TextInputLayout
                             android:id="@+id/plan_start_time_layout"
                             style="@style/Widget.TaskPlanner.Field"
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/spacing_small"
-                            android:layout_weight="1"
+                            android:layout_marginTop="@dimen/spacing_small"
                             android:hint="@string/plan_start_time">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -233,14 +231,13 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/spacing_small"
                         android:baselineAligned="false"
-                        android:orientation="horizontal">
+                        android:orientation="vertical">
 
                         <com.google.android.material.textfield.TextInputLayout
                             android:id="@+id/plan_end_date_layout"
                             style="@style/Widget.TaskPlanner.Field"
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:hint="@string/plan_end_date">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -257,10 +254,9 @@
                         <com.google.android.material.textfield.TextInputLayout
                             android:id="@+id/plan_end_time_layout"
                             style="@style/Widget.TaskPlanner.Field"
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/spacing_small"
-                            android:layout_weight="1"
+                            android:layout_marginTop="@dimen/spacing_small"
                             android:hint="@string/plan_end_time">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -941,54 +937,77 @@
 
     <!-- The footer. A sibling of the scroll rather than its last child, on its own surface, with a hairline
          across the top: the fields sliding behind it have to stop at a line and not run into the labels. -->
-    <!-- `baselineAligned="false"`: the same shape as the two-button rows on the report screen, where a two-line
-         label on one button pushed its one-line sibling past the row's edge and the row clipped it. Both labels fit
-         one line at every width this app budgets today, so nothing about this footer's measured frames changes —
-         it is the defect kept from arriving, which a longer translation (Stage 14) or a narrower handset is enough
-         to start. -->
+    <!-- Two bands, because one row could not hold three Russian labels.
+         Measured on `taskplanner_avd` at 320dp with the font at 1.3: «СОХРАНИТЬ» is 158px of *drawn* text and
+         «ОТМЕНА» 111px — drawn, not declared, because the `Label` role is all-caps and letterspaced, and the
+         lowercase word the strings file holds is a narrower string than the one the screen shows. A Material
+         button spends 82px of its own box on padding and the reserved spinner slot takes 67px, so this footer was
+         being asked to seat 527px inside the 472px a 320dp window gives it. English, drawing "SAVE" and "CANCEL"
+         for 170px between them, never once complained.
+         So the row was not the thing to renegotiate; the shape was. The primary action now holds its own band with
+         the save-in-progress figure beside it — 323px of room for a label that needs 158px — and the secondary
+         action is sized by its own word on the band below. No word was shortened, none was broken, and no text size
+         was touched, which is the point: the width came from the structure rather than out of the reader's type.
+         The spinner's slot stays reserved (`invisible`, not `gone`) and it still sits beside the button it
+         disables, so `the footer does not move when a save starts` measures what it always measured, in a row with
+         one fewer competitor for the width. -->
     <LinearLayout
         android:id="@+id/button_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_footer"
-        android:baselineAligned="false"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingStart="@dimen/screen_margin"
         android:paddingEnd="@dimen/screen_margin"
         android:paddingTop="@dimen/spacing_small"
         android:paddingBottom="@dimen/spacing_small">
 
-        <!-- Where the save-in-progress figure sits: beside the button it disables, so the reader who pressed
-             Save sees the answer where their finger was rather than at the end of a scroll they have to start
-             hunting down. Its slot is reserved — `invisible`, not `gone` — because a spinner that appears from
-             nothing takes 40dp out of a weighted row and both buttons slide sideways under the finger that is
-             still on the screen. `the footer does not move when a save starts` measures exactly that. -->
-        <ProgressBar
-            android:id="@+id/progressBar"
-            android:layout_width="@dimen/progress_indicator"
-            android:layout_height="@dimen/progress_indicator"
-            android:layout_marginEnd="@dimen/spacing_small"
-            android:contentDescription="@string/progress_saving"
-            android:visibility="invisible" />
+        <!-- `baselineAligned="false"`: the same reason as the two-button rows on the report screen, where a
+             two-line label on one button pushed its one-line sibling past the row's edge and the row clipped it.
+             Here the band holds one button, so nothing can push anything; the flag stays because the shape it
+             protects against is the one this file just came from. -->
+        <FrameLayout
+            android:id="@+id/footerPrimaryRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false">
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/saveTask"
+                style="@style/Widget.TaskPlanner.Button.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/action_save" />
+
+            <!-- Where the save-in-progress figure sits: over the trailing corner of the button it disables, so
+                 the reader who pressed Save sees the answer where their finger was rather than at the end of a
+                 scroll they have to start hunting down. Declared *after* the button because a FrameLayout draws
+                 its later children on top. Its slot is reserved — `invisible`, not `gone` — so the button never
+                 resizes under a finger that is still on the screen, which is what
+                 `the footer does not move when a save starts` measures; sitting inside the button is what lets
+                 the primary action keep the full width the form above it uses, instead of starting 40dp to the
+                 right of every field on the screen. The tint is the button's own foreground colour because on
+                 the filled surface the theme's primary would be green on green. -->
+            <ProgressBar
+                android:id="@+id/progressBar"
+                android:layout_width="@dimen/progress_indicator"
+                android:layout_height="@dimen/progress_indicator"
+                android:layout_gravity="center_vertical|end"
+                android:layout_marginEnd="@dimen/spacing_small"
+                android:contentDescription="@string/progress_saving"
+                android:indeterminateTint="?attr/colorOnPrimary"
+                android:visibility="invisible" />
+        </FrameLayout>
+
+        <!-- Its own band and its own width: the secondary action is the smaller of the two, and a word that
+             decides its own box cannot be squeezed into breaking by a neighbour's claim on the same row. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/cancelButton"
             style="@style/Widget.TaskPlanner.Button.Outlined"
-            android:layout_width="0dp"
-            android:layout_weight="1"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="@dimen/spacing_small"
+            android:layout_marginTop="@dimen/spacing_small"
             android:text="@string/action_cancel" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/saveTask"
-            style="@style/Widget.TaskPlanner.Button.Filled"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_small"
-            android:text="@string/action_save" />
 
     </LinearLayout>
 

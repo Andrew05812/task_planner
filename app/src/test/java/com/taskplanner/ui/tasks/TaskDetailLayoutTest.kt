@@ -295,10 +295,37 @@ class TaskDetailLayoutTest {
                 "of $height",
             topInWindow(binding.saveTask) + binding.saveTask.height <= height
         )
+        // The footer is two bands, and the reason is a measurement rather than a preference: at 320dp with the
+        // font at 1.3 the drawn «СОХРАНИТЬ» needs 158px, «ОТМЕНА» 111px, each button spends 82px of its own box on
+        // padding, and the reserved spinner takes 67px — 527px of claim on the 472px this window gives the row. The
+        // assertions below are the shape that arithmetic forced, stated so they fail if the shape drifts back.
+        val primaryRow = binding.footerPrimaryRow
+        assertEquals(
+            "the band that carries Save carries one action and the figure that reports on it: a second " +
+                "pressable label in here is how «СОХРАНИТЬ» came to break in the middle",
+            2, primaryRow.childCount
+        )
         assertTrue(
-            "the spinner comes before the buttons it sits beside, so a reader walking the footer from the " +
-                "left finds the reason before the action",
-            footer.indexOfChild(binding.progressBar) < footer.indexOfChild(binding.cancelButton)
+            "the figure is drawn over the button it reports on — a FrameLayout paints its later children on " +
+                "top — which is what lets the primary action keep the full width the form above it uses",
+            primaryRow.indexOfChild(binding.progressBar) > primaryRow.indexOfChild(binding.saveTask)
+        )
+        // Containment, not adjacency: inside the button's own box the figure can neither widen the band nor
+        // shift a neighbour, so the guarantee `the footer does not move when a save starts` protects is held by
+        // the geometry rather than only by the reserved slot.
+        assertTrue(
+            "the figure sits inside the primary button: progress=[${binding.progressBar.left}," +
+                "${binding.progressBar.top},${binding.progressBar.right},${binding.progressBar.bottom}] " +
+                "button=[${binding.saveTask.left},${binding.saveTask.top},${binding.saveTask.right}," +
+                "${binding.saveTask.bottom}]",
+            binding.progressBar.right <= binding.saveTask.right &&
+                binding.progressBar.bottom <= binding.saveTask.bottom &&
+                binding.progressBar.top >= binding.saveTask.top
+        )
+        assertTrue(
+            "Cancel is on its own band, below Save, so the primary action stays the wider of the two: " +
+                "cancel.top=${binding.cancelButton.top} primaryRow.bottom=${primaryRow.bottom}",
+            binding.cancelButton.top >= primaryRow.bottom
         )
         assertTrue("Save is at least a finger tall", binding.saveTask.height >= finger)
         assertTrue("Cancel is at least a finger tall", binding.cancelButton.height >= finger)
