@@ -5720,3 +5720,127 @@ entries then confirmed are all specifier-only joiners.
 
 The full ledger — every finding, the check that settled it, and its status, including the three this stage
 leaves open — is `docs/LOCALIZATION.md` §Review ledger.
+
+## 20t — Stage 14 completed: the matrix ran, and what it found was mostly the harness
+
+**What was asked.** Stage 14 was published with four acceptance criteria unmet: two Russian labels clipped in
+the task editor, 29 runtime sentences still built in Kotlin, tests that compare rendered text to English
+literals, and a Profile tab reported not to come back after an activity recreation. The completion pass was to
+close those four, prove them on `taskplanner_avd` and only that device, re-run the instrumented matrix and the
+frame matrix against one build, and leave the stage `DONE` or say plainly why it is not.
+
+### The four, and what each turned out to be
+
+The two truncations were width, not language, and the arithmetic said so: the plan grid gave each of two fields
+149px for a label that draws at 153px, and English needed 147px of a 121px box at 320dp/1.3 — the grid was
+wrong for both tongues and Russian only made it visible. The footer could not be redistributed at all:
+«СОХРАНИТЬ» draws at 158px (all-caps plus 0.045em of tracking, so it is wider than the word in the strings
+file, and `Paint.measureText` does not know that), and spinner plus two labels claimed 527px of a 472px row.
+The plan became four full-width rows, the footer two bands with the save-in-progress figure drawn inside the
+primary button's trailing corner, and the category editor's pair redistributed. Nothing was shortened, nothing
+was broken across lines, no text size moved, every touch target stayed at 48dp, and English was re-measured at
+every configuration. `TaskEditorRussianFitInstrumentedTest` is the gate, and it is instrumented because no
+Robolectric in this repository can ask whether a string fits its box.
+
+The 29 sentences became 24 sites carrying a `@StringRes` and 40 resources in both languages, with four named
+constants deleted rather than translated and one hedge dropped because the screen already printed its own
+label. The state carrying the *id* fixed a second bug for free: a sentence written into a state object at the
+moment of failure survives the recreation a language change causes, and stays in the language the reader just
+left. The per-line inventory the brief asked for is `docs/STAGE14-RUNTIME-SENTENCES.md`, regenerated from the
+commit by `scripts/inventory-runtime-sentences.py` rather than written out of memory — 50 lines, each with its line
+number in `01b4438`, the call it was an argument of, and the resource that replaced it.
+
+The Profile tab was the one the framing had wrong. `ProfileNavigationRestorationTest` was written first and
+passed against the unfixed build: destination, bar selection and one attached fragment all come back on all
+five tabs, after a bare `recreate()` and after a language change in both directions. Reading the report as a
+claim about the *destination* would have produced a fix aimed at nothing. The defect was the way out: Settings,
+Goals, Habits, Insights and Reports live behind the account screen and have no tab of their own, so the bar
+keeps Profile lit, and pressing the tab the bar already holds was a re-selection that navigated nowhere. It
+pops back now.
+
+The English literals were inventoried into five kinds rather than deleted: assertions that exist to check an
+English resource, behaviour that must not depend on language, comparisons of visible text that had to become
+locale-aware, fallback checks, and fixtures. Three sites were fixed to ask their own `getString`, three were
+exempted with the reason written into the gate, and the gate's first run reported 49 findings of which 45 were
+the detector matching a SQLite table name, an enum constant, or its own fixture — which is why a rule is not
+evidence until you read what it flags.
+
+### What the matrix found that the brief did not ask about
+
+The first matrix of the completion pass ran all 24 discovered classes in 24 separate instrumentation processes
+and failed nine of them. Two of the nine were right about the app; the rest were the harness's own doing, and
+the distinction only exists because the failure messages were rebuilt to carry the readings that settle it.
+
+* **A class that changes the language has to hand it back on a live window, and a class that measures in a
+  language has to establish which one it measures in.** The language is kept by the framework, not in the app's
+  own files, so the runner's `clearPackageData` between classes does not take it back. The ledger said so
+  before this pass, and this pass produced the demonstration anyway: `ProfileNavigationRestorationTest` chose
+  Russian, had no `@After`, and "handed the language back" in `@Before` *before launching* — the silent no-op
+  `CsvLocaleTest` measures. The class after it failed with "the run asked for 'en' and the window is resolving
+  'ru'". `LanguageSwitchInstrumentedTest` leaked for a different reason: it establishes the system default at
+  the head of each test, which covers a passing run and not a failing one — and three classes later
+  `TaskCardWidthBudgetInstrumentedTest` measured a date at 136px against a 115px allowance. Both numbers were
+  correct: the allowance is a budget for "Oct 25, 2026" and the card was drawing «25 окт. 2026 г.» So
+  `testing/DeviceLanguage` exists, `@After` resets before `scenario.close()`, and the measuring class asks the
+  app for its language before it asks the view for its width.
+* **A walk that asks for the language the app already holds is not a walk.** The restoration test went five tabs
+  in Russian, then five in English. Eight of those ten "changes" were no-ops — nothing recreates, so there is
+  nothing to restore, and eight assertions passed about a screen that had not moved. It alternates now, and
+  every iteration asserts its own premise: a different activity instance, the delegate answering the tag, the
+  window resolving it. The matrix gave no signal at all here; this one was found by reading the loop.
+* **A tap is delivered by window focus, and nothing in Espresso waits for it.** Four classes failed with the
+  same impossible sentence: a tab pressed, and neither the destination nor the bar's selection moved, for 45 or
+  60 seconds. `click()` waits for the window to be idle and the view to be displayed; whether the tap *arrives*
+  is focus's decision. The device's own words, read afterwards: `mCurrentFocus=Window{… Application Not
+  Responding: com.android.systemui}`, `load average: 19.05` on four cores with nothing of mine running, and in
+  dropbox "Input dispatching timed out ([Gesture Monitor] edge-swipe (server) is not responding. Waited
+  12756ms for MotionEvent" beside a run of "… failed to complete startup" ANRs for Google background processes
+  that the system kills, starts again, and ANRs again. A reboot did not clear it: twenty minutes later the same
+  device read load 43 and an `am instrument` that died with `shortMsg=Process crashed`. So `testing/AppWindow`
+  reads focus, the pressing classes wait for it before the first tap after any launch or recreation, and an
+  expired wait now says `focused=` — the difference between a lost tap and a screen that refuses to draw.
+  `run-instrumented-classes.sh` prints load, memory, focus and the ANR count before it spends an hour on a
+  matrix and again afterwards, and refuses to run into an error dialog.
+  `scripts/prep-emulator-for-matrix.sh` is the repair written down: hide the system's error windows, disable
+  the four background packages this project's tests never touch — `com.google.android.gms` left as it is,
+  because the account code under test needs it — reboot, settle, and report what the device says about itself.
+* **A message built before the wait it reports on describes the wrong moment.** `assertTrue(message, condition)`
+  evaluates its arguments first, so every message that read the app's state was reading the state the run
+  *started* in and calling it the state it gave up on. The premises this pass adds are written as wait, then
+  read, then assert — for the same reason a photograph taken before the click cannot show what the click did.
+
+### The two the second and third matrices produced
+
+The completion pass did not stop at the first re-run. Three more matrices later — the same app bytes, verified
+against `pm path` by SHA-256 — and two findings worth more than the green they cost.
+
+* **A gate is only as wide as the shapes it knows.** The report screen asserted that the Snackbar after a save
+  begins with `SAVED_PREFIX = "Written to the file you chose"` — the first twenty-eight characters of
+  `report_saved_format`, copied into the test. In Russian the screen says «Записано в выбранный вами файл — …»
+  and the test called that silence. `EnglishLiteralAssertionTest` had been green over that file all day, for
+  three reasons that compound: the line was not an assertion call but a `startsWith` inside a helper, the words
+  arrived through a named constant which the gate only resolves inside Espresso matchers, and a *head* of a
+  longer sentence matches neither the whole-label rule nor the word-stem rule. All three were widened, and the
+  detector test grew a case for exactly this shape, so the rule that missed it is now the rule that fails on it.
+  The assertion asks the resource for its own sentence in the reader's language — formatted with a character no
+  file name and no sentence contains, cut where the placeholder was.
+* **A tab press that does nothing, on a window that is focused and settled.** The language-switch class fails it
+  deterministically: twice in a row from a clean install at load 6, with `focused=true`, with the activity
+  identity held steady for a second and a half before the tap, and with `PerformException` conspicuously absent —
+  the tap was performed, and nothing moved. The bar's own selection was `navigation_tasks`, so this is not the
+  re-selection path Stage 14c fixed; the two candidates left are a second bottom bar in the view hierarchy from
+  an activity the locale recreate and the close left standing, which Espresso can match first and tap for
+  nothing, and a `popBackStack` that returns false because the destination it was told to pop to is not on the
+  stack. Either is a real bug and neither is localization. It is recorded as open, in
+  `docs/LOCALIZATION.md`'s ledger and in the final report, rather than made to disappear: the assertions that
+  found it are the assertions that prove the fix, none was weakened, and nothing is `@Ignore`d. That also
+  withdraws one claim this file made an hour earlier — the pop-back is in the code and is *not* currently
+  demonstrated on the device, because the method that demonstrates it does not reach its own first step.
+
+**One rewrite was owed regardless.** The method that claimed the language survives a process death was reading
+whatever an earlier run had left in the framework's store — which is how a leak and a passing test became the
+same event, and why the claim moved with the matrix's order. It chooses Russian through the row now, closes the
+window, opens another, and asserts the new activity speaks Russian; and its KDoc says out loud that a second
+activity in one process is not a second *process*, and names the class where the process-death claim actually
+lives — the frame walk, whose `am force-stop` between the choosing run and the walking run is written into
+`scripts/capture-stage14-matrix.sh` instead of being assumed from a schedule.

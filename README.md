@@ -107,6 +107,12 @@ order of a list of names are all read from the language chosen in the app rather
 handset was sold with. `docs/LOCALIZATION.md` is the contract, what proves each part, and what is knowingly
 left undone.
 
+A second language also makes a layout say whether it can hold the words. Whether a label fits its box is
+measured on the device that draws it — no JVM test in this repository can ask the question — at 393dp with the
+font at 1.0 and at 320dp with the font at 1.3, in both languages, and it checks that a word is neither
+ellipsized nor broken mid-word and that the button holding it is still a finger's width. Where the answer was
+no, the layout changed shape; the text size did not.
+
 ```
 python scripts/check-localization.py   # fails, naming the exact entries, if the two files disagree
 ```

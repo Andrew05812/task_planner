@@ -407,6 +407,58 @@ Three openings this stage leaves, each named in `docs/LOCALIZATION.md` rather th
 two Russian-only truncations above, twenty-nine failure sentences still built in code (a ratchet refuses a
 thirtieth), and the stale-Profile-tab defect that predates the stage and has a control test recording it.
 
+**All three were closed the next day. See 14.14.**
+
+---
+
+## 14.14 The completion pass of 2026-10-31
+
+**Status: the four acceptance criteria are DONE; the instrumented matrix is `BLOCKED — emulator/system
+instability`, with one real defect found underneath it.** Stage 14 shipped with those four criteria unmet; this
+pass closed them, then spent longer on the proof than on the fixes, and what the proof turned up is recorded
+here rather than smoothed over.
+
+| The finding | What it turned out to be | What closed it |
+|---|---|---|
+| «Время окончания» ellipsized; «СОХРАНИТЬ» wrapped mid-word | A width budget, not a language problem. The plan grid gave each field 149px for a label needing 153px — and English "Starts on" needed 147px of 121px at 320dp/1.3, so the grid was wrong for both languages and Russian only showed it. The footer could not be redistributed at all: three items claimed 527px of a 472px row once the drawn form of «СОХРАНИТЬ» (158px — all-caps and letterspaced, so not the word in the strings file) was counted | Four full-width plan rows; a two-band footer with the save-in-progress figure drawn inside the primary button's trailing corner; the category editor's pair redistributed. No word shortened, none broken, no size reduced, 48dp kept, English re-measured |
+| 29 runtime sentences in code | The gate's own reason for leaving them — "a ViewModel holds no Context" — was the defect's excuse, not its limit | 24 sites now carry a `@StringRes`; 40 resources added in both languages; 4 of them already existed and nothing read them. Exception text went to the log, where machine text is read; a refusal a reader can act on became a `ReaderRefusal` with a resource |
+| English literals in the tests | The instrumented set was already gated; the JVM set had never been measured. The gate's own detector reported 49, and 45 were it matching a SQLite table name, an enum constant or its own fixture | Zero-tolerance rules for `androidTest` (stem rule) and the `ui` package of `app/src/test` (whole-label rule); three sites fixed to ask their own `getString`; three exempted with the reason named; `ScreensInBothLanguagesTest` added as the positive claim |
+| Profile not restored after recreation | It is restored. `ProfileNavigationRestorationTest` walks all five tabs through a `recreate()` and a language change in both directions and finds the destination, the bar and one attached fragment intact — written first, green against the unfixed build, which is what stopped the pass from "fixing" the wrong thing. What was broken was the way out of a screen that has no tab of its own | A re-selected tab pops back to its destination; the test that recorded the dead tab was rewritten to the claim it promised, and run RED first |
+| The matrix itself, run against the result: five classes failed, and two of them were the harness's doing, not the app's | (a) The pass's own new class chose Russian with no teardown and reset the language in `@Before`, before a window existed — the silent no-op `CsvLocaleTest` measures. The framework keeps the language outside the app's files, so `clearPackageData` between classes does not take it back: the next class failed on "asked for 'en', resolving 'ru'", and three classes later — from a second leaker, the language-switch class, which set its starting language but had no teardown — a date measured 136px against a budget written for "Oct 25, 2026" while the card drew «25 окт. 2026 г.» (b) Three classes failed with a press that moved neither the destination nor the bar's selection, on a device reading load average 16.83 on four cores with an empty crash buffer: Espresso waits for idle and *displayed*, and tap *arrival* is the window focus's decision. (c) Eight of the new class's ten "language changes" asked for the language the app already held, so nothing recreated and eight assertions passed about a screen that never moved | Every class that changes the language now establishes its starting language on a live window and hands it back before closing (`testing/DeviceLanguage`); every class that presses waits for focus and carries `focused=` in the message of a wait that gives up (`testing/AppWindow`, `navState`, `describe`); the language walk alternates and asserts a new activity instance per iteration; `scripts/run-one-class-with-logcat.sh` added so a future expired wait can be read rather than argued about. No timeout was lengthened, no assertion weakened, nothing `@Ignore`d |
+
+**The matrix, four times, and what each run was worth.** Discovery is settled: 24 `*Test.kt` files under
+`app/src/androidTest`, 24 classes the runner finds, 24 processes run, 24 rows in the table — `Discovered =
+Executed`, on `emulator-5584` / `taskplanner_avd` / API 35, one class per instrumentation process, each with its
+own log and exit code. The verdicts are not settled, and the reason is measurable: the *same* app bytes (SHA-256
+`08838047e26e0d16…`, checked against `pm path` before and after) gave 9 failing classes in the first run, 2 in the
+third, and 7 in the fourth, while the device's own load average wandered between 3.5 and 43 and its log carried
+`Input dispatching timed out ([Gesture Monitor] edge-swipe (server) is not responding. Waited 12756ms for
+MotionEvent"` and ANRs of processes that have nothing to do with this app. Three classes were fixed and verified
+between the third and fourth runs — the language hand-back, the settled-activity wait, the zoom control's
+displayability — and the fourth run still lists five failures and two classes that produced no verdict line at
+all, three of which (`Stage8aScreens`, `TaskEditorRussianFit`, `TasksHeader`) were green in the third. So the
+matrix is **BLOCKED — emulator/system instability**, not green, and no part of the suite is reported as passing
+that did not pass in front of the person writing this.
+
+What is *not* an environment story: one reproduction held through everything — a bottom tab pressed from Tasks
+changes nothing, with the window focused, the activity identity held steady, a clean install, and a load of 6.
+`theTabThatOwnsTheScreenCarriesTheReaderBackToIt` cannot reach its own first step, which withdraws the claim this
+pass made an hour earlier that the re-selection pop-back is proven on device. It is in the code, it is what the
+brief asked for, and it is **ОТКРЫТО** until a run says so. `docs/LOCALIZATION.md`'s ledger carries the two
+candidate mechanisms and the evidence for each.
+
+**The gate widened with the work.** `HardcodedFailureTextTest` went from four shapes to three rules that see a
+named constant (`EMAIL_TAKEN`) and an exception's text handed to a UI sink, and reads a call's arguments across
+lines — the first version truncated `localized(context, R.string.x)` at the comma and reported a fix as a
+defect. Its ceiling went 29 → 5, each of the five named with the reason it is a diagnostic rather than copy.
+
+**Baseline, measured after the changes rather than carried over.** 130 JVM classes, 1640 tests, 0 failures,
+0 skipped; lint 0 errors and 149 warnings, none of them in a file this pass touched; `check-localization.py`
+pass at 937 English and 932 Russian strings with 0 missing, 0 placeholder mismatches and 0 invalid XML.
+
+**Google Sign-In remains `BLOCKED — Firebase project / OAuth configuration required`**, unchanged from 14.13:
+nothing in this pass made the cloud feature reachable, and the two refusals still built in code are inside it.
+
 **Stage 15 (import from Google Keep) is next. Stage 8b is not scheduled and was not started.**
 
 ---
