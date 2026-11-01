@@ -5884,3 +5884,44 @@ What the next session owes this: a run that reads the *activity identity* alongs
 the assertion that passed on Categories and the one that failed on Calendar can be shown to be about the same
 instance or not — which is the single measurement that separates "Espresso tapped a dead window" from "the app
 navigated back on its own". No production change is justified before that reading exists.
+
+## 20u — Task #168: the identity measurement, and the tap that was not a tap
+
+**The question was asked wrong until it was asked of objects.** Two explanations of the lost tab press had been
+carried for four matrices — a stale bottom bar from an earlier window, or a re-selection popping to a destination
+that is not on the stack. Both are claims about *which object received the gesture*, and nothing in the suite had
+ever read an object identity: `state()` reported where the live activity thought the reader was, which is precisely
+what a stale-target theory says is a different question from where the tap went. `testing/NavIdentity.kt` reads the
+activity, window, decor, `applicationWindowToken`, bar, menu and item view per live activity, and
+`probeEspressoTarget` records the view `withId(...)` resolves to — through a `ViewAction` that writes nothing, run
+before the press, so the run cannot be accused of changing what it measures. The accessibility tree is queried
+beside it, so a disagreement between Espresso's choice and the system's focused window is a finding about the
+matcher rather than an argument.
+
+**What it found, in the order the brief asked for it.** One live activity, RESUMED, focused, one bar, one item
+view, the matcher's target identical to it, the bar lit on the *previous* tab: no stale window, no re-selection.
+The answer was in the app's own log at the press — `W/MotionEvents: Overslept and turned a tap into a long press`,
+with a `Window{… Tooltip}` opening beside it and a cold start of `Displayed … +30s754ms`, `Skipped 353 frames`,
+`Davey! duration=8849ms`. Espresso injects DOWN, pumps the main thread for the gesture's span, injects UP; a
+thread seconds behind makes that span exceed the 400 ms long-press timeout, and a long press on a Material
+navigation item shows a tooltip and performs no click. Espresso prints its own warning and returns the interaction
+as performed, so four matrices reported an app that refused and meant a machine that was slow.
+
+**The fix is a gesture that stays a gesture, and a reading that cannot hide the difference.** `testing/TabTap.kt`
+waits for the main thread to answer a round trip inside 100 ms, tries the ordinary click, and only if the
+destination did not move injects DOWN and UP as one 20 ms `SOURCE_TOUCHSCREEN` sequence; it reports which of the
+two moved the app and labels the press `pressed normally`, `TAP-DEGRADED` or `PRESS-REFUSED`. Seven classes that
+press the bar go through it. Nothing in `MainActivity`, the listeners, the nav graph or fragment lifecycle was
+edited: had the measurement found a navigation defect, the order would have been RED on the current code, then one
+fix, then GREEN — it did not, so no production change was justified and none was made. The withdrawal the
+completion pass recorded was correct and is now closed from the other side:
+`theTabThatOwnsTheScreenCarriesTheReaderBackToIt` reaches its own first step, and the pop-back is demonstrated
+(`destination navigation_settings->navigation_profile`, `selection navigation_profile->navigation_profile`).
+
+**Two lessons for any later stage that presses anything.** A recreate reuses the decor: `ActivityScenario.recreate()`
+answers a *new activity instance* and the *same decor view object*, so an assertion that the decor must change
+tests the framework's bookkeeping and not the app — it is reported, not asserted. And an `input swipe` sent to
+"fix" a floating IME can leave the notification shade holding `mCurrentFocus`, which silently invalidates every
+press in the batch that follows; `TabTap`'s readings are what made that visible in this pass' own re-run rather
+than leaving it to be discovered as a mystery failure. Read `mCurrentFocus` before believing a red table that the
+operator's hands may have painted.

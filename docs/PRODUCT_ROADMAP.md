@@ -490,6 +490,93 @@ nothing in this pass made the cloud feature reachable, and the two refusals stil
 
 **Stage 15 (import from Google Keep) is next. Stage 8b is not scheduled and was not started.**
 
+## 14.15 The device verification pass of 2026-11-01 (task #168)
+
+**Status: the open navigation defect is closed as a harness finding; production code was not touched, because
+the measurement found nothing in it to touch. The remaining opening is device proof, and it is named as such.**
+
+The completion pass left one sentence unresolved — a bottom tab pressed that changed nothing, with two candidate
+causes and no reading that could tell them apart. This pass took the reading. `testing/NavIdentity.kt` prints, per
+live activity, the identity of the activity, its window, its decor view, the decor's `applicationWindowToken`, its
+`BottomNavigationView`, its menu and the item view the matcher would press, beside the bar's selection, the
+controller's current and previous destination and the attached fragments. Every press it was pointed at had **one**
+live activity, **one** bar, and a matcher target identical to the resumed activity's own item view, with focus held
+and the bar still lit on the *previous* tab — so neither candidate survived: there was no second window to tap, and
+no re-selection to pop.
+
+The cause was in the app's own log at the moment of the press: `W/MotionEvents: Overslept and turned a tap into a
+long press`, with a `Window{… Tooltip}` created and destroyed around it. Espresso's `click()` injects a DOWN, pumps
+the main thread for the gesture's span, and injects an UP; on a thread seconds behind — the same device spent
+**30 s** to `Displayed com.taskplanner/.ui.MainActivity`, `Skipped 353 frames`, `Davey! duration=8849ms` — that span
+passes `ViewConfiguration`'s long-press timeout (measured: **400 ms**), so the platform holds a long press, a
+Material navigation item answers a long press with a tooltip and never performs a click, and Espresso returns the
+interaction as performed. Four captures carry the line (`…TabPressIdentityInstrumentedTest.044455`, the two walk
+runs of `ProfileNavigationRestorationTest` and `LanguageSwitchInstrumentedTest.053437`); the captures without it
+navigated.
+
+**What changed is the harness.** `testing/TabTap.kt` waits for the app's main thread to answer a round trip inside
+100 ms, performs the ordinary click, and only if the destination did not move injects DOWN and UP as one 20 ms
+sequence with `SOURCE_TOUCHSCREEN`; it reports which gesture moved the app, the timeout, and the round-trip
+latency, with a verdict of `pressed normally`, `TAP-DEGRADED` or `PRESS-REFUSED`. Six classes that press the bar
+now go through it — `ProfileNavigationRestorationTest`, `LanguageSwitchInstrumentedTest`,
+`Stage14LanguageFramesInstrumentedTest`, `Stage8aScreensInstrumentedTest`, `TasksScreenInstrumentedTest`,
+`ProfileNoUserInstrumentedTest`, `ReportScreenInstrumentedTest` — with no assertion relaxed and no tab forced.
+`TabPressIdentityInstrumentedTest` is the controlled scenario the brief specifies (launch → focus → identities → a
+tab that moves → Settings, which has no tab → `recreate()` → the new identities → the old references → the
+matcher's target → the presses → the snapshot again), and it records a fact worth keeping: **after `recreate()`
+the activity instance changes while the decor view object is reused** — so an assertion that the decor must differ
+tests the framework's bookkeeping, not the app, and was replaced with a report.
+
+**The gate itself had two bugs, found by reading what it printed.** `prep-emulator-for-matrix.sh` used `$TARGET`
+without defining it (the stale-directory check compared the parent of every app's directory and always reported
+agreement, so the EACCES guard had never protected a run) and assigned to `UID`, which bash keeps readonly — with
+`TARGET` defined, the fallback became the *host's* uid and the guard deleted a directory that did belong to the
+app. `run-instrumented-classes.sh` now prints `sys.boot_completed`, the System UI pid, the app's uid and process,
+the crash-buffer count, host free memory and the installed APK's SHA-256 against the built one (refusing with exit
+7 on a mismatch), and it labels every row `PASS`, `FAIL`, `ENVIRONMENT` or `NOT RUN` — because four matrices had
+been read as almost-green while their logs said `Process crashed`.
+
+**What the device gave, and what it did not.** Discovery is 25 = 25: every `*Test.kt` class found, run, and rowed,
+one class per instrumentation process, on `taskplanner_avd` / `emulator-5584` / API 35, against the unchanged
+production bytes `08838047e26e0d16c2ddd56f1e5fac9d3887c99cde480ac0307f90339e0936fc` (read back from `/data/app`
+before and after). The uncontaminated run of the whole matrix, 05:49–07:03, gave **16 PASS / 6 FAIL / 3
+ENVIRONMENT**; the two classes that had carried the open defect were green on a quiet device minutes earlier —
+`ProfileNavigationRestorationTest` `OK (2 tests)`, all five tabs through a `recreate()` and all ten legs of the
+alternating ru/en-US walk, and `LanguageSwitchInstrumentedTest` `OK (3 tests)`, whose reading
+`destination navigation_settings->navigation_profile … selection navigation_profile->navigation_profile` is the
+re-selection pop-back reached on the device, which the completion pass had had to withdraw. Of the six failures
+that run reported, the press-shaped ones were then re-run individually after the harness change, and
+`ProfileNoUserInstrumentedTest` came back `OK (2 tests)` and `ReportScreenInstrumentedTest` `2 of 3` (the
+remaining one is its save-to-disk path, not a navigation claim).
+
+**Part of this pass' own re-run was worthless, and the reason is the operator, not the app.** To dock the
+emulator's floating keyboard (`dumpsys input_method` → `keyboardViewType: WIDGET`, which is why
+`TaskEditorInstrumentedTest.theFooterStaysOnTheWindowWithTheKeyboardUp` never sees the window shrink) a swipe was
+sent — and it left the system holding `mCurrentFocus=Window{… NotificationShade}`. Every press in the batch that
+followed was aimed at a window the system was not sending input to; the rejections say so in their own readings
+(`click moved=false, tightTapTried=true moved=false … mainThreadRoundTrip=11ms`), which is exactly the evidence
+`TabTap` exists to produce. Focus was restored with `CLOSE_SYSTEM_DIALOGS` and HOME, and the classes were run
+again; that second batch then met the same wall this stage has been hitting all along — five rows of
+`INSTRUMENTATION_RESULT: shortMsg=Process crashed.` at a guest load average of 7.6 to 12.5.
+
+**So Stage 14's device proof is still `BLOCKED — emulator/system instability`, with the sentence narrowed.** What
+is no longer open is the *why* of the lost presses: that is measured, fixed in the harness, and demonstrated on
+the classes that press the bar. What remains is quantity, not mystery — a long enough run of the 25 classes on a
+device that stays healthy for an hour, and the 28 frames of the Russian and 320dp configurations from a verified
+build (still 14 of 42 today; the `s14-ru-*` files on disk remain 2026-10-30's, photographed before the editor
+layout changed, and are not evidence about it).
+
+**Baseline, re-measured here rather than carried over:** 130 JVM classes / 1640 tests / 0 failures / 0 skipped;
+lint 0 errors / 149 warnings; `check-localization.py` pass. CI on `d7eb9ae` is run 41272737643 (one job, 16 of 16
+steps) and covers JVM, lint and the localization gate — not the device.
+
+**Baseline, re-measured here rather than carried over:** 130 JVM classes / 1640 tests / 0 failures / 0 skipped;
+lint 0 errors / 149 warnings; `check-localization.py` pass. CI on `d7eb9ae` is run 41272737643 (one job, 16 of 16
+steps) and covers JVM, lint and the localization gate — not the device.
+
+**Google Sign-In remains `BLOCKED — Firebase project / OAuth configuration required`.** **Stage 15 (import from
+Google Keep) is next. Stage 8b is not scheduled and was not started.**
+
 ---
 
 # Stage 15 — Import from Google Keep

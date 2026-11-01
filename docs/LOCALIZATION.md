@@ -146,13 +146,18 @@ walks an app with no profile, and photographs an empty dashboard.
   name and description on every start, so a language change reaches a channel that already exists; the
   reader's own importance setting is preserved. What cannot be done from a notification channel is a
   re-translation of a notification that is already on the shade.
-- **The device half of the proof is not complete, and says so in two places.** The instrumented matrix was run
-  four times against the same APK bytes and left 7 / 2 / 7 classes without a clean verdict, then a fifth run on a
-  quiet machine re-certified one class; 23 classes are still owed a healthy-device pass on these bytes. And 28 of
+- **The device half of the proof is not complete, and says so in two places.** Discovery is settled at 25 classes
+  (`*Test.kt`, one class per instrumentation process), and the matrix's uncontaminated run of the whole set on the
+  verified bytes gave 16 PASS / 6 FAIL / 3 ENVIRONMENT; the press-shaped failures were then re-run individually and
+  came back green or near-green (`ProfileNavigationRestorationTest` 2/2, `LanguageSwitchInstrumentedTest` 3/3,
+  `ProfileNoUserInstrumentedTest` 2/2, `ReportScreenInstrumentedTest` 2/3), which is the part the lost-press
+  diagnosis was for. The clean verdict for all 25 is still owed to a device that stays healthy for an hour: the
+  batches after that one met `INSTRUMENTATION_RESULT: shortMsg=Process crashed.` at a guest load of 7.6–12.5, and
+  one batch was invalidated by the operator's own gesture, which left `mCurrentFocus=NotificationShade`. And 28 of
   the 42 frames — every Russian configuration and both at 320dp — are from the build *before* the editor layout
-  changed, because each capture run that chooses Russian died to the system's own ANR kill. What does stand for
-  the Russian side is the instrumented measurement of the drawn widths, not a photograph. Both are recorded as
-  `BLOCKED — emulator/system instability` in the roadmap's §14.14 rather than presented as done.
+  changed, because each capture run that chooses Russian died to the system's own ANR kill. What does stand for the
+  Russian side is the instrumented measurement of the drawn widths, not a photograph. Both are recorded as
+  `BLOCKED — emulator/system instability` in the roadmap's §14.15 rather than presented as done.
 
 ## The completion pass
 
