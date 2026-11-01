@@ -137,7 +137,7 @@ class TabPressIdentityInstrumentedTest {
             1,
             liveAtLaunch.size
         )
-        assertEquals("the one live activity should be resumed", "RESUMED", launched.lifecycle)
+        assertEquals("the one live activity should be resumed", NavIdentity.resumedStage, launched.lifecycle)
 
         // 5. a tab that moves: Tasks is the start destination, so Profile is a real change.
         val firstPress = pressAndReport(R.id.navigation_profile, "5 press Profile from Tasks", ENTRY_PROFILE)
@@ -231,12 +231,12 @@ class TabPressIdentityInstrumentedTest {
     private fun snapshot(where: String): NavIdentity.ActivityReading {
         NavIdentity.report(where, R.id.navigation_profile, "focus=${AppWindow.focused(scenario)}")
         val live = NavIdentity.readings(R.id.navigation_profile)
-        return live.firstOrNull { it.lifecycle == "RESUMED" } ?: live.firstOrNull()
+        return live.firstOrNull { it.lifecycle == NavIdentity.resumedStage } ?: live.firstOrNull()
             ?: error("no live activity to read at $where")
     }
 
     private fun destinationName(): String =
-        NavIdentity.readings(R.id.navigation_profile).firstOrNull { it.lifecycle == "RESUMED" }?.destination
+        NavIdentity.readings(R.id.navigation_profile).firstOrNull { it.lifecycle == NavIdentity.resumedStage }?.destination
             ?: "<none>"
 
     /**

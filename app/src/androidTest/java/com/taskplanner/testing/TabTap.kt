@@ -232,7 +232,7 @@ object TabTap {
     }
 
     private fun live(itemId: Int): NavIdentity.ActivityReading? =
-        NavIdentity.readings(itemId).firstOrNull { it.lifecycle == "RESUMED" }
+        NavIdentity.readings(itemId).firstOrNull { it.lifecycle == NavIdentity.resumedStage }
 
     private fun context() = InstrumentationRegistry.getInstrumentation().targetContext
 

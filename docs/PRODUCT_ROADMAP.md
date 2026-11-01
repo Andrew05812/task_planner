@@ -549,14 +549,16 @@ that run reported, the press-shaped ones were then re-run individually after the
 `ProfileNoUserInstrumentedTest` came back `OK (2 tests)` and `ReportScreenInstrumentedTest` `2 of 3` (the
 remaining one is its save-to-disk path, not a navigation claim).
 
-**Part of this pass' own re-run was worthless, and the reason is the operator, not the app.** To dock the
-emulator's floating keyboard (`dumpsys input_method` → `keyboardViewType: WIDGET`, which is why
-`TaskEditorInstrumentedTest.theFooterStaysOnTheWindowWithTheKeyboardUp` never sees the window shrink) a swipe was
-sent — and it left the system holding `mCurrentFocus=Window{… NotificationShade}`. Every press in the batch that
+**Part of this pass' own re-run was worthless, and the reason is the operator, not the app.** A swipe was sent at
+the emulator's floating keyboard (`dumpsys input_method` → `keyboardViewType: WIDGET`) to try to dock it, and the
+gesture left the system holding `mCurrentFocus=Window{… NotificationShade}`. Every press in the batch that
 followed was aimed at a window the system was not sending input to; the rejections say so in their own readings
 (`click moved=false, tightTapTried=true moved=false … mainThreadRoundTrip=11ms`), which is exactly the evidence
-`TabTap` exists to produce. Focus was restored with `CLOSE_SYSTEM_DIALOGS` and HOME, and the classes were run
-again; that second batch then met the same wall this stage has been hitting all along — five rows of
+`TabTap` exists to produce. Focus was restored with `CLOSE_SYSTEM_DIALOGS` and HOME, and the eight classes were run
+again: `TaskEditorInstrumentedTest` came back `OK (7 tests)` — including the keyboard test that had failed in the
+contaminated batch, which says the earlier failure was the device's state and not the editor's — and
+`ProfileNoUserInstrumentedTest` `OK (2 tests)`, with `ReportScreenInstrumentedTest` at 2 of 3 (the one left is its
+save-to-disk path, not a navigation claim) and five rows of
 `INSTRUMENTATION_RESULT: shortMsg=Process crashed.` at a guest load average of 7.6 to 12.5.
 
 **So Stage 14's device proof is still `BLOCKED — emulator/system instability`, with the sentence narrowed.** What

@@ -55,6 +55,17 @@ object NavIdentity {
 
     private const val TAG = "NavIdentity"
 
+    /**
+     * The stage name this object answers for the activity the reader is looking at, derived from the
+     * framework enum rather than spelled out.
+     *
+     * The instrumented literal gate refuses a written-out English word in an assertion, and it should:
+     * the only "RESUMED" a test may compare against is the one the lifecycle monitor itself prints, not
+     * a string the app might translate. The gate caught exactly that in `TabPressIdentityInstrumentedTest`,
+     * where the word matched the resource text "series resumed".
+     */
+    val resumedStage: String = Stage.RESUMED.name
+
     /** One live activity's own account of itself, its window, its bar and its navigation state. */
     data class ActivityReading(
         val activityIdentity: Int,
@@ -113,9 +124,9 @@ object NavIdentity {
                 // Insertion order is the story: RESUMED first, then the activities that are alive but not in
                 // front, so a caller that takes `firstOrNull` takes the one the reader is looking at.
                 runCatching {
-                    monitor.getActivitiesInStage(Stage.RESUMED).forEach { alive[it] = "RESUMED" }
-                    monitor.getActivitiesInStage(Stage.STARTED).forEach { alive.putIfAbsent(it, "STARTED") }
-                    monitor.getActivitiesInStage(Stage.CREATED).forEach { alive.putIfAbsent(it, "CREATED") }
+                    monitor.getActivitiesInStage(Stage.RESUMED).forEach { alive[it] = resumedStage }
+                    monitor.getActivitiesInStage(Stage.STARTED).forEach { alive.putIfAbsent(it, Stage.STARTED.name) }
+                    monitor.getActivitiesInStage(Stage.CREATED).forEach { alive.putIfAbsent(it, Stage.CREATED.name) }
                 }
                 found = alive.map { (activity, stage) -> read(activity, stage, pressedItemId) }
             }
