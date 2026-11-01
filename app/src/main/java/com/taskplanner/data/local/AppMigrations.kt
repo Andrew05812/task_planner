@@ -647,6 +647,32 @@ object AppMigrations {
         }
     }
 
+    /**
+     * 16 → 17: a task can hang under another task, and a topic can be finished.
+     *
+     * Both columns exist for one reason — the Google Keep import in Stage 15 — and neither is a general-purpose
+     * addition dressed up as one. `parent_uuid` is what indentation in the user's text means, and without it the
+     * honest options were "flatten the tree" or "don't ship the import". `is_completed` on a group is the `[X]`
+     * that 34 of the 56 root lines in that same file carry, which today's schema has nowhere to put: the earlier
+     * attempt at this import lost all 34 by turning every line into a task of one group.
+     *
+     * Additive only, in the shape every migration in this file has kept since v1: `ALTER TABLE ... ADD COLUMN`
+     * with a default for the non-null one, so existing rows are valid the moment the statement returns and
+     * nothing is rewritten, re-typed or dropped. The index is the one the entity declares, named the way Room
+     * names it, because `AppMigrationsTest` compares this result against the schema Room exports for v17 and a
+     * differently-named index fails that check rather than merely running slower.
+     */
+    val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `task_groups` ADD COLUMN `is_completed` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `parent_uuid` TEXT")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_tasks_user_id_parent_uuid` " +
+                    "ON `tasks` (`user_id`, `parent_uuid`)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -662,6 +688,7 @@ object AppMigrations {
         MIGRATION_12_13,
         MIGRATION_13_14,
         MIGRATION_14_15,
-        MIGRATION_15_16
+        MIGRATION_15_16,
+        MIGRATION_16_17
     )
 }

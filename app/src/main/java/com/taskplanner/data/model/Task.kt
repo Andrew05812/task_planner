@@ -24,6 +24,9 @@ import kotlinx.parcelize.Parcelize
         Index(value = ["user_id", "end_time", "start_time"]),
         Index(value = ["category_id"]),
         Index(value = ["group_id"]),
+        // The tree is read one parent at a time — a topic's children, then each child's — and a profile with an
+        // imported Keep subtree would otherwise scan the whole account per level.
+        Index(value = ["user_id", "parent_uuid"]),
         // The dashboard asks "what did I finish in this window" for a period of days, and the answer
         // has to be sought by completion rather than walked. `completed_at` is the only column that
         // says when a task was finished — `updated_at` moves on any edit and `archived_at` says when
@@ -154,5 +157,20 @@ data class Task(
     val createdAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+
+    /**
+     * The task this one is written under, or null when a topic — or nothing — holds it.
+     *
+     * Indentation in a Keep export is the only hierarchy the source has, and the user asked for it to survive:
+     * four levels, not a flat list under one group. `groupId` still says which topic a subtree belongs to, so a
+     * root task of a topic keeps `group_id` and has a null parent, and the levels below it chain through here.
+     *
+     * No DB-level foreign key, for the same reason `group_id` has none: an import writes a parent and its
+     * children in one transaction, and a schema that demanded the row exist first would make the order of that
+     * write a puzzle instead of a loop. Cycles are impossible by construction here — a node's parent is always
+     * a line above it — and `KeepImportMapping` checks anyway.
+     */
+    @ColumnInfo(name = "parent_uuid")
+    val parentUuid: String? = null
 ) : Parcelable
