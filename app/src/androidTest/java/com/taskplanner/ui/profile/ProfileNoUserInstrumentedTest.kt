@@ -18,6 +18,7 @@ import com.taskplanner.R
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.AppMigrations
 import com.taskplanner.ui.MainActivity
+import com.taskplanner.testing.TabTap
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -54,7 +55,15 @@ class ProfileNoUserInstrumentedTest {
         assertTrue("the app starts on Tasks", waitUntil("the tasks screen") {
             findView(R.id.recyclerView) != null
         })
-        onView(withId(R.id.navigation_profile)).perform(click())
+        // The tab press goes through `TabTap`, which reports the gesture it delivered: this class's failure on
+        // the completion pass' matrix was the app's own log calling the injected tap a long press, and a long
+        // press on a navigation item is not a click — so the account screen never opened and the premise below
+        // died with a two-word message. The claim is the same one this method always made.
+        val press = TabTap.press(R.id.navigation_profile, "navigation_profile")
+        assertTrue(
+            "the Profile tab did not reach the account screen: ${press.summarize()} | ${press.verdict()}",
+            press.moved
+        )
         assertTrue("the account opens", waitUntil("the account screen") {
             findView(R.id.noUserGroup) != null
         })

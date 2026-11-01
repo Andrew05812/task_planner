@@ -35,6 +35,7 @@ import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.User
 import com.taskplanner.testing.AppWindow
+import com.taskplanner.testing.TabTap
 import com.taskplanner.ui.settings.AppLocale
 import com.taskplanner.ui.MainActivity
 import java.io.File
@@ -413,7 +414,15 @@ class ReportScreenInstrumentedTest {
     // -- the path ---------------------------------------------------------------------------------
 
     private fun openTheReport() {
-        onView(withId(R.id.navigation_profile)).perform(click())
+        // `TabTap` for the tab press, for the reason the completion pass measured: the app's own log called the
+        // injected tap a long press — which a navigation item answers with a tooltip, not a click — so the
+        // account screen never opened and this path died waiting for a button on it. The claim is unchanged: the
+        // reader reaches the account screen, and now the message says which gesture carried them there.
+        val press = TabTap.press(R.id.navigation_profile, "navigation_profile")
+        assertTrue(
+            "the Profile tab did not reach the account screen: ${press.summarize()} | ${press.verdict()}",
+            press.moved
+        )
         waitUntil("the account screen") { findView(R.id.openReportsButton) != null }
         shot("00-profile-entry")
         onView(withId(R.id.openReportsButton)).perform(scrollTo(), click())

@@ -8,9 +8,12 @@ import androidx.test.espresso.matcher.ViewMatchers.isChecked
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.taskplanner.R
+import com.taskplanner.testing.TabTap
 import org.hamcrest.CoreMatchers.not
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,7 +69,7 @@ class TasksScreenInstrumentedTest {
      */
     @Test
     fun statisticsAndBackKeepsTheTaskListUsable() {
-        onView(withId(R.id.navigation_statistics)).perform(click())
+        pressTab(R.id.navigation_statistics)
         // The period rail is Statistics' own chrome: `statisticsPeriodScroll` is declared in
         // fragment_statistics.xml:11 and the chips inside it are added by `StatisticsFragment.setupChips()`
         // from `WorkPeriod.entries`, so the rail has content whatever the data looks like. The dashboard
@@ -76,7 +79,7 @@ class TasksScreenInstrumentedTest {
         onView(withId(R.id.statisticsPeriodScroll)).check(matches(isDisplayed()))
         onView(withId(R.id.statisticsPeriodChips)).check(matches(isDisplayed()))
 
-        onView(withId(R.id.navigation_tasks)).perform(click())
+        pressTab(R.id.navigation_tasks)
         onView(withId(R.id.recyclerView)).check(matches(isDisplayed()))
         // The filter rail is the rest of the Tasks screen. A fragment recreated by the navigation
         // round trip can restore its list and lose its chrome; only the chips prove the screen is
@@ -102,5 +105,20 @@ class TasksScreenInstrumentedTest {
     fun theTasksScreenSurvivesTheActivityBeingRecreated() {
         scenario.recreate()
         onView(withId(R.id.recyclerView)).check(matches(isDisplayed()))
+    }
+
+    /**
+     * Press a bottom tab and require the app to have moved.
+     *
+     * Through `TabTap`, because this test's failure on the completion pass' matrix was exactly the gesture the
+     * app's own log called a long press: the tab press did not arrive, so Statistics never drew and the next
+     * assertion died with `NoMatchingViewException` about a view on a screen nobody had reached. The claim this
+     * class makes is unchanged — the tab has to be reached — and the reading says which gesture reached it.
+     */
+    private fun pressTab(id: Int) {
+        val entry = InstrumentationRegistry.getInstrumentation().targetContext
+            .resources.getResourceEntryName(id)
+        val press = TabTap.press(id, entry)
+        assertTrue("the $entry tab was never reached: ${press.summarize()} | ${press.verdict()}", press.moved)
     }
 }

@@ -6,14 +6,13 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.navigation.fragment.NavHostFragment
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso
-import androidx.test.espresso.action.ViewActions
-import androidx.test.espresso.matcher.ViewMatchers
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.taskplanner.R
 import com.taskplanner.testing.AppWindow
+import com.taskplanner.testing.NavIdentity
+import com.taskplanner.testing.TabTap
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -328,9 +327,23 @@ class ProfileNavigationRestorationTest {
             AppWindow.focusMessage("the screen before ${tab.label}", AppWindow.focused(scenario)),
             focused
         )
-        Espresso.onView(ViewMatchers.withId(tab.menuId)).perform(ViewActions.click())
+        // The press itself goes through `TabTap`, which is where the "the tab did nothing" investigation landed:
+        // on this device the injected tap was repeatedly being stretched past the long-press timeout by a stalled
+        // main thread — Espresso's own log said `Overslept and turned a tap into a long press`, a tooltip window
+        // opened, and a long press on a navigation item is not a click. `TabTap` performs the ordinary click
+        // first, then a gesture short enough to stay a tap, and reports which one moved the app. The assertion is
+        // the same one this method always made — the tab has to be reached — and the reading rides along in its
+        // message, so a machine that cannot deliver a tap says so instead of blaming the navigation.
+        val press = TabTap.press(tab.menuId, entryName(tab.menuId))
+        assertTrue(
+            "the ${tab.label} tab was never reached: ${press.summarize()} | ${press.verdict()}",
+            press.destinationAfter == entryName(tab.menuId)
+        )
         settle(tab)
     }
+
+    /** The resource entry name of an id — a destination and its tab item deliberately share one. */
+    private fun entryName(id: Int): String = context.resources.getResourceEntryName(id)
 
     /**
      * The screen is on: its fragment attached, resumed, and drawn.
@@ -355,7 +368,8 @@ class ProfileNavigationRestorationTest {
         return "${tab.label}: waited ${WAIT_MILLIS / 1000}s and the app stayed on " +
             "bar='${name(current.selection)}' controller='${name(current.destination)}' " +
             "attached=${current.attached} nested=${current.nested} resumed=${resumed()} " +
-            "shown=${shown()} focused=${AppWindow.focused(scenario)} language='${languageOnScreen()}'"
+            "shown=${shown()} focused=${AppWindow.focused(scenario)} language='${languageOnScreen()}'" +
+            "\n" + NavIdentity.report("give-up ${tab.label}", tab.menuId)
     }
 
     private fun resumed(): Boolean {

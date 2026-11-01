@@ -21,6 +21,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.taskplanner.R
 import com.taskplanner.testing.AppWindow
 import com.taskplanner.testing.SeededProfile
+import com.taskplanner.testing.TabTap
 import com.taskplanner.ui.MainActivity
 import org.junit.After
 import org.junit.AfterClass
@@ -323,15 +324,17 @@ class LanguageSwitchInstrumentedTest {
         // which is the one that has no teardown behind it yet, passed.
         val settled = AppWindow.awaitSettledActivity(scenario)
         assertTrue(AppWindow.settleMessage("${name(id)}"), settled)
-        onView(withId(id)).perform(click())
-        // Assembled after the wait expires, so it says where the app ended up — with the focus reading beside
-        // it, because "nothing moved" and "nothing moved while the window was not the one receiving input" are
-        // different findings, and only the second one is the device's to answer for.
-        val arrived = runCatching { waitUntil("the tab") { destination() == id } }.getOrDefault(false)
+        // `TabTap` rather than a bare `click()`, for the reason measured on this device: the app's own log said
+        // `Overslept and turned a tap into a long press` while its main thread was stalling for seconds, a tooltip
+        // window opened over the bar, and a long press on a navigation item is not a click — which is exactly what
+        // "pressing navigation_profile left the app on navigation_tasks, focused=true" had been describing. The
+        // ordinary click is still tried first, and the reading says which gesture moved the app.
+        val press = TabTap.press(id, name(id))
         assertTrue(
             "pressing ${name(id)} left the app on ${name(destination())} (it was on ${name(from)}), and the " +
-                "bar's selection is ${name(selection())} — window focused=${AppWindow.focused(scenario)}",
-            arrived
+                "bar's selection is ${name(selection())} — window focused=${AppWindow.focused(scenario)}; " +
+                press.summarize() + " | " + press.verdict(),
+            press.destinationAfter == name(id)
         )
     }
 

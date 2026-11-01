@@ -19,6 +19,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.taskplanner.R
 import com.taskplanner.testing.SeededProfile
+import com.taskplanner.testing.TabTap
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.Task
@@ -432,10 +433,14 @@ class Stage14LanguageFramesInstrumentedTest {
     }
 
     private fun press(id: Int) {
-        onView(withId(id)).perform(click())
+        val entry = context.resources.getResourceEntryName(id)
+        // Through `TabTap`, because this walk is the run that photographs the screens: a press that the platform
+        // read as a long press leaves the bar exactly where it was, and the frame then shows the wrong screen —
+        // which is the failure this class was built to refuse. The reading travels into the message.
+        val press = TabTap.press(id, entry)
         assertTrue(
-            "the bar never answered the press on ${context.resources.getResourceEntryName(id)}",
-            waitUntil { findView(id)?.let { true } ?: false }
+            "the bar never answered the press on $entry: ${press.summarize()} | ${press.verdict()}",
+            waitUntil { findView(id) != null }
         )
     }
 

@@ -28,6 +28,7 @@ import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.data.model.User
 import com.taskplanner.testing.SeededProfile
+import com.taskplanner.testing.TabTap
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
@@ -499,9 +500,13 @@ class Stage8aScreensInstrumentedTest {
     }
 
     private fun pressTab(id: Int) {
-        onView(withId(id)).perform(click())
+        // Through `TabTap`, which reports the gesture it delivered. This class was one of the three that failed a
+        // matrix with "the tab did not draw its screen" on a device whose main thread was seconds behind, and the
+        // app's own log said the tap had been read as a long press; the reading makes that visible per press
+        // instead of leaving it to be inferred from a table of failures.
+        val press = TabTap.press(id, context.resources.getResourceEntryName(id))
         assertTrue(
-            "the tab $id did not draw its screen",
+            "the tab $id did not draw its screen: ${press.summarize()} | ${press.verdict()}",
             waitUntil("the tab") { destination() == id }
         )
     }
