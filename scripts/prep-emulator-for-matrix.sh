@@ -85,7 +85,7 @@ DIR=/storage/emulated/0/Android/data/$TARGET
 # Android's rendering of a uid rather than the uid; the previous version of this guard matched that label
 # against `dumpsys package`'s `userId=`, a token this image does not print. The read came back empty, the
 # `[ -n ]` test failed, and the script printed "agrees" about a comparison it had not made — so an absent
-answer and a matching answer looked the same in the log, which is the one thing a guard must not allow.
+# answer and a matching answer looked the same in the log, which is the one thing a guard must not allow.
 DIR_UID=$(adb -s "$SERIAL" shell stat -c %u "$DIR" 2>/dev/null | tr -d '\r' | head -1)
 case "$DIR_UID" in ''|*[!0-9]*) DIR_UID= ;; esac
 APP_UID=$(adb -s "$SERIAL" shell pm list packages -U 2>/dev/null | tr -d '\r' | grep -m1 "^package:$TARGET " | sed 's/.*uid://')
