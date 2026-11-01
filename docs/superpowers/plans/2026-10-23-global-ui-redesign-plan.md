@@ -5925,3 +5925,40 @@ tests the framework's bookkeeping and not the app — it is reported, not assert
 press in the batch that follows; `TabTap`'s readings are what made that visible in this pass' own re-run rather
 than leaving it to be discovered as a mystery failure. Read `mCurrentFocus` before believing a red table that the
 operator's hands may have painted.
+
+## 20v — Task #168 continued: the device proof closes, and two readers are found to be lying
+
+**What closed.** The instrumented matrix ran to **25 classes discovered = 25 attempted, 108 tests / 108 passed,
+PASS=25 / FAIL=0 / ENVIRONMENT=0** against the unchanged production bytes
+`08838047e26e0d16c2ddd56f1e5fac9d3887c99cde480ac0307f90339e0936fc`, and the 28 frames still owed were captured from
+those same bytes through the capture script's provenance gate — all 42 in `after/s14/` are now photographs of one
+build. The October frames they replace were moved to `docs/images/ui-redesign/superseded/` with a README naming the
+build they predate. Stage 14's device proof is no longer the thing that is missing.
+
+**The matrix's crashes were a startup timeout, and load average did not see it.** The first run of the evening
+(14:38) gave 8 PASS / 2 FAIL / 15 ENVIRONMENT, and the fifteen were one cliff: every class after the eleventh died
+with `shortMsg=Process crashed.`, whose system-log reason is `ANR in com.taskplanner … failed to complete startup`,
+with `Start proc` answered 18 s after the request and ART verifying at 253 bytecodes/s. `uptime` read
+`load average: 2.44` during it. The gate now asks the direct question — `am start -W`, refuse on `Status: timeout` —
+and on a healthy guest the same build reports 6 027 ms. `adb reboot` did not fix the machine: it left the guest with
+no `system_server` for 45+ minutes while the console said `virtual device is running`; a graceful `adb emu kill`
+plus a relaunch with the original command line booted in 90 s. Read the running process's command line before
+stopping it, and ask before stopping an emulator you did not start.
+
+**Two readers were reporting their own failures as the app's.** First `TabTap`: `NavIdentity.readings()` answers
+with an empty list when its own `runOnMainSync` read throws, so eight seconds of settle polling is indistinguishable
+from an app that would not move — and the read taken one step later said the app had been on the pressed tab's
+destination all along. The reader now carries whether the input system accepted the gesture, whether the window held
+input focus, and polls-run against polls-unread, and `verdict()` distinguishes `INPUT-NOT-DELIVERED`, `NO-FOCUS`,
+`UNREAD` and `MOVED-UNOBSERVED` before it will say `PRESS-REFUSED`. Second `CalendarLocaleTest`: its oracle for
+"what day does the device open its week" read `instrumentation.context.resources.configuration`, which lives in the
+target's process and therefore follows the app's own language choice — so the test compared the app with itself and
+passed or failed depending on which class ran first. Both readers now take the device from
+`Settings.System`'s stored `system_locales`, and the test asserts on every run that the oracle did not move when the
+app changed language, so the property is measured rather than trusted.
+
+**For any later stage.** A diagnostic field that has the same value in the green captures and the red ones is
+decoration, not evidence — grep it across both before reasoning from it (`accessibilityCopies=0` for bottom-nav item
+ids is constant on this image). And when a fix's first attempt fails the assertion you wrote to prove the fix, write
+that assertion into the test instead of deleting it: it is what caught `Resources.getSystem()` riding the same
+configuration.

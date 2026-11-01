@@ -572,12 +572,104 @@ layout changed, and are not evidence about it).
 lint 0 errors / 149 warnings; `check-localization.py` pass. CI on `d7eb9ae` is run 41272737643 (one job, 16 of 16
 steps) and covers JVM, lint and the localization gate — not the device.
 
-**Baseline, re-measured here rather than carried over:** 130 JVM classes / 1640 tests / 0 failures / 0 skipped;
-lint 0 errors / 149 warnings; `check-localization.py` pass. CI on `d7eb9ae` is run 41272737643 (one job, 16 of 16
-steps) and covers JVM, lint and the localization gate — not the device.
+**Google Sign-In remains `BLOCKED — Firebase project / OAuth configuration required`.**
 
-**Google Sign-In remains `BLOCKED — Firebase project / OAuth configuration required`.** **Stage 15 (import from
-Google Keep) is next. Stage 8b is not scheduled and was not started.**
+## 14.16 The device proof closes, on one build, the same evening (task #168 continued)
+
+**Status: Stage 14's device proof is complete — 25 instrumented classes / 108 tests, every one passing, and 42
+frames from the same bytes. What is open after this section is named in it, and none of it is the navigation
+defect §14.15 chased.**
+
+The section that §14.15 left as "a quantity, not a mystery" turned out to need both: the quantity came from a
+device that stayed healthy, and getting one required finding out that the mystery had been pointed at the wrong
+thing twice.
+
+**The 14:38 matrix, and what its fifteen crashes actually were.** Discovery 25 = 25, one class per instrumentation
+process, on `taskplanner_avd` / `emulator-5584` / API 35 against the unchanged production bytes
+`08838047e26e0d16c2ddd56f1e5fac9d3887c99cde480ac0307f90339e0936fc`: **8 PASS / 2 FAIL / 15 ENVIRONMENT**. The
+fifteen were not scattered: the first eleven classes produced verdicts, and every class after them died at startup.
+The reason was in the system log beside each one — `ANR in com.taskplanner / Reason: Process … failed to complete
+startup` — with `Start proc` answered **18 s** after the request, ART verifying `TaskPlannerApplication.onCreate()`
+at 253 bytecodes/s and `getExecutor()` at `0.00 bytecodes/s`, the guest at `69% kernel + 21% softirq`, and
+`am start -W` returning `Status: timeout` at 30 s while the window took focus at t+40 s. `uptime` read
+`load average: 2.44` during that. The gate had been reading a proxy; it now asks the question
+(`run-instrumented-classes.sh` refuses with exit 8 when the app cannot start), and the same measurement on a
+healthy guest is **6 027 ms / 6 538 ms** to the same screen.
+
+**The AVD had to be restarted, not rebooted.** `adb reboot` left the guest running for 45+ minutes with
+`sys.boot_completed` unset, no `system_server`, `pm` answering `Can't find service: package`, and the console
+insisting `virtual device is running`. A graceful `adb emu kill` and a relaunch with the original command line
+(`-avd taskplanner_avd -port 5584 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot`, read
+off the running process before it was stopped) booted in **90 s**. Nothing was wiped; the app's APK was still
+`08838047e26e…` on `/data/app` afterwards, re-read before the matrix ran.
+
+**The lost press came back, and it was not the oversleep story.** Two classes failed in that matrix —
+`ProfileNavigationRestorationTest` (2 of 2) and `TabPressIdentityInstrumentedTest` (1 of 1) — with
+`click moved=false, tightTapTried=true moved=false … mainThreadRoundTrip=38ms` and `81ms`: a main thread that
+answered in under a tenth of a second cannot have stretched a 400 ms gesture, so §14.15's answer did not cover
+this. Reading the captures against each other found the third cause, and it belonged to the harness:
+`NavIdentity.readings()` returns an **empty list** when its own read fails, so eight seconds of settle polling is
+indistinguishable from an app that would not move — and in the same run, the read taken one step later reported
+`destination navigation_tasks->navigation_profile`, i.e. the app had moved. A second contributor: the reader took
+`firstOrNull { lifecycle == RESUMED }`, which during a `recreate()` can be the outgoing activity, whose controller
+really does still hold the old destination. `TabTap` now carries whether the input system accepted the gesture,
+whether the window held input focus, and polls-run against polls-unread, and its verdict names which of
+`INPUT-NOT-DELIVERED`, `NO-FOCUS`, `UNREAD`, `MOVED-UNOBSERVED` is present, reserving `PRESS-REFUSED` for
+injected + focused + readable + unchanged. With that, `TabPressIdentityInstrumentedTest` is `OK (1 test)`: six
+presses, all `click moved=true … windowFocus true->true … settle 1 polls 0 unread`, **zero** `Overslept` lines and
+**zero** tooltip windows in the capture, and the re-selection pop-back reached on the device
+(`destination navigation_settings->navigation_profile`). Production code is still untouched, because the readings
+still do not show a navigation defect.
+
+**A field that never varied was being read as evidence.** `accessibilityCopies=0` appeared identically in the green
+captures, so "the accessibility tree holds no such node" says nothing about a refusal — it is how this Material bar
+exposes its items on this image. Recorded so nobody reasons from it again.
+
+**The locale test was comparing the app with itself.** The final matrix's only failure, before the fix below, was
+`CalendarLocaleTest.systemDefaultLeavesTheDeviceAnswering`: `expected:<MONDAY> but was:<SUNDAY>` — where SUNDAY was
+the app correctly following an `en-US` device and MONDAY was the test's own oracle, which read
+`instrumentation.context.resources.configuration`: the instrumentation context lives in the target's process, and a
+per-app locale is applied to that process, so the oracle followed the language a previous class had chosen. Run
+alone, the method passed — both sides wrong together. Pointing the oracle at the framework's stored locale
+(`system_locales`, the key `adb shell settings get system system_locales` answers) made the disagreement visible at
+once, and the first attempt at fixing it — `Resources.getSystem().configuration` — failed the new assertion that
+the oracle must not move when the app changes language, which is why that assertion is now in the test instead of
+in a comment. Both the oracle and `applyLocale`'s settling condition read one helper over a source the app cannot
+move. **No production change was justified**: with a fixed oracle the app answers the device's own day after
+handing its choice back. What is recorded as open is the other direction — one class run failed at "while the app
+holds Russian its calendar opens where Russian opens it", which `applyLocale`'s wait did not cover, and it has not
+reproduced in the solo run, the class run before it, or the full matrix after it.
+
+**The matrix, on the bytes everything else on this page names.** 25 discovered = 25 attempted, **PASS=25,
+FAIL=0, ENVIRONMENT=0, NOT-RUN=0**, 108 tests / 108 passed, one instrumentation process per class, every row
+carrying the installed APK's sha `08838047e26e…`, the guest at load 1.64 and `MemAvailable 1 227 116 kB` before it
+and 6.50 after, `ANR in com.taskplanner` zero in the run, host 3 177 MB free. `build/matrix-run-168c.log`.
+
+**The frames: 42 of 42 from one build.** The 28 that were owed — `en 320 light 1.3`, `ru 393 light 1.0`,
+`ru 393 dark 1.0`, `ru 320 light 1.3` — were captured through the same provenance gate (`local and installed
+agree` printed twice, once per run), and they settle what the October frames could not: «Ноябрь 2…» truncates at
+320dp/1.3 **and “November…” truncates identically at the same settings**, so the heading cut is the width and the
+scale's and stays `ОТКРЫТО, не Stage 14`; at 393dp/1.0 «Ноябрь 2026» fits whole; the editor footer draws
+«СОХРАНИТЬ» on one line; the due field reads «29 окт. 2026 г.»; the Russian week opens Monday and the English
+Sunday from the same build; and all five bottom-bar labels fit at the narrowest configuration. The 28 October
+frames were moved to `docs/images/ui-redesign/superseded/` with a README naming the build they predate, not
+deleted — and, stated plainly because it is a mistake worth keeping in the record: the `git mv` of those files was
+swept into commit `6dda399`, whose message is about the press reader and never mentions them. The moves are
+published, so the history stays as it is.
+
+**Baseline re-measured for this section** (from `build/gates-168.log`, run after the androidTest changes and
+before the docs): 130 JVM classes / 1640 tests / 0 failures / 0 skipped; `check-localization.py` pass (932 Russian
+strings, 48 plurals, 0 missing); lint **0 errors / 147 warnings** — two fewer than the 149 §14.14 and §14.15
+recorded, counted the same way (`severity="Warning"` in `lint-results-debug.xml`) on the same variant. The
+difference is not attributed: nothing in this pass edited a file the warnings sit in, and the two lines were not
+tracked down, so both numbers are printed with the run they came from rather than one of them being quietly
+written over. CI covers the same gates on the published SHA.
+
+**What is still open after Stage 14, with none of it hidden by the green table:** Google Sign-In
+`BLOCKED — Firebase project / OAuth configuration required`; the API 24–32 locale behaviour, which stays proven
+structurally and on the JVM because this device is API 35; the calendar heading at 320dp/1.3, open as a
+width-and-scale defect; and the one unreproduced locale assertion above, filed as open rather than smoothed over.
+**Stage 15 (import from Google Keep) is next. Stage 8b is not scheduled and was not started.**
 
 ---
 
