@@ -62,6 +62,43 @@ FOCUS=$(adb -s "$SERIAL" shell dumpsys window 2>/dev/null | grep -m1 mCurrentFoc
 ANRS=$(adb -s "$SERIAL" shell dumpsys dropbox 2>/dev/null | grep -cE "_anr" || true)
 printf 'device: load average %s, MemAvailable %s kB, %s ANR records in dropbox\n' "${LOAD:-?}" "${MEM:-?}" "${ANRS:-?}"
 printf 'device: %s\n' "${FOCUS:-no window reported}"
+
+# The rest of what a matrix run has to say about the machine it just measured. Each of these lines caught a
+# different false failure in the completion pass: `sys.boot_completed` because a device still starting up
+# answers `Process crashed`; the crash buffer because `DeadSystemException` across six processes is the system's
+# news and not the app's; the System UI pid because an ANR'ing `com.android.systemui` holds input focus while
+# the app's own process is perfectly alive; and the installed APK's hash because a matrix of a binary nobody
+# built is not evidence about a build.
+BOOT=$(adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+CRASH=$(adb -s "$SERIAL" logcat -b crash -d 2>/dev/null | grep -cE "FATAL EXCEPTION|DeadSystemException|Process crashed" || true)
+SYSTEMUI=$(adb -s "$SERIAL" shell pidof com.android.systemui 2>/dev/null | tr -d '\r')
+APPUID=$(adb -s "$SERIAL" shell dumpsys package "$TARGET" 2>/dev/null | tr -d '\r' | grep -m1 -oE 'userId=[0-9]+' | cut -d= -f2)
+APPPID=$(adb -s "$SERIAL" shell pidof "$TARGET" 2>/dev/null | tr -d '\r')
+HOST_FREE=$(powershell.exe -NoProfile -Command '$os=Get-CimInstance Win32_OperatingSystem; [int]($os.FreePhysicalMemory/1024)' 2>/dev/null | tr -d '\r' | tail -1)
+printf 'device: boot_completed=%s systemui_pid=%s app_uid=%s app_pid=%s crash-buffer-lines=%s\n' \
+  "${BOOT:-?}" "${SYSTEMUI:-absent}" "${APPUID:-?}" "${APPPID:-not running}" "${CRASH:-?}"
+printf 'host:   free %s MB\n' "${HOST_FREE:-?}"
+
+# Provenance, refused rather than noted. The frames matrix has had this check since the completion pass found
+# its two halves came from two different builds; the instrumented matrix deserved the same guard, because the
+# sentence "the suite is green on this build" is only worth printing if the build is named by its bytes.
+APK="$ROOT/app/build/outputs/apk/debug/app-debug.apk"
+DEV_PATH=$(adb -s "$SERIAL" shell pm path "$TARGET" 2>/dev/null | head -1 | tr -d '\r' | sed 's/^package://')
+DEV_SHA=$(adb -s "$SERIAL" shell sha256sum "$DEV_PATH" 2>/dev/null | tr -d '\r' | cut -d' ' -f1)
+LOCAL_SHA=$(sha256sum "$APK" 2>/dev/null | cut -d' ' -f1)
+printf 'apk:    installed %s\n' "${DEV_SHA:-none} at ${DEV_PATH:-nowhere}"
+printf 'apk:    built     %s\n' "${LOCAL_SHA:-$APK missing}"
+if [ -z "$DEV_PATH" ]; then
+  echo "REFUSED: $TARGET is not installed on $SERIAL. Install the build the matrix is meant to describe." >&2
+  exit 7
+fi
+if [ -n "$LOCAL_SHA" ] && [ "$LOCAL_SHA" != "$DEV_SHA" ]; then
+  echo "REFUSED: the installed app is not $APK." >&2
+  echo "  A class run against different bytes is not a result about this build — reinstall" >&2
+  echo "  (adb -s $SERIAL install -r -g app/build/outputs/apk/debug/app-debug.apk) and run again." >&2
+  exit 7
+fi
+
 case "$FOCUS" in
   *"Application Not Responding"*|*"not responding"*)
     echo "REFUSED: an error dialog holds the device's input focus. Every tap this run injects would land on it," >&2
@@ -118,8 +155,13 @@ done
 if [ -z "$CLASSES" ]; then echo "REFUSED: no class matched ${FILTERS[*]:-<none>}" >&2; exit 4; fi
 
 printf '%s\n' "serial=$SERIAL avd=$AVD api=$API classes=$(echo $CLASSES | wc -w)"
-echo "| Test class | Tests | Passed | Failed | Exit code | Log |"
-echo "|---|---:|---:|---:|---:|---|"
+# Four verdicts, not two. The completion pass' table printed a class that produced no verdict line at all as
+# `? tests, 0 failed`, which a reader can only take as "nothing went wrong" — while the log behind it said
+# `Process crashed`. A missing result is not a pass, and a machine that died is not an app that failed, so the
+# row now says which of the four it was.
+echo "| Test class | Tests | Passed | Failed | Verdict | Exit | APK (installed) | Log |"
+echo "|---|---:|---:|---:|---|---:|---|---|"
+PASS_N=0; FAIL_N=0; ENV_N=0; ATTEMPTED=0
 
 for c in $CLASSES; do
   short=${c##*.}
@@ -150,13 +192,27 @@ for c in $CLASSES; do
   fi
   [ -z "$failed" ] && failed=0
   passed=$(( ${tests:-0} - failed ))
-  verdict="NO VERDICT LINE"
-  [ -n "$tests" ] && verdict="$tests tests, $failed failed"
-  echo "| $short | ${tests:-?} | $passed | $failed | $code | build/instrumented-full/$short.log |"
-  if [ "$code" -ne 0 ] || [ "$verdict" = "NO VERDICT LINE" ]; then
-    printf '   %s :: tail: %s\n' "$short" "$(tail -3 "$log" | tr '\n' ' ' | cut -c1-300)" >&2
+  ATTEMPTED=$((ATTEMPTED + 1))
+  # A verdict line outranks a crash: a class that reported its failures and then died during teardown reported
+  # real results. Only a run with no verdict line at all can be the machine's story rather than the app's.
+  if [ -n "$tests" ] && [ "$failed" -gt 0 ]; then
+    kind=FAIL; FAIL_N=$((FAIL_N + 1)); verdict="FAIL — $failed of $tests failed"
+  elif [ -n "$tests" ]; then
+    kind=PASS; PASS_N=$((PASS_N + 1)); verdict="PASS — $tests of $tests"
+  elif grep -qaE "Process crashed|INSTRUMENTATION_FAILED|Unable to find instrumentation info|SecurityException|adb: device (not found|offline)" "$log"; then
+    kind=ENVIRONMENT; ENV_N=$((ENV_N + 1))
+    verdict="ENVIRONMENT — $(grep -aoE 'Process crashed|INSTRUMENTATION_FAILED[^\"]{0,60}|Unable to find instrumentation info[^\"]{0,60}|SecurityException[^\"]{0,60}' "$log" | head -1)"
+  else
+    kind=ENVIRONMENT; ENV_N=$((ENV_N + 1)); verdict="ENVIRONMENT — no verdict line (exit $code)"
+  fi
+  echo "| $short | ${tests:-?} | $passed | $failed | $kind | $code | ${DEV_SHA:0:12}… | build/instrumented-full/$short.log |"
+  if [ "$kind" != PASS ]; then
+    printf '   %s :: %s :: tail: %s\n' "$short" "$verdict" "$(tail -3 "$log" | tr '\n' ' ' | cut -c1-300)" >&2
   fi
 done
+DISCOVERED=$(echo $CLASSES | wc -w)
+printf '=== summary: discovered=%s attempted=%s PASS=%s FAIL=%s ENVIRONMENT=%s NOT-RUN=%s\n' \
+  "$DISCOVERED" "$ATTEMPTED" "$PASS_N" "$FAIL_N" "$ENV_N" "$((DISCOVERED - ATTEMPTED))"
 echo "=== per-class logs in $OUT ==="
 # The same reading as the pre-flight, taken after the work, because a run that starts healthy and degrades is
 # exactly the run whose failures must not be read as defects. dropbox timestamps are the device's own clock,

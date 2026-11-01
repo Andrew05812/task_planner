@@ -29,6 +29,11 @@ set -u
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 SERIAL=${1:-emulator-5584}
 REBOOT=${2:-}
+TARGET=com.taskplanner
+# The stale-directory check below reads this app's external files directory. Without TARGET set it ran against
+# `/storage/emulated/0/Android/data/` — the parent of every app's directory — compared a root owner to an empty
+# uid, printed the "agrees" line, and did nothing at all. The EACCES guard this script documents was therefore
+# inert on every run until now, which is how a script passes while proving nothing.
 CHURN=(
   com.google.android.apps.wellbeing
   com.google.android.googlequicksearchbox
@@ -77,13 +82,17 @@ fi
 # by the runs that write them.
 DIR=/storage/emulated/0/Android/data/$TARGET
 OWNER=$(adb -s "$SERIAL" shell stat -c %U "$DIR" 2>/dev/null | tr -d '')
-UID=$(adb -s "$SERIAL" shell dumpsys package "$TARGET" 2>/dev/null | tr -d '' | grep -m1 -oE 'userId=[0-9]+' | cut -d= -f2)
-if [ -n "$OWNER" ] && [ -n "$UID" ] && [ "$OWNER" != "u${UID}" ] && [ "$OWNER" != "root" ]; then
-  echo "stale: $DIR is owned by $OWNER, the app is u$UID — removing it so the app recreates its own"
+# Not `UID`: bash keeps that name as a readonly variable, so the assignment failed with
+# `UID: readonly variable`, the comparison below ran against the *host’s* uid instead of the app’s,
+# and the script deleted a directory that did agree with the app. A check whose variable cannot be set is
+# worse than no check at all, because it acts.
+APP_UID=$(adb -s "$SERIAL" shell dumpsys package "$TARGET" 2>/dev/null | tr -d '' | grep -m1 -oE 'userId=[0-9]+' | cut -d= -f2)
+if [ -n "$OWNER" ] && [ -n "$APP_UID" ] && [ "$OWNER" != "u${APP_UID}" ] && [ "$OWNER" != "root" ]; then
+  echo "stale: $DIR is owned by $OWNER, the app is u$APP_UID — removing it so the app recreates its own"
   adb -s "$SERIAL" shell am force-stop "$TARGET" >/dev/null 2>&1
   adb -s "$SERIAL" shell rm -rf "$DIR" >/dev/null 2>&1
 else
-  echo "external files dir: ${OWNER:-absent} agrees with the app's uid ${UID:-?}"
+  echo "external files dir: ${OWNER:-absent} agrees with the app's uid ${APP_UID:-?}"
 fi
 
 # The screen has to be awake and unlocked for a tap to reach the app, and after a reboot the keyguard is up.
