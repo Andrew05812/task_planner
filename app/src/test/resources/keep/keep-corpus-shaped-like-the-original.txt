@@ -1,0 +1,439 @@
+[X] 🟥Topic 00 
+ [X] Item 000
+ [X] 🟩Item 001
+ [X] 🟦Item 002
+ [X] ⭐Item 003
+ [X] 📌Item 004
+ [X] Repeated errand 01
+ [ ] 
+ [X] ✅Item 006
+ [X] 🔁Item 007
+ [X] 🟥Item 008
+ [X] Item 009
+ [X] 🟩Item 010
+ [X] Repeated errand 01
+ [ ] 
+ [X] 🟦Item 012
+ [X] ⭐Item 013
+ [X] 📌Item 014
+ [X] ✅Item 015
+ [X] 🔁Item 016
+ [X] Repeated errand 01
+ [ ] 
+ [X] 🟥Item 018
+ [X] Item 019
+ [X] 🟩Item 020
+ [X] 🟦Item 021
+ [X] ⭐Item 022
+ [X] Repeated errand 02
+ [ ] 
+ [X] 📌Item 024
+ [X] ✅Item 025
+ [X] 🔁Item 026
+ [X] 🟥Item 027
+ [X] Item 028
+ [X] Repeated errand 02
+ [ ] 
+ [X] 🟩Item 030
+ [X] 🟦Item 031
+ [X] ⭐Item 032
+ [X] 📌Item 033
+ [X] Repeated errand 02
+ [X] ✅Item 035
+ [ ] 
+ [X] 🔁Item 036
+ [X] 🟥Item 037
+ [X] Item 038
+ [X] 🟩Item 039
+ [X] Repeated errand 03
+ [X] 🟦Item 041
+ [ ] 
+ [X] ⭐Item 042
+ [X] 📌Item 043
+ [X] ✅Item 044
+ [X] 🔁Item 045
+ [X] Repeated errand 03
+ [X] 🟥Item 047
+ [ ] 
+ [X] Item 048
+ [X] 🟩Item 049
+ [X] 🟦Item 050
+ [X] ⭐Item 051
+ [X] Repeated errand 03
+ [X] 📌Item 053
+ [ ] 
+ [X] ✅Item 054
+ [X] 🔁Item 055
+ [X] Item 056 - 08:00
+ [X] Item 057 - 09:07
+ [X] Repeated errand 04
+ [X] Item 059 - 10:14
+ [ ] 
+ [X] Item 060 - 11:21
+ [X] Item 061 - 12:28
+ [X] Item 062 - 13:35
+ [X] Item 063 - 14:42
+ [X] Repeated errand 04
+ [X] Item 065 - 15:49
+ [ ] 
+ [X] Item 066 - 16:56
+ [X] Item 067 - 17:03
+ [X] Item 068 - 18:10
+ [X] Repeated errand 04
+ [X] Item 070 - 19:17
+ [X] Item 071 - 08:24
+ [ ] 
+ [X] Item 072 - 09:31
+ [X] Item 073 - 10:38
+ [X] Item 074 - 11:45
+ [X] Repeated errand 05
+ [X] Item 076 - 12:52
+ [X] Item 077 - 13:59
+ [ ] 
+ [X] Item 078 - 14:06
+ [X] Item 079 - 15:13
+ [X] Item 080 - 16:20
+ [X] Repeated errand 05
+ [X] Item 082 - 17:27
+ [X] Item 083 - 18:34
+ [ ] 
+ [X] Item 084 - 19:41
+ [X] Item 085 - 08:48
+ [X] Item 086 - 09:55
+ [X] Repeated errand 05
+ [X] Item 088 - 10:02
+ [X] Item 089 - 11:09
+ [ ] 
+ [X] Item 090 - 12:16
+ [X] Item 091 - 13:23
+ [X] Item 092 - 14:30
+ [X] Repeated errand 06
+ [X] Item 094 - 15:37
+[X] Topic 01 - 16:44 
+ [X] Item 095 - 17:51
+ [ ] 
+ [X] Item 096 - 18:58
+ [X] Item 097 - 19:05
+ [X] Repeated errand 06
+ [X] Item 099 - 08:12
+ [X] Item 100 - 09:19
+[X] Topic 02 - 10:26 
+ [X] Item 101 - 11.06.26
+ [ ] 
+ [X] Item 102 - 12.07.26
+ [X] Item 103 - 13.08.26
+ [X] Repeated errand 06
+ [X] Item 105 - 14.09.26
+ [X] Item 106 - a place, a number and a comma, kept verbatim
+[X] Topic 03 - a place, a number and a comma, kept verbatim 
+ [X] Item 107 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 108 - a place, a number and a comma, kept verbatim
+ [X] Item 109 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 07
+ [X] Item 111 - a place, a number and a comma, kept verbatim
+ [X] Item 112 - a place, a number and a comma, kept verbatim
+[X] Topic 04 - a place, a number and a comma, kept verbatim 
+ [X] Item 113 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 114 - a place, a number and a comma, kept verbatim
+ [X] Item 115 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 07
+ [X] Item 117 - a place, a number and a comma, kept verbatim
+ [X] Item 118 - a place, a number and a comma, kept verbatim
+[X] Topic 05 - a place, a number and a comma, kept verbatim 
+ [X] Item 119 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 120 - a place, a number and a comma, kept verbatim
+ [X] Item 121 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 07
+ [X] Item 123 - a place, a number and a comma, kept verbatim
+ [X] Item 124 - a place, a number and a comma, kept verbatim
+[X] Topic 06 - a place, a number and a comma, kept verbatim 
+ [X] Item 125 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 126 - a place, a number and a comma, kept verbatim
+ [X] Item 127 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 08
+ [X] Item 129 - a place, a number and a comma, kept verbatim
+ [X] Item 130 - a place, a number and a comma, kept verbatim
+[X] Topic 07 - a place, a number and a comma, kept verbatim 
+ [X] Item 131 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 132 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 08
+ [X] Item 134 - a place, a number and a comma, kept verbatim
+ [X] Item 135 - a place, a number and a comma, kept verbatim
+ [X] Item 136 - a place, a number and a comma, kept verbatim
+[X] Topic 08 - a place, a number and a comma, kept verbatim 
+ [X] Item 137 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 138 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 08
+ [X] Item 140 - a place, a number and a comma, kept verbatim
+ [X] Item 141 - a place, a number and a comma, kept verbatim
+ [X] Item 142 - a place, a number and a comma, kept verbatim
+ [X] Item 143 - a place, a number and a comma, kept verbatim
+ [ ] 
+[X] Topic 09 - a place, a number and a comma, kept verbatim 
+ [X] Item 144 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 09
+ [X] Item 146 - a place, a number and a comma, kept verbatim
+ [X] Item 147 - a place, a number and a comma, kept verbatim
+ [X] Item 148 - a place, a number and a comma, kept verbatim
+ [X] Item 149 - a place, a number and a comma, kept verbatim
+ [ ] 
+[X] Topic 10 - a place, a number and a comma, kept verbatim 
+ [X] Item 150 - a place, a number and a comma, kept verbatim
+ [X] Repeated errand 09
+ [X] Item 152 - a place, a number and a comma, kept verbatim
+ [X] Item 153 - a place, a number and a comma, kept verbatim
+ [X] Item 154 - a place, a number and a comma, kept verbatim
+ [X] Item 155 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 156 - a place, a number and a comma, kept verbatim
+[X] Topic 11 - a place, a number and a comma, kept verbatim 
+ [X] Repeated errand 09
+ [X] Item 158 - a place, a number and a comma, kept verbatim
+ [X] Item 159 - a place, a number and a comma, kept verbatim
+ [X] Item 160 - a place, a number and a comma, kept verbatim
+ [X] Item 161 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Item 162 - a place, a number and a comma, kept verbatim
+[X] Topic 12 - a place, a number and a comma, kept verbatim 
+ [X] Repeated errand 10
+ [X] Item 164 - a place, a number and a comma, kept verbatim
+ [X] Item 165 - a place, a number and a comma, kept verbatim
+ [X] Item 166 - a place, a number and a comma, kept verbatim
+ [X] Item 167 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Repeated errand 10
+ [X] Item 169 - a place, a number and a comma, kept verbatim
+[X] Topic 13 - a place, a number and a comma, kept verbatim 
+ [X] Item 170 - a place, a number and a comma, kept verbatim
+ [X] Item 171 - a place, a number and a comma, kept verbatim
+ [X] Item 172 - a place, a number and a comma, kept verbatim
+ [X] Item 173 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Repeated errand 10
+ [X] Item 175 - a place, a number and a comma, kept verbatim
+[X] Topic 14 - a place, a number and a comma, kept verbatim 
+ [X] Item 176 - a place, a number and a comma, kept verbatim
+ [X] Item 177 - a place, a number and a comma, kept verbatim
+ [X] Item 178 - a place, a number and a comma, kept verbatim
+ [X] Item 179 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Repeated errand 11
+ [X] Item 181 - a place, a number and a comma, kept verbatim
+ [X] Item 182 - a place, a number and a comma, kept verbatim
+[X] Topic 15 - a place, a number and a comma, kept verbatim 
+ [X] Item 183 - a place, a number and a comma, kept verbatim
+ [X] Item 184 - a place, a number and a comma, kept verbatim
+ [X] Item 185 - a place, a number and a comma, kept verbatim
+ [ ] 
+ [X] Repeated errand 11
+ [X] Item 187 - a place, a number and a comma, kept verbatim
+ [X] Item 188 - a place, a number and a comma, kept verbatim
+[X] Topic 16 - a place, a number and a comma, kept verbatim 
+ [X] Item 189 — длинная строка экспорта, длинная строка экспорта, длинная строка экспорта, длинная строка экспорта, длинная строка экспорта, длинная строка экспорта, длиннаяя
+ [X] Item 190
+ [X] Item 191
+ [ ] 
+ [X] Repeated errand 11
+ [X] Item 193
+ [X] Item 194
+ [X] Item 195
+[X] Topic 17 
+ [X] Item 196
+ [X] Repeated errand 12
+ [ ] 
+ [X] Item 198
+ [X] Item 199
+ [X] Item 200
+ [X] Item 201
+[X] Topic 18 
+ [X] Item 202
+ [X] Repeated errand 12
+ [ ] 
+ [X] Item 204
+ [X] Item 205
+ [X] Item 206
+ [X] Item 207
+ [X] Item 208
+[X] Topic 19 
+ [X] Repeated errand 12
+ [ ] 
+ [X] Item 210
+ [X] Item 211
+ [X] Item 212
+ [X] Item 213
+ [X] Item 214
+[X] Topic 20 
+ [X] Repeated errand 13
+ [ ] 
+ [X] Item 216
+ [X] Item 217
+ [X] Item 218
+ [X] Item 219
+ [X] Item 220
+ [X] Repeated errand 13
+ [ ] 
+[X] Topic 21 
+ [X] Item 222
+ [X] Item 223
+ [X] Item 224
+ [X] Item 225
+ [X] Item 226
+ [X] Repeated errand 13
+ [ ] 
+[X] Topic 22 
+ [X] Item 228
+ [X] Item 229
+ [X] Item 230
+ [X] Item 231
+ [X] Repeated errand 14
+ [X] Item 233
+ [ ] 
+ [X] Item 234
+[X] Topic 23 
+ [X] Item 235
+ [X] Item 236
+ [X] Item 237
+ [X] Repeated errand 14
+ [X] Item 239
+ [ ] 
+ [X] Item 240
+[X] Topic 24 
+ [X] Item 241
+ [X] Item 242
+ [X] Item 243
+ [X] Repeated errand 14
+ [X] Item 245
+ [ ] 
+ [X] Item 246
+ [X] Item 247
+[X] Topic 25 
+ [X] Item 248
+ [X] Item 249
+ [X] Repeated errand 15
+ [X] Item 251
+ [ ] 
+ [X] Item 252
+ [X] Item 253
+[X] Topic 26 
+ [X] Item 254
+ [X] Item 255
+ [X] Repeated errand 15
+ [X] Item 257
+ [ ] 
+ [X] Item 258
+ [X] Item 259
+ [X] Item 260
+[X] Topic 27 
+ [X] Repeated errand 15
+ [ ] Item 262
+ [ ] Item 263
+ [ ] 
+ [ ] Item 264
+ [ ] Item 265
+ [ ] Item 266
+[X] Topic 28 
+ [ ] Repeated errand 16
+ [ ] Item 268
+ [ ] Item 269
+ [ ] 
+ [ ] Item 270
+ [ ] Item 271
+ [ ] Item 272
+ [ ] Repeated errand 16
+[X] Topic 29 
+ [ ] Item 274
+ [ ] Item 275
+ [ ] 
+ [ ] Item 276
+ [ ] Item 277
+ [ ] Item 278
+ [ ] Repeated errand 16
+[X] Topic 30 
+ [ ] Item 280
+ [ ] Item 281
+ [ ] 
+ [ ] Item 282
+ [ ] Item 283
+ [ ] Item 284
+ [ ] Repeated errand 17
+ [ ] Item 286
+[X] Topic 31 
+ [ ] Item 287
+ [ ] 
+ [ ] Item 288
+ [ ] Item 289
+ [ ] Item 290
+ [ ] Repeated errand 17
+ [ ] Item 292
+[X] Topic 32 
+ [ ] Item 293
+ [ ] 
+ [ ] Item 294
+ [ ] Item 295
+ [ ] Repeated errand 17
+ [ ] Item 297
+ [ ] Item 298
+ [ ] Item 299
+ [ ] 
+[X] Topic 33 
+ [ ] Item 300
+ [ ] Item 301
+ [ ] Repeated errand 18
+ [ ] Item 303
+ [ ] Item 304
+ [ ] Item 305
+ [ ] 
+[ ] Topic 34 
+ [ ] Item 306
+ [ ] Item 307
+ [ ] Repeated errand 18
+ [ ] Item 309
+ [ ] Item 310
+ [ ] Item 311
+ [ ] 
+ [ ] Item 312
+[ ] Topic 35 
+ [ ] Item 313
+ [ ] Repeated errand 19
+ [ ] Item 315
+ [ ] Item 316
+ [ ] Item 317
+ [ ] 
+ [ ] Item 318
+[ ] Topic 36 
+ [ ] Item 319
+ [ ] Repeated errand 19
+ [ ] Item 321
+ [ ] Item 322
+ [ ] Item 323
+ [ ] 
+ [ ] Item 324
+ [ ] Item 325
+[ ] Topic 37 
+[ ] Topic 38 
+[ ] Topic 39 
+[ ] Topic 40 
+[ ] Topic 41 
+[ ] Topic 42 
+[ ] Topic 43 
+[ ] Topic 44 
+[ ] Topic 45 
+[ ] Topic 46 
+[ ] Topic 47 
+[ ] Topic 48 
+[ ] Topic 49 
+[ ] Topic 50 
+[ ] Topic 51 
+[ ] Topic 52 
+[ ] Topic 53 
+[ ] Topic 54 
+[ ] Topic 55 
+[X] 
+[X] 
+[X] 
