@@ -1,5 +1,6 @@
 package com.taskplanner.ui.calendar
 
+import android.provider.Settings
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.test.core.app.ActivityScenario
@@ -145,7 +146,20 @@ class CalendarLocaleTest {
         // measured on this device, can run past a minute while the arithmetic has already settled. This method's
         // claim is about which day a week opens on, so that is what it waits for. `LanguageSwitchInstrumentedTest`
         // owns the claim about what the screen shows after System default.
+        // The oracle is only worth trusting if the app cannot move it. This is the assertion that says so: the
+        // device's first day is read before the choice, and again while the app holds Russian, and it has to be
+        // the same day — while the app's own arithmetic has to have moved. Read the other way round, this is the
+        // exact defect the matrix caught: an oracle that followed the app's language made a correct app look wrong.
+        val deviceStart = deviceWeekStart()
         applyLocale("ru")
+        assertEquals(
+            "the oracle moved when the app changed language, so it is reading the app and not the device",
+            deviceStart, deviceWeekStart()
+        )
+        assertEquals(
+            "while the app holds Russian its calendar opens where Russian opens it",
+            DayOfWeek.MONDAY, CalendarMath.firstDayOfWeek()
+        )
         applyLocale("")
 
         assertEquals(
@@ -154,28 +168,21 @@ class CalendarLocaleTest {
         )
         assertEquals(
             "and the week opens where the device opens it, not where the language it just left did",
-            deviceWeekStart(), CalendarMath.firstDayOfWeek()
+            deviceStart, CalendarMath.firstDayOfWeek()
         )
     }
 
     // ---------------------------------------------------------------- the reading
 
     /**
-     * The device's own first day of week, read from the instrumentation package rather than the app's.
-     *
-     * The test package holds no app locale of its own, so its configuration is the system's; the target app's
-     * configuration reflects whatever language the app last chose, including in this very test. Asking the
-     * wrong one would let a leaked Russian setting look like a device that opens its week on Monday.
+     * The device's own first day of week, from [deviceLocaleTag] — the one source the app's choice cannot move.
      */
-    private fun deviceWeekStart(): DayOfWeek {
-        val deviceLocale = InstrumentationRegistry.getInstrumentation()
-            .context.resources.configuration.locales[0]
-        return java.time.temporal.WeekFields.of(deviceLocale).firstDayOfWeek
-    }
+    private fun deviceWeekStart(): DayOfWeek =
+        java.time.temporal.WeekFields.of(Locale.forLanguageTag(deviceLocaleTag())).firstDayOfWeek
 
     private fun choose(languageTags: String) {
         applyLocale(languageTags)
-        val wanted = languageTags.ifEmpty { deviceLanguageTag() }
+        val wanted = languageTags.ifEmpty { deviceLocaleTag() }
         assertTrue(
             "the window never resolved its resources in '$wanted'; the process says " +
                 "'${Locale.getDefault().toLanguageTag()}' and the window still says '${activityLanguage()}'",
@@ -203,7 +210,7 @@ class CalendarLocaleTest {
                 AppCompatDelegate.getApplicationLocales().toLanguageTags() == languageTags
             }
         )
-        val wanted = languageTags.ifEmpty { deviceLanguageTag() }
+        val wanted = languageTags.ifEmpty { deviceLocaleTag() }
         assertTrue(
             "the process default did not follow the app's choice: the app says '$languageTags' while " +
                 "Locale.getDefault() says '${Locale.getDefault().toLanguageTag()}' — the calendar reads the " +
@@ -229,9 +236,35 @@ class CalendarLocaleTest {
         return language
     }
 
-    private fun deviceLanguageTag(): String =
-        InstrumentationRegistry.getInstrumentation()
-            .context.resources.configuration.locales[0].toLanguageTag()
+    /**
+     * The language the *device* was configured with, from the place the app's own choice cannot rewrite.
+     *
+     * This is the second half of the same defect, and the two halves hid each other. `applyLocale("")` asks this
+     * for its settling condition — "wait until the process default is the device's language again" — and the
+     * oracle of `deviceWeekStart()` asked the same question of the same source. When that source was
+     * `instrumentation.context.resources.configuration`, both sides moved together with the app's Russian, so
+     * the method passed by comparing the app with itself: it waited for `ru` and expected a Monday, and called
+     * that the device. Pointing only the oracle at the framework's stored locale broke that agreement and the
+     * defect in the helper showed at once. Both now read one source that the app cannot move.
+     *
+     * Two in-process sources were tried before this one, and the assertion in
+     * [systemDefaultLeavesTheDeviceAnswering] is what proved each of them wrong rather than my reading of the
+     * docs: `instrumentation.context.resources.configuration` (the matrix of 2026-11-01 21:19 read a Monday from
+     * it on an `en-US` device) and `Resources.getSystem().configuration` (minutes later, `expected:<SUNDAY> but
+     * was:<MONDAY>` the moment the app held Russian — the system resources object rides the same configuration).
+     *
+     * Below API 33 the app's choice cannot move the process default at all (that is `AppLocale`'s own subject),
+     * so the fallback there is not a compromise: it is the device's answer.
+     */
+    private fun deviceLocaleTag(): String =
+        Settings.System.getString(
+            InstrumentationRegistry.getInstrumentation().targetContext.contentResolver,
+            // The key is `Settings.System.SYSTEM_LOCALES`, which is @hide; this is the name the setting is
+            // stored under, and `adb shell settings get system system_locales` answers through it.
+            "system_locales"
+        ).orEmpty().split(',').firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+            ?: Locale.getDefault().toLanguageTag()
+
 
     private fun resumedActivityExists(): Boolean {
         var alive = false
