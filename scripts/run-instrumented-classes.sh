@@ -72,12 +72,15 @@ printf 'device: %s\n' "${FOCUS:-no window reported}"
 BOOT=$(adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
 CRASH=$(adb -s "$SERIAL" logcat -b crash -d 2>/dev/null | grep -cE "FATAL EXCEPTION|DeadSystemException|Process crashed" || true)
 SYSTEMUI=$(adb -s "$SERIAL" shell pidof com.android.systemui 2>/dev/null | tr -d '\r')
-APPUID=$(adb -s "$SERIAL" shell dumpsys package "$TARGET" 2>/dev/null | tr -d '\r' | grep -m1 -oE 'userId=[0-9]+' | cut -d= -f2)
+# The app's uid, read as a number from `pm list packages -U`. Not from `dumpsys package`'s `userId=`: this
+# image does not print that token, so the field used to answer `?` in every header while looking like a reading.
+APPUID=$(adb -s "$SERIAL" shell pm list packages -U 2>/dev/null | tr -d '\r' | grep -m1 "^package:$TARGET " | sed 's/.*uid://')
 APPPID=$(adb -s "$SERIAL" shell pidof "$TARGET" 2>/dev/null | tr -d '\r')
 HOST_FREE=$(powershell.exe -NoProfile -Command '$os=Get-CimInstance Win32_OperatingSystem; [int]($os.FreePhysicalMemory/1024)' 2>/dev/null | tr -d '\r' | tail -1)
 printf 'device: boot_completed=%s systemui_pid=%s app_uid=%s app_pid=%s crash-buffer-lines=%s\n' \
-  "${BOOT:-?}" "${SYSTEMUI:-absent}" "${APPUID:-?}" "${APPPID:-not running}" "${CRASH:-?}"
+  "${BOOT:-?}" "${SYSTEMUI:-absent}" "${APPUID:-none}" "${APPPID:-not running}" "${CRASH:-?}"
 printf 'host:   free %s MB\n' "${HOST_FREE:-?}"
+
 
 # Provenance, refused rather than noted. The frames matrix has had this check since the completion pass found
 # its two halves came from two different builds; the instrumented matrix deserved the same guard, because the
@@ -135,6 +138,30 @@ if ! awk -v l="${LOAD1:-99}" -v m="$WAIT_FOR_LOAD" "BEGIN{exit !(l+0<=m+0)}"; th
   echo "  host, let it settle, and run again. Nothing was cleared and no process was killed to get here." >&2
   exit 6
 fi
+
+# ---------------------------------------------------------------- can the app start at all?
+# The matrix of 2026-11-01 14:38 spent its first hour answering one question twice and fifteen times: whether
+# this machine can bring the app's process up. Fourteen classes in a row ended `shortMsg=Process crashed.`, and
+# the system log held the reason for each: `ANR in com.taskplanner / Reason: Process … failed to complete
+# startup`, with the guest at 69% kernel + 21% softirq, `Start proc` 18 s after the start request, and ART
+# verifying `TaskPlannerApplication.onCreate()` at a few hundred bytecodes per second. Load average said 4.7
+# while all of that was happening — the proxy had recovered, the thing it proxies had not.
+#
+# So the gate asks the question directly, once, before it spends an hour: start the app the way the framework
+# does and read `am start -W`'s own verdict. `Status: timeout` means the activity never completed startup, and
+# every instrumented class this run could produce would be a row about that, not about the app.
+START=$(adb -s "$SERIAL" shell am start -W -n "$TARGET/.ui.MainActivity" 2>&1 | tr -d '\r')
+WAIT=$(echo "$START" | sed -n 's/^WaitTime: //p')
+if echo "$START" | grep -q "Status: timeout"; then
+  echo "REFUSED: the app did not complete startup on $SERIAL (am start -W waited ${WAIT:-?} ms and timed out)." >&2
+  echo "  Every class in this matrix would die in the framework's process-start window and be reported as a" >&2
+  echo "  crash, which says nothing about the app. The host, not the AVD, is usually the cause: the same build" >&2
+  echo "  starts in seconds when the machine is quiet. Free the host (or move the work to a quieter hour) and" >&2
+  echo "  run again. Nothing was cleared and no process was killed to get here." >&2
+  adb -s "$SERIAL" shell am force-stop "$TARGET" >/dev/null 2>&1
+  exit 8
+fi
+printf 'startup: MainActivity came up in %s ms — the device can host an instrumentation process\n' "${WAIT:-?}"
 
 # ---------------------------------------------------------------- the classes, read off the source
 # Discovered rather than listed, because a class added to the tree and not to this file is a class that never

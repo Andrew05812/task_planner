@@ -81,18 +81,26 @@ fi
 # the app's own external scratch area on this project's AVD: proof PDFs and the frame shots, both regenerated
 # by the runs that write them.
 DIR=/storage/emulated/0/Android/data/$TARGET
-OWNER=$(adb -s "$SERIAL" shell stat -c %U "$DIR" 2>/dev/null | tr -d '')
-# Not `UID`: bash keeps that name as a readonly variable, so the assignment failed with
-# `UID: readonly variable`, the comparison below ran against the *host’s* uid instead of the app’s,
-# and the script deleted a directory that did agree with the app. A check whose variable cannot be set is
-# worse than no check at all, because it acts.
-APP_UID=$(adb -s "$SERIAL" shell dumpsys package "$TARGET" 2>/dev/null | tr -d '' | grep -m1 -oE 'userId=[0-9]+' | cut -d= -f2)
-if [ -n "$OWNER" ] && [ -n "$APP_UID" ] && [ "$OWNER" != "u${APP_UID}" ] && [ "$OWNER" != "root" ]; then
-  echo "stale: $DIR is owned by $OWNER, the app is u$APP_UID — removing it so the app recreates its own"
+# Compare two numbers, not two renderings. `stat -c %U` answers with a label like `u0_a322`, which is this
+# Android's rendering of a uid rather than the uid; the previous version of this guard matched that label
+# against `dumpsys package`'s `userId=`, a token this image does not print. The read came back empty, the
+# `[ -n ]` test failed, and the script printed "agrees" about a comparison it had not made — so an absent
+answer and a matching answer looked the same in the log, which is the one thing a guard must not allow.
+DIR_UID=$(adb -s "$SERIAL" shell stat -c %u "$DIR" 2>/dev/null | tr -d '\r' | head -1)
+case "$DIR_UID" in ''|*[!0-9]*) DIR_UID= ;; esac
+APP_UID=$(adb -s "$SERIAL" shell pm list packages -U 2>/dev/null | tr -d '\r' | grep -m1 "^package:$TARGET " | sed 's/.*uid://')
+case "$APP_UID" in ''|*[!0-9]*) APP_UID= ;; esac
+OWNER_LABEL=$(adb -s "$SERIAL" shell stat -c %U "$DIR" 2>/dev/null | tr -d '\r' | head -1)
+if [ -z "$DIR_UID" ]; then
+  echo "external files dir: absent or unreadable — nothing to clear, the app will create its own"
+elif [ -z "$APP_UID" ]; then
+  echo "external files dir: uid $DIR_UID, but $TARGET is not installed, so no comparison was made" >&2
+elif [ "$DIR_UID" != "$APP_UID" ]; then
+  echo "stale: $DIR is owned by uid $DIR_UID ($OWNER_LABEL), the app is uid $APP_UID — removing it so the app recreates its own"
   adb -s "$SERIAL" shell am force-stop "$TARGET" >/dev/null 2>&1
   adb -s "$SERIAL" shell rm -rf "$DIR" >/dev/null 2>&1
 else
-  echo "external files dir: ${OWNER:-absent} agrees with the app's uid ${APP_UID:-?}"
+  echo "external files dir: uid $DIR_UID is the app's own"
 fi
 
 # The screen has to be awake and unlocked for a tap to reach the app, and after a reboot the keyguard is up.
