@@ -1,12 +1,18 @@
 package com.taskplanner.data.repository
 
 import androidx.room.withTransaction
+import com.taskplanner.data.hierarchy.HierarchyDeletePolicy
+import com.taskplanner.data.hierarchy.HierarchyDeleteRefusal
+import com.taskplanner.data.hierarchy.HierarchyDeleteResult
+import com.taskplanner.data.hierarchy.HierarchyDeleteSummary
 import com.taskplanner.data.hierarchy.HierarchyMoveRefusal
 import com.taskplanner.data.hierarchy.HierarchyMoveResult
 import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.local.AppDatabase
 import com.taskplanner.data.local.GroupDao
+import com.taskplanner.data.local.ReminderDao
 import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.local.TrackingSessionDao
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.tracking.TimeBase
 import javax.inject.Inject
@@ -30,6 +36,8 @@ class TaskHierarchyRepository @Inject constructor(
     private val database: AppDatabase,
     private val taskDao: TaskDao,
     private val groupDao: GroupDao,
+    private val trackingSessionDao: TrackingSessionDao,
+    private val reminderDao: ReminderDao,
     private val sessionRepository: SessionRepository,
     private val timeBase: TimeBase
 ) {
@@ -210,6 +218,121 @@ class TaskHierarchyRepository @Inject constructor(
             placeAfter = true,
             rowsRewritten = written.size
         )
+    }
+
+    /**
+     * Deletes [taskId] one of the two ways the reader can choose, and returns the rows that became tombstones.
+     *
+     * With no [policy] on a row that has rows under it, this asks instead of writing: the answer is
+     * [HierarchyDeleteResult.Confirm] carrying the branch's size, and not one row is touched. That is the brief's
+     * rule — a parent's delete may not be left without an explicit policy — and putting it here rather than in a
+     * screen is what stops the next caller from forgetting the question.
+     *
+     * [HierarchyDeletePolicy.PROMOTE_CHILDREN] re-hangs the immediate children on whatever held this row — the
+     * grandparent, or the topic — and each keeps its own descendants, its topic and its place among its siblings, so
+     * a branch does not fall to the margin because a line above it disappeared.
+     * [HierarchyDeletePolicy.DELETE_SUBTREE] marks the row and every descendant as tombstones; nothing is removed
+     * physically, because history is retired rather than deleted.
+     *
+     * A row of either set that is being measured refuses the whole request: an open interval has seconds already
+     * spent on it, and a delete that stopped the timer on its own would throw that work away or leave a timer
+     * pointing at a row that is gone. Stopping the measurement is an action the reader takes, not a side effect of
+     * one they took for something else. The same holds for a block whose identities are not single-valued: the set
+     * being deleted is named by walking parent links, so a doubled `uuid` is refused rather than guessed at.
+     *
+     * Tombstoned rows lose their reminder *rows* here, in this transaction — a wakeup outliving the card it rings for
+     * is the failure this prevents. Two follow-ups stay with the caller, as they already are for a single delete: the
+     * `AlarmManager` cancellations, which are not database state, and the series' next instance, which
+     * [com.taskplanner.data.repository.RecurrenceRepository] re-materialises. They read
+     * [HierarchyDeleteResult.Deleted.deletedRows] and [HierarchyDeleteResult.Deleted.retiredReminders], so a subtree
+     * costs the same follow-up as one row: what went is returned whole rather than as a count, and the reminders are
+     * returned as the rows they were, because after this transaction nothing could read them again.
+     */
+    suspend fun deleteTask(taskId: Long, policy: HierarchyDeletePolicy?): HierarchyDeleteResult =
+        database.withTransaction {
+            val userId = sessionRepository.currentUserId()
+                ?: return@withTransaction HierarchyDeleteResult.Refused(HierarchyDeleteRefusal.NO_PROFILE)
+            val stored = TaskHierarchyPolicy.canonicalSequence(taskDao.getRowsInStoredOrder(userId))
+            val head = stored.firstOrNull { it.id == taskId }
+                ?: return@withTransaction HierarchyDeleteResult.Refused(HierarchyDeleteRefusal.ROW_MISSING)
+            val block = TaskHierarchyPolicy.subtreeOf(stored, head)
+            val ambiguous = TaskHierarchyPolicy.ambiguousUuids(stored)
+            if (!TaskHierarchyPolicy.blockIsKnowable(head, block, ambiguous)) {
+                return@withTransaction HierarchyDeleteResult.Refused(HierarchyDeleteRefusal.AMBIGUOUS_IDENTITY)
+            }
+            val beingMeasured = (if (policy == HierarchyDeletePolicy.DELETE_SUBTREE) block else listOf(head))
+                .firstOrNull { task ->
+                    trackingSessionDao.getLiveSessionsForTask(userId, task.id).isNotEmpty()
+                }
+            if (beingMeasured != null) {
+                return@withTransaction HierarchyDeleteResult.Refused(HierarchyDeleteRefusal.MEASUREMENT_RUNNING)
+            }
+            val children = stored.filter { it.parentUuid == head.uuid && it.id != head.id }
+            if (policy == null && children.isNotEmpty()) {
+                // Asked without an answer, and the answer is not this class's to give: nothing is written, and the
+                // screen is handed the size of what it has to ask about.
+                return@withTransaction HierarchyDeleteResult.Confirm(children.size, block.size)
+            }
+            // A row with nothing under it has only one delete, so a caller that did not choose is not asked to: the
+            // two policies write the same single tombstone.
+            val chosen = policy ?: HierarchyDeletePolicy.PROMOTE_CHILDREN
+            val now = timeBase.wallMillis()
+            var written = 0
+            if (chosen == HierarchyDeletePolicy.PROMOTE_CHILDREN) {
+                // Only the immediate children move up; a grandchild still hangs from its own parent, which is what
+                // keeps the shape of the branch instead of flattening it into the row that replaced its head.
+                children.forEach { child ->
+                    taskDao.setTaskParent(child.id, head.parentUuid?.takeIf { it.isNotBlank() }, now)
+                }
+                written = children.size
+            }
+            val doomed = if (chosen == HierarchyDeletePolicy.DELETE_SUBTREE) block else listOf(head)
+            taskDao.softDeleteTasks(doomed.map { it.id }, now)
+            // The alarms go in the same transaction as the rows: a tombstone written and its reminder left armed is
+            // a notification for a card the reader deleted, and it is exactly the state a crash between two
+            // statements would leave behind. The split is the one the single-row delete already makes — a plain task
+            // loses its lead times with it, while an instance of a running series keeps them, because the next
+            // instance is built from this row's content and retiring them here would shorten the series in silence.
+            val retiring = doomed.filter { it.uuid.isNotBlank() && it.seriesUuid == null }
+            val retiredReminders = retiring.flatMap { reminderDao.getLiveForTask(it.uuid) }
+            reminderDao.softDeleteForTasks(retiring.map { it.uuid }, now)
+            HierarchyDeleteResult.Deleted(
+                policy = chosen,
+                deletedRows = doomed,
+                promotedTaskIds = if (chosen == HierarchyDeletePolicy.PROMOTE_CHILDREN) {
+                    children.map { it.id }
+                } else {
+                    emptyList()
+                },
+                retiredReminders = retiredReminders,
+                rowsWritten = written + doomed.size
+            )
+        }
+
+    /**
+     * What deleting [taskIds] would take with it, read before any of it is written.
+     *
+     * A read rather than a guess, because the screen has to say these numbers in the question it asks — and a filter
+     * can hide the very children that make the question worth asking, so the rows on screen are not evidence. One
+     * call for a whole batch, which is what lets a multi-row selection ask a single question before deleting any of
+     * it, and [HierarchyDeleteSummary.affectedRows] counts a row once even where the reader selected both an ancestor
+     * and its descendant.
+     */
+    suspend fun deleteBatchSummary(taskIds: List<Long>): HierarchyDeleteSummary = database.withTransaction {
+        val userId = sessionRepository.currentUserId()
+            ?: return@withTransaction HierarchyDeleteSummary(0, 0, 0)
+        val stored = TaskHierarchyPolicy.canonicalSequence(taskDao.getRowsInStoredOrder(userId))
+        val wanted = taskIds.toSet()
+        var branchRows = 0
+        var children = 0
+        val affected = HashSet<Long>()
+        stored.filter { it.id in wanted }.forEach { head ->
+            val childCount = if (head.uuid.isBlank()) 0 else stored.count { it.parentUuid == head.uuid && it.id != head.id }
+            if (childCount > 0) branchRows++
+            children += childCount
+            affected += TaskHierarchyPolicy.subtreeOf(stored, head).map { it.id }
+        }
+        HierarchyDeleteSummary(branchRows, children, affected.size)
     }
 
     /**

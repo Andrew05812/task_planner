@@ -79,6 +79,25 @@
     <string name="dialog_change_status_message">Изменить статус задачи на «%s»?</string>
     <string name="dialog_delete_task_title">Удалить задачу</string>
     <string name="dialog_delete_task_message">Удалить эту задачу?</string>
+    <string name="delete_branch_title">Задачи с подзадачами</string>
+    <string name="delete_branch_message">Вы удаляете задачу, под которой %1$s, — %2$s всего. Перенести их на уровень выше или удалить всю ветку?</string>
+    <string name="delete_branch_message_batch">%1$d из выбранных задач имеют подзадачи, всего %2$s. Перенести их на уровень выше или удалить ветки целиком?</string>
+    <plurals name="delete_branch_children">
+        <item quantity="one">%1$d подзадача</item>
+        <item quantity="few">%1$d подзадачи</item>
+        <item quantity="many">%1$d подзадач</item>
+        <item quantity="other">%1$d подзадач</item>
+    </plurals>
+    <plurals name="delete_branch_rows">
+        <item quantity="one">%1$d запись</item>
+        <item quantity="few">%1$d записи</item>
+        <item quantity="many">%1$d записей</item>
+        <item quantity="other">%1$d записи</item>
+    </plurals>
+    <string name="delete_policy_promote">Перенести выше</string>
+    <string name="delete_policy_subtree">Удалить ветку</string>
+    <string name="delete_blocked_running">Сначала остановите отсчёт времени</string>
+    <string name="delete_row_missing">Этой задачи больше нет в списке</string>
     <string name="dialog_create_profile_title">Новый профиль</string>
     <string name="dialog_edit_profile_title">Изменить профиль</string>
     <string name="dialog_delete_profile_title">Удалить профиль</string>

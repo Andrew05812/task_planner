@@ -50,7 +50,8 @@ class TaskIdentityAuditTest {
         fixture = AppFixture(context)
         userId = runBlocking { fixture.signIn(email = "identity@example.com").id }
         hierarchy = com.taskplanner.data.repository.TaskHierarchyRepository(
-            fixture.database, fixture.taskDao, fixture.groupDao, fixture.sessionRepository, fixture.timeBase
+            fixture.database, fixture.taskDao, fixture.groupDao, fixture.trackingSessionDao, fixture.reminderDao,
+            fixture.sessionRepository, fixture.timeBase
         )
     }
 

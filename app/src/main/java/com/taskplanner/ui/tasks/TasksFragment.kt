@@ -20,6 +20,7 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
+import com.taskplanner.data.hierarchy.HierarchyDeletePolicy
 import com.taskplanner.data.hierarchy.HierarchyMoveResult
 import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.model.Task
@@ -409,9 +410,52 @@ class TasksFragment : Fragment() {
             .setTitle(R.string.dialog_delete_task_title)
             .setMessage(R.string.dialog_delete_task_message)
             .setPositiveButton(R.string.delete) { _, _ ->
-                viewModel.deleteSelectedFor(listOf(task.id))
+                viewModel.deleteSelectedFor(listOf(task.id), onChoice = { rows, children, affected ->
+                    askBranchPolicy(rows, children, affected) { policy ->
+                        viewModel.deleteSelectedFor(listOf(task.id), policy)
+                    }
+                })
             }
             .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * The question Stage 16 §9 makes a parent's delete ask: what happens to the rows hanging under it.
+     *
+     * Two operations, not a confirmation — and the domain, not this screen, decided that the question was worth
+     * asking, because a filter can hide the children that make it one. The destructive choice sits on the negative
+     * button and cancelling is the third, so a mis-tap cannot be the branch's funeral.
+     */
+    private fun askBranchPolicy(
+        branchRows: Int,
+        children: Int,
+        subtree: Int,
+        onPick: (HierarchyDeletePolicy) -> Unit
+    ) {
+        val message = if (branchRows == 1) {
+            getString(
+                R.string.delete_branch_message,
+                resources.getQuantityString(R.plurals.delete_branch_children, children, children),
+                resources.getQuantityString(R.plurals.delete_branch_rows, subtree, subtree)
+            )
+        } else {
+            getString(
+                R.string.delete_branch_message_batch,
+                branchRows,
+                resources.getQuantityString(R.plurals.delete_branch_rows, subtree, subtree)
+            )
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.delete_branch_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.delete_policy_promote) { _, _ ->
+                onPick(HierarchyDeletePolicy.PROMOTE_CHILDREN)
+            }
+            .setNegativeButton(R.string.delete_policy_subtree) { _, _ ->
+                onPick(HierarchyDeletePolicy.DELETE_SUBTREE)
+            }
+            .setNeutralButton(R.string.cancel, null)
             .show()
     }
 
@@ -421,7 +465,11 @@ class TasksFragment : Fragment() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.confirm_delete_selected_title)
             .setMessage(getString(R.string.confirm_delete_selected_message, count))
-            .setPositiveButton(R.string.delete) { _, _ -> viewModel.deleteSelected() }
+            .setPositiveButton(R.string.delete) { _, _ ->
+                viewModel.deleteSelected(onChoice = { rows, children, affected ->
+                    askBranchPolicy(rows, children, affected) { policy -> viewModel.deleteSelected(policy = policy) }
+                })
+            }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }

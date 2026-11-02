@@ -6249,3 +6249,104 @@ checked them and it did not), `heightOf` is asserted on a leaf and a two-row bra
 `levelsByUuid` figure above it, the definitional `MAX_DEPTH == MAX_TASK_LEVELS` assertion is joined by a real paste
 that reports `TooDeep` and clamps at level 3, `PARENT_UNNAMED` gets its own test and its own refusal reason instead of
 reporting `NO_DEEPER_PARENT`, and `rowsRewritten` is asserted for an indent as well as a reorder.
+
+## 20ω — Stage 16 §9: a parent's delete became a choice, and the screen asks for it
+
+§20z left one sentence in `docs/HIERARCHY.md` false the moment indent shipped — "there is no path that orphans one" —
+and named §9 as the block that owes the answer. This is that block, and it closes the hole end to end rather than
+only at the repository, because the hole was already reachable: a notebook that arrived through Stage 15's import has
+parents with children in it today, and the list's existing delete would retire the row and leave the branch hanging on
+a tombstone, which the renderer draws one level shallower than the reader wrote.
+
+**The policy is a parameter, and its absence is an answer.** `TaskHierarchyRepository.deleteTask(taskId, policy)`
+writes `PROMOTE_CHILDREN` (the immediate children re-hang on whatever held the row; a grandchild keeps its own parent,
+so the branch keeps its shape) or `DELETE_SUBTREE` (head and every descendant as tombstones — nothing is physically
+removed, because history is retired rather than deleted). Called with `null` on a row that holds something, it writes
+nothing and returns `Confirm(childCount, subtreeSize)`: the domain refuses to guess on the reader's behalf, and a
+screen that forgot to ask cannot corrupt a tree by omission. `deleteBatchSummary(taskIds)` is the same question read
+over a whole selection in one pass, which is what lets a multi-row selection ask once before deleting any of it instead
+of removing the first row and then noticing the second was a parent — and it counts each row once, so selecting both an
+ancestor and its descendant cannot be told a number bigger than the notebook.
+
+**Three rules inherited, not invented.** A row being measured — or any row under it — refuses the whole request
+(`MEASUREMENT_RUNNING`): an open interval has seconds already spent on it, and stopping a measurement is an action the
+reader takes, not a side effect of one they took for something else. A block whose identities are not single-valued
+refuses too (`AMBIGUOUS_IDENTITY`), because the doomed set is named by walking parent links and a doubled `uuid` gives
+that two answers — the same missing unique index §20y measured. And the tombstoned rows lose their reminder *rows* in
+the same transaction, with one exception the single-row delete already made and this one had to keep: an instance of a
+running series keeps its lead times, because the next instance is built from this row's content. `finishDelete(rows,
+retiredReminders)` carries the half that is not database state — the `AlarmManager` cancellations and the series
+re-materialisation — so a branch costs exactly the follow-up a row costs.
+
+**The §9 checklist was walked, not summarised.** `a_subtree_delete_leaves_the_branches_measured_time_and_goal_link_
+where_they_are` counts `work_sessions`, `work_interval_corrections` and `goal_tasks` before and after a branch delete
+and requires the same numbers: history outlives the card, and no delete path here writes those tables. `a_deleted_
+branch_keeps_everything_but_the_live_flag_and_gains_a_date` compares each row's parent link, archive flag, status, due
+and priority with what was stored, and separately requires `deletedAt` to be set — the two columns §9 names that a
+tombstone could plausibly lose. And `a_delete_that_fails_halfway_leaves_no_promoted_child_behind` puts the failure
+*between* the two writes this delete performs: a delegating `TaskDao` (the real Room dao for everything else) throws
+on `softDeleteTasks`, after the children were re-hung, and the test reads the profile back to find the child hanging
+where it was. The storage is real SQLite throughout; only one method is made to fail, which is the difference between
+a rollback proof and a mock.
+
+**The RED ran in four observed states.** First the new API did not exist:
+`HierarchyDeleteTest.kt:59:13 Type mismatch: inferred type is TrackingSessionDao but SessionRepository was expected`,
+`:101:44 Unresolved reference: HierarchyDeletePolicy`, `:102:33 Unresolved reference: deleteTask`. Then the reminder
+retirement was missing: `13 tests completed, 4 failed`, the two reminder cases as assertions
+(`expected:<[]> but was:<[head, child, grandchild]`) and the ambiguity case as
+`ClassCastException: …Deleted cannot be cast to …Refused`. Then the retirement was written *without* the series split:
+`13 tests completed, 1 failed` — `a_row_that_is_an_instance_of_a_series_keeps_its_lead_times_for_the_next_instance
+FAILED`. That middle step is the one worth naming, because the same test had *passed* one state earlier, when nothing
+retired anything: a test written against absent behaviour can be green for the wrong reason, and the only way to know
+is to break the code on purpose. One failure through all of it was my own fixture, not the code —
+`a_row_that_is_not_live_in_this_profile_is_refused_rather_than_invented` asked `rowsByName()`, which reads *this*
+profile, for a row belonging to another, and reported `NoSuchElementException: Key theirs is missing in the map`.
+
+**Two defects found by reading my own diff after the suite was green, both proved by taking the fix back out.**
+The first is the one the transaction boundary hides: moving the reminder rows into the delete's own transaction made
+`ReminderRepository.onTasksDeleted`'s cancel-the-alarms loop read a set that was already empty, so the wakeup survived
+the row it belonged to. Nothing the reader sees — `getDue` filters tombstones — but the old path cancelled, and this
+one did not. The delete now returns `Deleted.retiredReminders` and the follow-up cancels them through
+`ReminderRepository.cancelRetired`; with that call removed, `a_branch_delete_takes_the_scheduled_alarm_with_the_row`
+fails. The second: a selection holding both a parent and its own child deleted the parent, took the child along as a
+descendant, deleted the child again, and reported `delete_row_missing` for a row the reader had just retired —
+`expected null, but was:<2131886314>` with the skip taken out. A batch now remembers which rows an earlier delete
+already took. The test that asserted "cancels the alarms" while checking reminder *rows* was renamed to say what it
+checks, and the real alarm assertion became its own test. One further failure was mine again: a sorted list compared
+against an unsorted expectation (`expected:<[parent, child]> but was:<[child, parent]>`).
+
+**Two more defects, both introduced by this block and caught by reading it back.** The first sat in the batch question
+as first written: it summed each selected row's subtree size, so a selection holding both an ancestor and its own
+descendant — which is exactly what a select-all produces — was told a number larger than the notebook. The fix reads a
+batch once (`deleteBatchSummary`), unions the affected rows instead of adding their counts, and replaces the
+single-row `branchOf` outright rather than leaving two ways to ask the same question. The second was the dialog's copy:
+§9 asks that the reader see how many records are affected, and the first version named only the rows hanging directly
+under it, so the branch size the domain had worked out reached nobody. The dialog now speaks both figures — "N subtasks
+under it, M rows in all" — with the second as its own plural, because Russian needs three forms for it and the
+localization gate counts them.
+
+**Gates after the block, measured on the tree this commit holds**: 144 classes / **1842** JVM tests / 0 failures /
+0 skipped (the state before the block was 142 / 1812; the 30 new are `HierarchyDeleteTest` at 18 and
+`HierarchyDeleteCommandTest` at 12, and no existing test was deleted or relaxed to get there). `lintDebug` 0 errors /
+**150** warnings — unchanged since Stage 15. `assembleDebug` produced `app-debug.apk`, 15 725 332 bytes, sha256 starting
+`c561f2a8f32c638b`; §19's device pass re-measures a freshly built one, as every stage does.
+`check-localization.py` passes: 992 English strings / 987 Russian (five marked `translatable="false"`), 55 plurals,
+0 missing, 0 placeholder mismatches — seven new strings and two new plurals, in both languages.
+`HardcodedFailureTextTest` stays at its ceiling of 5 with no new finding, because every refusal reaches the reader as
+`R.string.delete_blocked_running` / `R.string.delete_row_missing` rather than as a sentence. The five
+`TaskHierarchyRepository(...)` construction sites gained `trackingSessionDao` and `reminderDao` — the harness builds
+the repository by hand, and a constructor change is where a fixture finds out it is duplicating production.
+
+**One UX compromise stated rather than hidden.** The branch question opens *after* the existing "Delete Task?"
+confirm, not instead of it, because the screen cannot know whether a row holds a branch until the domain says so and a
+filter can hide exactly the children that make the question worth asking. So a reader deleting a parent answers two
+prompts. Merging them into one dialog is §6's pass, and `docs/HIERARCHY.md` says so in the list of what Stage 16 still
+owns rather than in a footnote here.
+
+**One path left open, named with its file and line.** `CategoryTasksViewModel.deleteTask`
+(`ui/categories/CategoryTasksViewModel.kt:91`) still calls `TaskRepository.deleteTask` — the raw soft-delete — so a
+parent deleted from a category's own list still leaves its children hanging on a tombstone. It is not fixed here
+because the two-operation dialog now exists once, in `TasksFragment`, and §6 is the pass that decides what the
+hierarchy controls look like on more than one screen; copying the dialog into a second fragment before then would mean
+maintaining two of them and guessing at the shape the other one is heading for. `docs/HIERARCHY.md` carries the same
+sentence, so the claim "a parent's delete asks" is scoped to the tasks screen rather than read as stage-wide.

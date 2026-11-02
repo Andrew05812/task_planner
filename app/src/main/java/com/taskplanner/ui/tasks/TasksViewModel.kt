@@ -5,6 +5,9 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.R
+import com.taskplanner.data.hierarchy.HierarchyDeletePolicy
+import com.taskplanner.data.hierarchy.HierarchyDeleteRefusal
+import com.taskplanner.data.hierarchy.HierarchyDeleteResult
 import com.taskplanner.data.hierarchy.HierarchyMoveResult
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
@@ -432,33 +435,86 @@ class TasksViewModel @Inject constructor(
 
     val selectedIds: Set<Long> get() = selectionFlow.value.first
 
-    private suspend fun deleteSelectedNow() {
-        val ids = selectionFlow.value.first.toList()
-        if (ids.isEmpty()) return
-        taskRepository.softDeleteTasks(ids)
-        exitSelection()
-    }
-
-    fun deleteSelected(onDone: () -> Unit = {}) {
+    fun deleteSelected(
+        onDone: () -> Unit = {},
+        policy: HierarchyDeletePolicy? = null,
+        onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit = { _, _, _ -> }
+    ) {
         viewModelScope.launch {
             try {
-                deleteSelectedNow()
-                onDone()
+                val ids = selectionFlow.value.first.toList()
+                if (ids.isEmpty()) return@launch
+                if (deleteRows(ids, policy, onChoice)) {
+                    exitSelection()
+                    onDone()
+                }
             } catch (e: Exception) {
                 setError(e)
             }
         }
     }
 
-    /** Swipe-panel delete for a single task; same soft-delete path as bulk removal. */
-    fun deleteSelectedFor(ids: List<Long>) {
+    /**
+     * Deletes [ids] through the tree rules, asking the reader rather than choosing for them when a row holds a branch.
+     *
+     * [onChoice] runs instead of a write when [policy] is null and one of the rows has something under it: the batch
+     * is checked as a whole first, so a two-row selection where the second row is a parent cannot delete the first
+     * and then ask. Says whether the batch went through, so a bulk command only closes selection mode once it did.
+     */
+    fun deleteSelectedFor(
+        ids: List<Long>,
+        policy: HierarchyDeletePolicy? = null,
+        onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit = { _, _, _ -> }
+    ) {
         viewModelScope.launch {
             try {
-                taskRepository.softDeleteTasks(ids)
+                deleteRows(ids, policy, onChoice)
             } catch (e: Exception) {
                 setError(e)
             }
         }
+    }
+
+    private suspend fun deleteRows(
+        ids: List<Long>,
+        policy: HierarchyDeletePolicy?,
+        onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit
+    ): Boolean {
+        if (policy == null) {
+            val summary = hierarchyRepository.deleteBatchSummary(ids)
+            if (summary.branchRows > 0) {
+                onChoice(summary.branchRows, summary.children, summary.affectedRows)
+                return false
+            }
+        }
+        var refused: HierarchyDeleteRefusal? = null
+        val gone = HashSet<Long>()
+        for (id in ids) {
+            // A subtree delete takes the rows under it, and a selection can hold both a parent and its own child.
+            // Deleting the child again would report it as missing — a sentence about a row the reader already retired.
+            if (id in gone) continue
+            when (val outcome = hierarchyRepository.deleteTask(id, policy)) {
+                is HierarchyDeleteResult.Deleted -> {
+                    gone += outcome.deletedRows.map { it.id }
+                    taskRepository.finishDelete(outcome.deletedRows, outcome.retiredReminders)
+                }
+                is HierarchyDeleteResult.Confirm -> onChoice(1, outcome.childCount, outcome.subtreeSize)
+                is HierarchyDeleteResult.Refused -> refused = outcome.reason
+            }
+        }
+        refused?.let { reportDeleteRefusal(it) }
+        return refused == null
+    }
+
+    /** A refusal the reader can act on, named in their language: the state carries the id, the screen the words. */
+    private fun reportDeleteRefusal(reason: HierarchyDeleteRefusal) {
+        val message = when (reason) {
+            HierarchyDeleteRefusal.MEASUREMENT_RUNNING -> R.string.delete_blocked_running
+            HierarchyDeleteRefusal.ROW_MISSING,
+            HierarchyDeleteRefusal.NO_PROFILE,
+            HierarchyDeleteRefusal.AMBIGUOUS_IDENTITY -> R.string.delete_row_missing
+        }
+        _state.update { it.copy(error = message) }
     }
 
     // ---------------------------------------------------------------- lifecycle

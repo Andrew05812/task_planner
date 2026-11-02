@@ -156,6 +156,16 @@ class ReminderRepository @Inject constructor(
         reminderDao.softDeleteForTasks(plainUuids, timeBase.wallMillis())
     }
 
+    /**
+     * Cancels the wakeups of reminders that are **already** retired.
+     *
+     * The pair to [onTasksDeleted]'s read-then-cancel, for the one caller that cannot use it: a hierarchy delete
+     * takes the reminder rows inside its own transaction, so by the time the follow-up runs there is nothing left to
+     * read and [onTasksDeleted] would cancel nothing. The caller hands back the rows it was given, and the alarm the
+     * reader never hears about goes with them.
+     */
+    fun cancelRetired(reminders: List<Reminder>) = reminders.forEach { scheduler.cancel(it) }
+
     /** Retires the reminders of the listed tasks whatever their state — used when a series is deleted. */
     suspend fun retireTasks(taskUuids: List<String>) {
         val uuids = taskUuids.filter { it.isNotBlank() }

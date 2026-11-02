@@ -111,6 +111,50 @@ A new task takes its position from `TaskRepository.nextFreeOrder()`, which count
 archived ones included: the sequence a drag renumbers includes archived rows, so counting only the visible ones would
 land a new task on a number an archived row already holds.
 
+## A parent's delete is a choice, and the domain asks for it
+
+`TaskHierarchyRepository.deleteTask(taskId, policy)` answers with a `HierarchyDeleteResult`, and the two operations
+are the ones Stage 16 §9 names:
+
+* **`PROMOTE_CHILDREN`** deletes the chosen row and re-hangs its immediate children on whatever held it — the
+  grandparent, or the topic. A grandchild keeps hanging from its own parent, and every row keeps its topic, its owner
+  and its place among its siblings, so a branch does not fall to the margin because a line above it disappeared.
+* **`DELETE_SUBTREE`** marks the row and every descendant as tombstones. Nothing is physically removed: history is
+  retired, so a second device can be told about it and a restore can still read the shape of what the reader had.
+
+Called with **no policy** on a row that has something under it, it writes nothing and answers
+`Confirm(childCount, subtreeSize)`. That is the point of the shape: the question is the reader's to answer, and a
+repository that guessed would be a repository that could not be undone. `HierarchyDeleteCommandTest` and
+`HierarchyDeleteTest` both pin it. The batch case is answered by `deleteBatchSummary(taskIds)`, which reads the whole
+selection in one pass and is why the dialog can ask about a *batch* before any of it is written — the rows on screen
+are not evidence, because a filter can hide exactly the children that make the question worth asking. It counts each
+row once, so a reader who selected both a parent and its own child is told the size of the notebook, not the sum of two
+overlapping branches, and the dialog speaks two numbers because the two operations differ by exactly that: the rows
+hanging directly under it, and everything the branch would take with it.
+
+Three rules the tree inherits rather than invents, each with a test that fails if it is dropped:
+
+* **A row being measured refuses the whole request** (`MEASUREMENT_RUNNING`). An open interval has seconds already
+  spent on it; a delete that stopped the timer on its own would throw that work away or leave the reader believing
+  they deleted a task that is still running. Stopping a measurement is an action, not a side effect.
+* **A block whose identities are not single-valued is refused** (`AMBIGUOUS_IDENTITY`) rather than guessed at, because
+  the set being deleted is named by walking parent links and a doubled `uuid` gives that two answers — the same row
+  `docs/HIERARCHY.md`'s audit measured, and the same reason `tasks.uuid` still has no unique index.
+* **Tombstoned rows lose their reminder rows in the same transaction**, except an instance of a running series, which
+  keeps its lead times because the next instance is built from this row's content. The split is the one the single-row
+  delete already made; writing it inside one transaction is what stops a crash leaving an alarm for a card nobody can
+  reach. It costs something, though, and the cost is worth stating: the follow-up that unmakes the *wakeups* finds the
+  rows already gone, so the delete returns them — `Deleted.retiredReminders` is the set it took out of the live table,
+  and `ReminderRepository.cancelRetired` works from that copy. Without it a reader gets no notification for a deleted
+  branch (the delivery query filters tombstones) and still leaves an `AlarmManager` wakeup scheduled for it, which is
+  the half the old single-row path guaranteed and this one had to re-earn.
+
+The non-database half of the old delete survives as `TaskRepository.finishDelete(rows, retiredReminders)`: the alarms
+are cancelled and a stranded series re-materialises. A branch therefore costs exactly the follow-up a single row costs,
+and the refusal
+reaches the reader as a resource id (`delete_blocked_running`, `delete_row_missing`) rather than as a sentence frozen
+in the language the reader has just left.
+
 ## Can a parent be ambiguous? measured, and what the write does about it
 
 `tasks.parent_uuid` names a parent by `tasks.uuid`, and nothing in the schema makes that name unique: `uuid` carries
@@ -176,14 +220,20 @@ that owns reminders rather than quietly rewired in a hierarchy commit.
 
 ## What Stage 16 still owns
 
-Everything that **changes the shape** of the tree, and it is deliberately not in this build:
+Everything that **changes the shape** of the tree by hand, and it is deliberately not in this build:
 
 * No indent / outdent control in the editor or on the row, and no "move to" sheet. The operations exist and are
   tested at the repository; nothing offers them yet, so a tree still arrives through an import and is edited by
   dragging within one sibling set.
-* Deleting a parent says nothing yet about its children — there is no path that creates one, so there is no path
-  that orphans one. That sentence stops being true the moment indent/outdent ships, and Stage 16 has to answer it
-  in the same change.
+* Deleting a parent now asks which of the two deletes the reader meant (§9 below), but the question is asked *after*
+  the first confirm, not instead of it: the list's dialog still opens with "Delete Task?", and the branch question
+  follows only when the domain finds rows under the row. Reshaping that into one dialog is the §6 UI pass's.
+* **The category screen's delete does not ask yet.** `CategoryTasksViewModel.deleteTask` (`ui/categories/CategoryTasksViewModel.kt:91`)
+  still routes through `TaskRepository.deleteTask`, the raw soft-delete, so deleting a parent from a category's own
+  list still leaves its children hanging on a tombstone. It is left that way on purpose rather than by accident: the
+  two-operation dialog is now built once, in `TasksFragment`, and copying it into a second screen before the §6 pass
+  decides what the hierarchy controls look like would mean maintaining two of them. The raw path is the one §6 has to
+  retire, and this line is where a reader can check that it still exists.
 * Topics cannot be nested inside topics: `TaskGroup` has no `parent_uuid`, and a Keep export has no syntax that
   would ask for one. Categories keep their own `parent_category_id`, which no screen has ever written.
 * Depth past the third task level is refused — at the edge of an import, reported and clamped, and now at every move
@@ -196,4 +246,6 @@ the source drew. A topic whose own line was `[X]` in Keep has that state **store
 `TaskGroup.is_completed`, read out of the database by `KeepImportTransactionTest` and carried on the sync document
 — and the task list does not yet *draw* it: nothing in `TasksAdapter` reads the column. Saying so is the point: the
 two states are independent facts from the file, nothing aggregates one into the other, and the visible mark on a
-topic header is Stage 16's to add. There is no control to change any of that by hand yet; see the list above.
+topic header is Stage 16's to add. No control changes the *shape* of a tree by hand yet — there is no indent, outdent
+or move-to anywhere in the app — but deleting a row that has rows under it now asks which of the two deletes the reader
+meant, and that dialog is in the list above rather than below it.

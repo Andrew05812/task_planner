@@ -1035,6 +1035,14 @@ nowhere to put it.
   (`TasksFragment.kt:178`), so a drag under a filter could collide with rows outside it and a row could be dropped
   across a group boundary. Both are gone: one profile-wide sequence, a subtree that travels as one block, and a
   sibling-set boundary that refuses the rest by name. `docs/HIERARCHY.md` describes what replaced them.
+- **A parent's delete now has a policy, and the domain asks for it** (2026-11-02, §9). `TaskHierarchyRepository.deleteTask`
+  takes `HierarchyDeletePolicy.PROMOTE_CHILDREN` / `DELETE_SUBTREE`, refuses by name when the row is being measured or
+  its identities are not single-valued, and when called with no policy on a row that holds a branch it writes nothing and
+  answers `Confirm(childCount, subtreeSize)` — which is what the tasks screen turns into a two-operation dialog
+  (`delete_branch_*`, in English and Russian). The list and selection-bar deletes go through it, so the orphan path the
+  Stage 15 import made reachable is closed **on the tasks screen**; the category screen still has the raw path, and
+  `docs/HIERARCHY.md` names the file and line as §6's to retire rather than letting the claim read as a stage-wide one.
+  `docs/HIERARCHY.md` states the three inherited rules it pins.
 - The row that would show an indent, `res/layout/item_group_header.xml`, has a fixed `marginStart="8dp"`
   (`:7`) and `paddingHorizontal="12dp"` (`:18`) with nothing depth-driven.
 
@@ -1140,6 +1148,12 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    **The delete-with-children policy is the next phase**, and it is the one this phase makes unavoidable: an indent
    creates the first path that orphans a subtree, so `docs/HIERARCHY.md`'s sentence "there is no path that creates one"
    stops being true with this commit.
+   **Done (2026-11-02), including the screen that asks.** `deleteTask(taskId, policy)` writes `PROMOTE_CHILDREN` or
+   `DELETE_SUBTREE`, refuses a measured row and an ambiguous block by name, and with no policy on a row that holds a
+   branch writes nothing and answers `Confirm(childCount, subtreeSize)`; `TasksFragment` turns that into a
+   two-operation dialog, and `HierarchyDeleteTest` (18) and `HierarchyDeleteCommandTest` (12) cover both branches on
+   real Room, the refusal snapshots, the reminder and series rules the tree inherits, and a delete whose second write
+   is made to fail. See §16.3 above and `docs/HIERARCHY.md`'s "A parent's delete is a choice".
    **The depth contract was settled at the same time**: `TaskHierarchyPolicy.MAX_TASK_LEVELS = 3` (topic + three task
    levels) is now the single bound the parser, the mapping, the move validation and the renderer read — Stage 15 left
    the parser and the renderer each holding a constant called 3 and meaning different things by it, which let the card

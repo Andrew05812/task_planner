@@ -1,6 +1,7 @@
 package com.taskplanner.data.repository
 
 import com.taskplanner.data.local.TaskDao
+import com.taskplanner.data.model.Reminder
 import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
@@ -124,8 +125,26 @@ class TaskRepository @Inject constructor(
     suspend fun softDeleteTasks(ids: List<Long>) {
         val rows = taskDao.getByIds(ids)
         taskDao.softDeleteTasks(ids)
+        finishDelete(rows)
+    }
+
+    /**
+     * The half of a delete that is not the rows: the alarms of the rows that went are cancelled, and a series whose
+     * instance was removed materialises its next one.
+     *
+     * Split out for the hierarchy path — [TaskHierarchyRepository.deleteTask] writes the tombstones and the reminder
+     * rows in its own transaction, then hands the rows here — so a branch deleted through the tree costs exactly the
+     * follow-up a single row costs, rather than a screen having to remember which parts of it to redo.
+     *
+     * [retiredReminders] is the row set the delete already took out of the live table. They travel because a
+     * cancellation reads the reminder *before* retiring it, and a delete that retired them inside its own transaction
+     * leaves nothing for [ReminderRepository.onTasksDeleted] to find — so the wakeups would outlive the rows quietly.
+     */
+    suspend fun finishDelete(rows: List<Task>, retiredReminders: List<Reminder> = emptyList()) {
+        if (rows.isEmpty()) return
         // Deleting the instance a series points at must not strand the series.
         recurrenceRepository.ensureOpenInstances()
+        reminderRepository.cancelRetired(retiredReminders)
         reminderRepository.onTasksDeleted(rows)
     }
 

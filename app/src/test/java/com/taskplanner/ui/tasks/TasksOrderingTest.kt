@@ -69,7 +69,8 @@ class TasksOrderingTest {
         Dispatchers.setMain(Executor { it.run() }.asCoroutineDispatcher())
         userId = runBlocking { fixture.signIn(email = "ordering@example.com").id }
         hierarchy = TaskHierarchyRepository(
-            fixture.database, fixture.taskDao, fixture.groupDao, fixture.sessionRepository, fixture.timeBase
+            fixture.database, fixture.taskDao, fixture.groupDao, fixture.trackingSessionDao, fixture.reminderDao,
+            fixture.sessionRepository, fixture.timeBase
         )
         viewModel = TasksViewModel(
             fixture.taskRepository,
