@@ -1,5 +1,6 @@
 package com.taskplanner.ui.tasks
 
+import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.model.Task
 
 /**
@@ -20,23 +21,19 @@ import com.taskplanner.data.model.Task
 object TaskTree {
 
     /**
-     * The deepest indent a card may draw, counted from zero at a topic's own child.
-     *
-     * A four-level paste — topic, task, subtask, subtask, which is what
-     * [com.taskplanner.data.keep.KeepTextParser.MAX_DEPTH] allows — reaches indent 2, because the topic is not a
-     * level of indentation. So this bound is not the paste's own limit; it is the ceiling on whatever else can
-     * write `parent_uuid`, and the reason it is 3 rather than 2 is that the indent a reader sees must never exceed
-     * the width the 320dp frames prove, whatever a sync pull or a future editor decides to chain.
-     */
-    const val MAX_INDENT_LEVEL: Int = 3
-
-    /**
      * Task id to the level its card indents to.
      *
      * Measured within the rows given: a parent that is not among them is not a level, because the list cannot
      * show a row it is not holding.
+     *
+     * The bound is not a number this file owns. The tree's contract is topic + three task levels and it lives in
+     * [com.taskplanner.data.hierarchy.TaskHierarchyPolicy.MAX_INDENT_LEVEL], so the parser reading a paste, the
+     * mapping writing it, the move that re-hangs a row, this renderer and the backup and sync that carry it all
+     * stop at the same depth. Stage 15 ended with two components each holding a constant called 3 and meaning
+     * different things by it, and the card was the one that could draw a level the import would never write.
      */
     fun depthsByTaskId(tasks: List<Task>): Map<Long, Int> {
+        val bound = TaskHierarchyPolicy.MAX_INDENT_LEVEL
         val parentOf = tasks.associateBy({ it.uuid }, { it.parentUuid })
         return tasks.associate { row ->
             var depth = 0
@@ -46,11 +43,11 @@ object TaskTree {
                 if (!seen.add(walker)) break // a cycle: stop at whatever depth the walk reached
                 val parent = parentOf[walker] ?: break
                 if (parent == walker || parent !in parentOf) break
-                if (depth == MAX_INDENT_LEVEL) break
+                if (depth == bound) break
                 depth++
                 walker = parent
             }
-            row.id to depth.coerceAtMost(MAX_INDENT_LEVEL)
+            row.id to depth.coerceAtMost(bound)
         }
     }
 }

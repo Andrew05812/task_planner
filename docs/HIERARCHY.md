@@ -32,7 +32,58 @@ round-trip contracts for it.
 * **Nothing about it invents structure.** A parent is only ever a line that was physically above it in the
   source. Titles never decide a parent, and depth is not inferred from indentation *after* the parse.
 
+## The depth, in one place
+
+Level 0 is the topic. A task directly under it is level 1, its child level 2, that child's child level 3, and the
+tree stops there: **four levels counting the topic, three levels of task, two steps of indent on the card.** That is
+what `TaskHierarchyPolicy.MAX_TASK_LEVELS` holds, and what everything else now reads instead of keeping its own copy:
+
+| Component | What it uses | What it means there |
+| --- | --- | --- |
+| `KeepTextParser.MAX_DEPTH` | `MAX_TASK_LEVELS` | a pasted line deeper than this is reported and clamped, never stored |
+| `TaskHierarchyPolicy.fitsUnder` | `MAX_TASK_LEVELS` | an indent/outdent/move that would push any row of the block past level 3 is refused |
+| `TaskTree.depthsByTaskId` | `MAX_INDENT_LEVEL` = `MAX_TASK_LEVELS - 1` | the deepest indent a card may draw |
+
+Stage 15 ended with both components holding a constant called `3` and meaning different things by it — the parser
+counted the topic as level 0, the renderer counted indents — so the card could draw a fourth level the import would
+never have written, and no test connected the two. `HierarchyMoveTest >
+one_depth_contract_holds_for_the_parser_the_renderer_and_the_moves` is the guard that they are one number again, and
+`TaskTree` no longer owns a depth constant at all.
+
+The bound is measured over the **whole block** a move carries, not over the row that was grabbed: a leaf can reach
+level 3, while the same row with a child under it cannot be indented at all, because its child would land on level 4.
+
 ## What Stage 16 has changed since
+
+**The tree can be edited, at the repository.** `TaskHierarchyRepository` now answers `indentTask`, `outdentTask`,
+`moveSubtreeUnder` and `moveWithinSiblings`, each in one transaction, each answering with a named
+`HierarchyMoveResult` — and no screen offers the controls yet (§6). What the operations guarantee:
+
+* **An indent hangs a row on the row above it** — the predecessor in the profile's own sequence, or the row the screen
+  names when a filter means the reader's neighbour is not the stored one. Never a row picked for its title, never one
+  from another topic. The row becomes its last child and keeps its own children; a destination whose identity two rows
+  claim is refused, because the level validated and the level drawn would then come from two different chains.
+* **An outdent lifts a row one level** and sets it after the subtree it came out of, so the branch it leaves still
+  reads as one branch. A row that is already a topic's own child has nowhere further up to go, and neither has one
+  whose grandparent is gone: lifting onto a link that names nothing would hide where the row really sits.
+* **A move takes the whole subtree and its topic with it**: `group_id` is rewritten on every row of the block in the
+  same transaction, so a parent never ends up in one topic with its children in another, and the destination topic
+  must be one this profile owns *and has not deleted*. Moving into the unfiled tree, or out of it, is the same
+  operation with a different destination.
+* **A row arriving as a topic root lands after the last root's whole branch**, not after the root row itself — the
+  alternative would draw a reader's existing children under a row that is not their parent, and renumber them for a
+  move that never touched them.
+* **A cycle is refused by name.** A row cannot be hung on its own descendant, on itself, on a row from another
+  profile, on a row that carries no identity, or on a row whose identity two rows claim. `Task.parent_uuid`'s old
+  comment — that a cycle is impossible because a parent is always a line above — was written when an import was the
+  only writer, and it stopped being true the moment these edits shipped; the comment now says who refuses what.
+* **A refusal writes nothing.** Every refusal case in `HierarchyMoveTest` re-reads the profile afterwards and compares
+  the whole shape — rows, parent links, topics, positions and whether each row is waiting for a push — with what was
+  there before. One edit also stamps every row it wrote with the same instant, so two rows of one tree cannot disagree
+  about when the change happened.
+
+The depth, the parent's owner and topic, and the knowability of the block are checked before any row is written, and
+the check reads the same rows the write does, inside the same transaction.
 
 **The ordering is fixed, and a drag has a boundary.** Both were listed below as Stage 16's owed work; phase 1 of
 §16.8 delivered them first, before any indent control existed, because a deeper tree makes each of them worse than a
@@ -127,14 +178,16 @@ that owns reminders rather than quietly rewired in a hierarchy commit.
 
 Everything that **changes the shape** of the tree, and it is deliberately not in this build:
 
-* No indent / outdent control in the editor or the list. A tree arrives through an import or is edited by dragging
-  within one sibling set; nothing yet moves a row under another row.
+* No indent / outdent control in the editor or on the row, and no "move to" sheet. The operations exist and are
+  tested at the repository; nothing offers them yet, so a tree still arrives through an import and is edited by
+  dragging within one sibling set.
 * Deleting a parent says nothing yet about its children — there is no path that creates one, so there is no path
   that orphans one. That sentence stops being true the moment indent/outdent ships, and Stage 16 has to answer it
   in the same change.
 * Topics cannot be nested inside topics: `TaskGroup` has no `parent_uuid`, and a Keep export has no syntax that
   would ask for one. Categories keep their own `parent_category_id`, which no screen has ever written.
-* Depth beyond four levels is refused at the edge and reported, not stored.
+* Depth past the third task level is refused — at the edge of an import, reported and clamped, and now at every move
+  that would push a block past it — and it is never stored by either path.
 
 ## What a reader sees
 

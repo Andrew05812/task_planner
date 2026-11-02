@@ -168,8 +168,13 @@ data class Task(
      *
      * No DB-level foreign key, for the same reason `group_id` has none: an import writes a parent and its
      * children in one transaction, and a schema that demanded the row exist first would make the order of that
-     * write a puzzle instead of a loop. Cycles are impossible by construction here — a node's parent is always
-     * a line above it — and `KeepImportMapping` checks anyway.
+     * write a puzzle instead of a loop.
+     *
+     * **A cycle is possible, and it is the writer's job to refuse one.** An import cannot form one — a parent is
+     * always a line above — but Stage 16 adds edits that can: an indent, an outdent and a move re-hang a row that
+     * already has descendants. So the guard is not a comment on how the column happens to be filled; it is
+     * [com.taskplanner.data.hierarchy.TaskHierarchyPolicy], which refuses to put a row under its own descendant,
+     * refuses an identity two rows claim, and refuses a tree deeper than the contract holds.
      */
     @ColumnInfo(name = "parent_uuid")
     val parentUuid: String? = null

@@ -1128,6 +1128,22 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
 3. **Model + repository**: move-subtree, delete-with-children policy, and the cycle guard *for moves* — the
    import's chain cannot cycle by construction and `TaskTree`'s walk is bounded, but a user-driven reparent
    needs the check at the moment it is attempted, which nothing does today.
+
+   **The model and the cycle guard are in** (2026-11-02). `TaskHierarchyRepository` answers `indentTask`,
+   `outdentTask`, `moveSubtreeUnder` and `moveWithinSiblings`, each inside one transaction over the profile's stored
+   rows and each answering with a named `HierarchyMoveResult`; `HierarchyMoveTest` (26 tests) covers indent onto the
+   row above, outdent past the subtree it leaves, a subtree crossing into another topic with `group_id` rewritten on
+   every row, and the refusals — self, own descendant, another profile's row, a topic that does not exist, a topic
+   that is not the destination parent's, and any move that would push the **deepest row of the block** past the third
+   task level. Every refusal re-reads the profile afterwards and compares rows, links, topics and positions with what
+   was there before: "the refusal writes nothing" is an assertion, not a claim.
+   **The delete-with-children policy is the next phase**, and it is the one this phase makes unavoidable: an indent
+   creates the first path that orphans a subtree, so `docs/HIERARCHY.md`'s sentence "there is no path that creates one"
+   stops being true with this commit.
+   **The depth contract was settled at the same time**: `TaskHierarchyPolicy.MAX_TASK_LEVELS = 3` (topic + three task
+   levels) is now the single bound the parser, the mapping, the move validation and the renderer read — Stage 15 left
+   the parser and the renderer each holding a constant called 3 and meaning different things by it, which let the card
+   draw a level no import could write. `TaskTree` no longer owns a depth constant, and the drift is pinned by a test.
 4. **Rendering**: a chevron per level and a collapse that works below the topic, and the first visible mark
    for a topic's own completed state. The depth-driven indent exists; a bounded depth exists; what is
    missing is the control at every level, and `TaskGroup.is_completed` — stored since 16 → 17 and carried

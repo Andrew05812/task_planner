@@ -233,6 +233,27 @@ interface TaskDao {
     )
     suspend fun assignTaskOrder(id: Long, order: Int, now: Long)
 
+    /**
+     * Re-hangs one row. Only the head of a moved subtree has its parent changed: everything under it keeps hanging
+     * from what it hung from, which is what makes the block move as a branch instead of scattering.
+     */
+    @Query(
+        "UPDATE tasks SET parent_uuid = :parentUuid, updated_at = :now, sync_state = 'PENDING' WHERE id = :id"
+    )
+    suspend fun setTaskParent(id: Long, parentUuid: String?, now: Long)
+
+    /**
+     * The topic of every row of a subtree, written together.
+     *
+     * `group_id` says which topic owns the tree, and it is carried on every row of it — so a subtree that changes
+     * topic has to change it on all of them in the same transaction. Doing it row by row outside one write is how a
+     * parent ends up in one topic with its children in another, which no screen could explain to the reader.
+     */
+    @Query(
+        "UPDATE tasks SET group_id = :groupId, updated_at = :now, sync_state = 'PENDING' WHERE id IN (:ids)"
+    )
+    suspend fun setTopicForTasks(ids: List<Long>, groupId: String?, now: Long)
+
     @Query(
         "UPDATE tasks SET archived = 1, archived_at = :now, status = 'COMPLETED', " +
             "completed_at = :now, updated_at = :now, sync_state = 'PENDING' WHERE id = :taskId"

@@ -18,6 +18,21 @@ import com.taskplanner.data.model.Task
 object TaskHierarchyPolicy {
 
     /**
+     * The deepest task level a tree may hold under one topic.
+     *
+     * **This is the one number for the contract, and everything that bounds a tree reads it here.** Stage 15 ended
+     * with two components each holding a constant called 3 and meaning different things by it: [KeepTextParser]'s
+     * counted a topic as level 0 and so allowed three task levels, while the renderer allowed a fourth indent — one
+     * level more than the parser would ever have written, and more than the 320dp card budget was photographed at.
+     * The brief settles it (topic + three task levels), the parser and renderer now agree, and `HierarchyMoveTest`
+     * fails if they drift apart again.
+     */
+    const val MAX_TASK_LEVELS: Int = 3
+
+    /** The deepest indent a card may draw: a topic is a header, not a step of indentation. */
+    const val MAX_INDENT_LEVEL: Int = MAX_TASK_LEVELS - 1
+
+    /**
      * The block of the ordering a row belongs to.
      *
      * A plain drag reorders a row *among its siblings*, which means rows of the same profile, under the same topic
@@ -40,6 +55,43 @@ object TaskHierarchyPolicy {
      */
     fun canonicalSequence(rows: List<Task>): List<Task> =
         rows.sortedWith(compareBy({ it.order }, { it.dueDate ?: Long.MAX_VALUE }, { it.id }))
+
+    /**
+     * How deep each row of this set sits, counted from one: a topic's own child is level 1.
+     *
+     * Measured within the rows given, because that is the only ancestry a card can be held to — and the same rule is
+     * what makes [heightOf] work on a subtree on its own, where the head counts as level 1. A row whose parent is
+     * blank, missing or already on the walk contributes no further level, so a cycle costs a stopped walk and not a
+     * stack overflow on the reader's main thread.
+     */
+    fun levelsByUuid(rows: List<Task>): Map<String, Int> {
+        val byUuid = rows.filter { it.uuid.isNotBlank() }.associateBy { it.uuid }
+        return byUuid.values.associate { row ->
+            var level = 1
+            var walker = row.parentUuid
+            val seen = hashSetOf(row.uuid)
+            while (walker != null && walker.isNotBlank() && seen.add(walker)) {
+                val parent = byUuid[walker] ?: break
+                if (level == MAX_TASK_LEVELS) break
+                level++
+                walker = parent.parentUuid
+            }
+            row.uuid to level
+        }
+    }
+
+    /** The height of a subtree: 1 for a row with nothing under it, one more for each level below. */
+    fun heightOf(rows: List<Task>, head: Task): Int =
+        levelsByUuid(subtreeOf(rows, head)).values.maxOrNull() ?: 1
+
+    /**
+     * Whether [blockHeight] rows can hang under a parent at [parentLevel] and still stay inside the contract.
+     *
+     * The bound is the deepest row of the block, not the grabbed one — which is why an indent of a row carrying a
+     * child is refused a level earlier than the same indent of a leaf, and why the reader is told the reason before
+     * the tree is written past the depth the card was measured to fit.
+     */
+    fun fitsUnder(parentLevel: Int, blockHeight: Int): Boolean = parentLevel + blockHeight <= MAX_TASK_LEVELS
 
     /**
      * The identities more than one row of this set claims, blank ones excluded.

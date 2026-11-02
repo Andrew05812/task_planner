@@ -1,5 +1,6 @@
 package com.taskplanner.ui.tasks
 
+import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.model.Task
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -35,13 +36,12 @@ class TaskTreeDepthTest {
 
     @Test
     fun aChainNumbersEachLevelOneDeeperThanTheLast() {
-        val chain = listOf(
-            task(1L, "a", null), task(2L, "b", "a"), task(3L, "c", "b"), task(4L, "d", "c")
-        )
+        // The deepest chain the contract allows under a topic: three task levels, which is two indent steps.
+        val chain = listOf(task(1L, "a", null), task(2L, "b", "a"), task(3L, "c", "b"))
 
         val depths = TaskTree.depthsByTaskId(chain)
 
-        assertEquals(listOf(0, 1, 2, 3), chain.map { depths.getValue(it.id) })
+        assertEquals(listOf(0, 1, 2), chain.map { depths.getValue(it.id) })
     }
 
     @Test
@@ -77,10 +77,10 @@ class TaskTreeDepthTest {
 
         val depths = TaskTree.depthsByTaskId(deep)
 
-        assertEquals("the deepest indent the card owns is the fourth level",
-            TaskTree.MAX_INDENT_LEVEL, depths.getValue(7L))
+        assertEquals("the deepest indent the card owns is three task levels below the topic",
+            TaskHierarchyPolicy.MAX_INDENT_LEVEL, depths.getValue(7L))
         assertTrue("and it is never exceeded, whatever the column says",
-            depths.values.all { it in 0..TaskTree.MAX_INDENT_LEVEL })
+            depths.values.all { it in 0..TaskHierarchyPolicy.MAX_INDENT_LEVEL })
     }
 
     @Test
@@ -90,8 +90,8 @@ class TaskTreeDepthTest {
         val depths = TaskTree.depthsByTaskId(loop)
 
         assertEquals("every row of a loop is still drawn, at the deepest indent the card allows",
-            listOf(3, 3, 3), loop.map { depths.getValue(it.id) })
-        assertEquals(TaskTree.MAX_INDENT_LEVEL, depths.getValue(1L))
+            listOf(2, 2, 2), loop.map { depths.getValue(it.id) })
+        assertEquals(TaskHierarchyPolicy.MAX_INDENT_LEVEL, depths.getValue(1L))
     }
 
     @Test

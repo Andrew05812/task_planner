@@ -302,7 +302,7 @@ class AppFixture(val context: Context) : AutoCloseable {
     val taskRepository = TaskRepository(
         taskDao, sessionRepository, recurrenceRepository, reminderRepository, workTrackingRepository
     )
-    val taskHierarchyRepository = TaskHierarchyRepository(database, taskDao, sessionRepository, timeBase)
+    val taskHierarchyRepository = TaskHierarchyRepository(database, taskDao, groupDao, sessionRepository, timeBase)
     val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
     val groupRepository = GroupRepository(groupDao, sessionRepository)
     val calendarRepository =

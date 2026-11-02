@@ -1,5 +1,7 @@
 package com.taskplanner.data.keep
 
+import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
+
 /**
  * Reads a Google Keep text export into a tree.
  *
@@ -34,8 +36,14 @@ package com.taskplanner.data.keep
  */
 object KeepTextParser {
 
-    /** The deepest level the contract holds: topic, task, subtask, subtask — four levels, indexed from 0. */
-    const val MAX_DEPTH: Int = 3
+    /**
+     * The deepest level the contract holds: topic, task, subtask, subtask — four levels, indexed from 0.
+     *
+     * The number is the tree's, not the parser's: [TaskHierarchyPolicy.MAX_TASK_LEVELS] is what the move validation,
+     * the card renderer, the backup and the sync stop at too, so a paste that arrives through this file can never
+     * write a tree that another component refuses to draw.
+     */
+    const val MAX_DEPTH: Int = TaskHierarchyPolicy.MAX_TASK_LEVELS
 
     private val BOX = Regex("^([ \t]*)\\[([ xX])\\](.*)$")
 

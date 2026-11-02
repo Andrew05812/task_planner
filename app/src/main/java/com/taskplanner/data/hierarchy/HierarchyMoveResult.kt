@@ -34,7 +34,37 @@ enum class HierarchyMoveRefusal {
      * under it" has no single answer. `tasks.uuid` has no unique index — Stage 16 §4 records why one was not added
      * blind — which is exactly why an ambiguous identity is refused at the write rather than resolved by a `LIMIT 1`.
      */
-    AMBIGUOUS_PARENT
+    AMBIGUOUS_PARENT,
+
+    /** Nothing above the row could take it as a child: it is the first row of its profile. */
+    NO_ROW_ABOVE,
+
+    /**
+     * The row above already holds this one, so an indent has nowhere deeper to go. It also answers a predecessor
+     * with a blank identity, which cannot take a child — the same reason [AMBIGUOUS_PARENT] refuses a doubled one.
+     */
+    NO_DEEPER_PARENT,
+
+    /** Already a topic's own child: outdenting further would leave the topic, which is not what an outdent means. */
+    ALREADY_AT_TOPIC_ROOT,
+
+    /** The row would land deeper than the contract holds — measured over its whole subtree, not over itself. */
+    DEPTH_EXCEEDED,
+
+    /** The destination row is not a live row of this profile, so it cannot be a parent of anything here. */
+    PARENT_NOT_IN_PROFILE,
+
+    /**
+     * The destination row carries no identity of its own, so nothing can hang from it. Writing a blank into
+     * `parent_uuid` would read back as "a topic's own child" — an un-parenting nobody asked for.
+     */
+    PARENT_UNNAMED,
+
+    /** The destination topic names no topic this profile owns. */
+    TOPIC_MISSING,
+
+    /** The destination parent lives in a different topic from the one the request named. */
+    TOPIC_MISMATCH
 }
 
 /**

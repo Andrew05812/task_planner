@@ -6173,3 +6173,79 @@ reminders, so it is written down in `docs/HIERARCHY.md` instead of being quietly
 AMBIGUOUS_PARENT`. Two of the five tests then failed on my own scenarios before the code was blamed — a tombstoned
 parent had left its child with no sibling to be dragged against, and a profile-isolation case asserted the order the
 opposite gesture produces — both fixed in the test, both honest about what the gesture actually was.
+
+## 20z — Stage 16 §5: the tree learns to move, and one depth number instead of two
+
+The reader can now change the shape of a tree, not only bring one in. `TaskHierarchyRepository` answers
+`indentTask`, `outdentTask`, `moveSubtreeUnder` and `moveWithinSiblings`, each inside one transaction over the
+profile's stored rows, each answering with a named `HierarchyMoveResult`. No screen offers the controls yet — that is
+§6 — so this block is the model and its proofs, and `docs/HIERARCHY.md` says which of the two exists.
+
+**The depth contract was settled first, because every move needs it.** Stage 15 left two components holding a constant
+called `3` with different meanings: `KeepTextParser.MAX_DEPTH` counted the topic as level 0 and so allowed three task
+levels, while `TaskTree.MAX_INDENT_LEVEL` counted indents and allowed four levels of task. The card could therefore
+draw a level the import would never have written, and nothing connected the two numbers. They are one now —
+`TaskHierarchyPolicy.MAX_TASK_LEVELS = 3`, `MAX_INDENT_LEVEL = MAX_TASK_LEVELS - 1` — read by the parser, the
+mapping, the move validation and the renderer, and `TaskTree` no longer owns a depth constant at all. The renderer's
+clamp is asserted as behaviour (a chain of six draws two indents), not as a name pointing at another name.
+`HierarchyMoveTest > one_depth_contract_holds_for_the_parser_the_renderer_and_the_moves` fails if they drift apart.
+Two existing depth tests were re-written rather than relaxed: a legal chain is three task levels (`0, 1, 2`), and a
+cycle now clamps at `2` where it clamped at `3`.
+
+**What the operations refuse, by name.** A row cannot be hung on its own descendant, on itself, on a row from another
+profile, on a row whose identity two rows claim, or on a row with no identity at all; a destination topic that this
+profile does not own is refused; a named topic that is not the destination parent's topic is refused. Every one of
+those refusal tests ends the same way: re-read the profile and compare rows, parent links, topics and positions with
+what was there before, so "writes nothing" is measured rather than promised.
+
+**The depth is measured over the block, not the grabbed row.** A leaf can reach level 3; the same leaf with a child
+under it cannot be indented at all, because the child would land on level 4. The two tests differ only in whether the
+row carries a subtree, which is what makes it visible that the bound is the block's.
+
+**Two things this block made unavoidable, both recorded instead of fixed sideways.** `docs/HIERARCHY.md`'s sentence
+"there is no path that creates a parent, so there is no path that orphans one" stopped being true with indent — the
+delete policy in §9 is now required, not optional. And `Task.parent_uuid`'s KDoc claimed cycles are impossible by
+construction, which was a statement about one writer; the comment now names the component that refuses a cycle.
+
+**Gates after the block, including the five fixes below**: 142 classes / **1812** JVM tests / 0 failures /
+0 skipped (phase 1 left 140 / 1781, and `HierarchyMoveTest` holds 26 of them);
+`lintDebug` 0 errors / **150** warnings — unchanged since Stage 15; `check-localization.py` pass; no new string,
+because no refusal has reached a reader yet. RED for the block was 20 unresolved references at
+`HierarchyMoveTest.kt:108-287` (`indentTask`, `outdentTask`, `moveSubtreeUnder`, `MAX_TASK_LEVELS`, `levelsByUuid`,
+`heightOf`, and the six new refusal names). One test then failed on its own fixture rather than on the code: it tried
+to move a three-level subtree under a level-one row, which the bound refuses — so that accidental finding became
+`a_move_that_would_push_a_subtree_past_the_depth_bound_is_refused`, and the move test was rebuilt on a two-row block.
+
+**Five findings against the first version of §5, all real, all fixed in the same commit.** A review pass read the diff
+as a stranger would and did not pull a single punch:
+
+1. **BLOCKER — a row arriving as a topic's root was placed after the root *row*, not after its branch.** The
+   destination-topic anchor picked `lastOrNull { root of destination }` and spliced immediately after it, so in a
+   topic holding `r → child`, a new root landed *between* them: the reader's existing child was drawn under a row that
+   is not its parent, and `writePositions` stamped and renumbered that child for a move that never touched it. The
+   test that should have caught it (`a_root_row_moved_into_a_topic...`) passed anyway because its fixture gave the root
+   exactly one child — the case where the bug is invisible. Fixed by anchoring on the end of that root's subtree, and
+   the test rewritten into `a_row_arriving_as_a_topic_root_lands_after_the_last_roots_whole_branch`, which asserts the
+   child's `order` and `sync_state` survived too.
+2. **MAJOR — the destination's identity was never checked for ambiguity.** `blockIsKnowable` guards the block being
+   moved, so indenting *onto* a uuid two rows claim sailed through: `levelsByUuid` and `depthsByTaskId` are both
+   `associateBy(uuid)`, last-row-wins, which means the level validated and the level drawn can come from two different
+   chains — and the row's own outdent is refused forever after. Fixed in `indentTask`, `moveSubtreeUnder` and
+   `outdentTask`'s grandparent link; covered by `a_row_moving_onto_an_identity_two_rows_claim_is_refused...`.
+3. **MAJOR — "the row above" meant the stored predecessor, not the one on screen.** Under a filter the two differ, and
+   the reader's indent would either be refused for a reason they cannot see or hang the row on an invisible parent,
+   which the renderer draws at the margin — an edit that looks like it did nothing. `indentTask` now takes an optional
+   `underTaskId`, which is what a screen that drew the neighbour can honestly report; the stored-predecessor default
+   stays for the unfiltered manual list. Pinned by `the_screen_can_name_the_row_it_actually_drew_above`.
+4. **MAJOR — `ownsTopic` trusted `getGroupByUuid`, which has no owner and no `is_deleted` filter** — so a subtree could
+   be moved into a topic the reader had already deleted. It now checks the owner *and* the tombstone flag.
+5. **MAJOR — one edit stamped three different instants.** The head, the block's topic and the crossed positions each
+   called `timeBase.wallMillis()`, so two rows of one tree could disagree about when the change happened; a `Ready`
+   plan now carries one `now`. The frozen `FakeTimeBase` in the fixture could not see this, which is worth saying out
+   loud about the harness: a clock that never moves cannot catch a stamp that moves twice.
+
+Also taken from the review: the refusal snapshot now includes `order` and `sync_state` (the class note claimed it
+checked them and it did not), `heightOf` is asserted on a leaf and a two-row branch instead of restating the
+`levelsByUuid` figure above it, the definitional `MAX_DEPTH == MAX_TASK_LEVELS` assertion is joined by a real paste
+that reports `TooDeep` and clamps at level 3, `PARENT_UNNAMED` gets its own test and its own refusal reason instead of
+reporting `NO_DEEPER_PARENT`, and `rowsRewritten` is asserted for an indent as well as a reorder.

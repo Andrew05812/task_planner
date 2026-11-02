@@ -9,6 +9,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import com.taskplanner.R
+import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import org.junit.Assert.assertEquals
@@ -107,7 +108,7 @@ class TaskCardIndentTest {
         val step = context.resources.getDimensionPixelSize(R.dimen.task_depth_indent)
         val base = basePadding()
 
-        (0..TaskTree.MAX_INDENT_LEVEL).forEach { level ->
+        (0..TaskHierarchyPolicy.MAX_INDENT_LEVEL).forEach { level ->
             val title = titleOf(bind(adapter, row(level)))
             assertEquals("level $level sits $level step(s) in from the card's own padding",
                 base + level * step, title.paddingStart)
@@ -120,14 +121,15 @@ class TaskCardIndentTest {
         val adapter = adapter()
         val step = context.resources.getDimensionPixelSize(R.dimen.task_depth_indent)
         val base = basePadding()
+        val deepest = TaskHierarchyPolicy.MAX_INDENT_LEVEL
 
         // The sequence a scrolling reader actually produces: deep, then shallow, in the same holder.
-        val holder = bind(adapter, row(3))
-        assertEquals(base + 3 * step, titleOf(holder).paddingStart)
+        val holder = bind(adapter, row(deepest))
+        assertEquals(base + deepest * step, titleOf(holder).paddingStart)
 
         adapter.bindViewHolder(holder, 0)
         assertEquals("the same holder, asked again for the deep row, does not move again",
-            base + 3 * step, titleOf(holder).paddingStart)
+            base + deepest * step, titleOf(holder).paddingStart)
 
         val shallow = bind(adapter, row(0))
         assertEquals("and a fresh holder drawing level zero starts at the card's own padding",
@@ -140,7 +142,7 @@ class TaskCardIndentTest {
         val adapter = adapter()
 
         val shallow = titleOf(bind(adapter, row(0)))
-        val deep = titleOf(bind(adapter, row(TaskTree.MAX_INDENT_LEVEL)))
+        val deep = titleOf(bind(adapter, row(TaskHierarchyPolicy.MAX_INDENT_LEVEL)))
         listOf(shallow, deep).forEach { title ->
             val holder = title.parent as View
             holder.measure(
