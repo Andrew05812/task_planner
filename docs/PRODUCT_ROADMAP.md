@@ -973,7 +973,12 @@ passed in every local run, `expected:<438> but was:<0>`. The assertion was not t
 have been the wrong lesson — a fixture whose shape depends on which client unpacked it is not a contract — so
 `.gitattributes` now pins `app/src/test/resources/keep/*.txt` to `text eol=crlf` and nothing else. The failure was
 reproduced before it was fixed and the fix confirmed the same way: a clone with `core.autocrlf=false` of `676bbb2`
-reads `CRLF 0 / LF 438`, and of `1080dc2` reads `CRLF 438`.
+reads `CRLF 0 / LF 438`, and of `1080dc2` reads `CRLF 438`. The published head `0916f4e` is green — **16 of 16 steps**, run 41419503843 — with one
+thing said out loud rather than buried: its first attempt failed on `WorkAdjustmentUiTest`, a Stage 3F screen test
+nothing in this stage touches (`the user is told which of the two fields is wrong expected:<A stretch cannot end at or
+before it starts.> but was:<null>`), the same commit tree passed the suite minutes earlier at `1080dc2`, and the
+rerun of the failed job passed 16/16. It is recorded as an intermittent to be diagnosed on its own day, not as a
+green run to be reported and forgotten, and not as a test to be relaxed.
 
 **What Stage 16 still owns, stated so this section cannot be read as that stage.** Move a task between parents,
 delete-with-children policy, a cycle guard at the moment a *user* attempts a reparent, a collapse control below the
