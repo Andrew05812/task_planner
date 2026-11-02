@@ -245,7 +245,7 @@ class KeepTextParserTest {
 
     @Test
     fun titlesKeepCyrillicEmojiDigitsTimesAndPunctuationExactlyAsWritten() {
-        val title = "🟥Сегодня — 26.12.26 - 11:00 - Ул. Петровка, д. 5"
+        val title = "🟥Сегодня — 12.03.27 - 09:30 - Ул. Примера, д. 7"
         val doc = KeepTextParser.parse("[X] $title")
 
         assertEquals("not one character of it is normalised", title, doc.topics.single().title)
@@ -254,9 +254,9 @@ class KeepTextParserTest {
 
     @Test
     fun aDateInsideATitleStaysTextAndTheParserHasNowhereToPutADueDate() {
-        val doc = KeepTextParser.parse("[ ] 26.12.26 - 11:00 - meet someone")
+        val doc = KeepTextParser.parse("[ ] 12.03.27 - 09:30 - meet someone")
 
-        assertEquals("26.12.26 - 11:00 - meet someone", doc.topics.single().title)
+        assertEquals("12.03.27 - 09:30 - meet someone", doc.topics.single().title)
         // §8 forbids inventing metadata. A parser with no field to invent it into cannot produce it either,
         // so the contract is checked on the shape of the type rather than on one example's output.
         assertEquals(

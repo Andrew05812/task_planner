@@ -56,19 +56,24 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_normal"
-                android:hint="@string/keep_import_paste_label">
+                android:hint="@string/keep_import_paste_label"
+                app:helperText="@string/keep_import_paste_placeholder"
+                app:helperTextEnabled="true">
 
                 <!-- The leading whitespace on a line *is* the data: it is what makes an indented line a task of
                      the topic above it rather than a topic of its own. So nothing here trims: no `trim`, no
                      autoCorrect that would rewrite a word, and the text grows with the paste rather than scrolling
                      inside its own box, because a field that scrolls inside a scrolling screen takes two gestures
-                     to read and the reader cannot tell which one moved. -->
+                     to read and the reader cannot tell which one moved.
+                     No `android:hint` on this view: an empty field inside a TextInputLayout draws the layout's label
+                     at the text position, so a hint here would print a second sentence over it — which is what the
+                     device frame of the empty field showed, two lines occupying one row. The format guidance is the
+                     layout's helper text, in the row Material owns under the box. -->
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/pasteInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="top|start"
-                    android:hint="@string/keep_import_paste_placeholder"
                     android:importantForAutofill="no"
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:minLines="10"
@@ -178,7 +183,11 @@
             android:textAppearance="?attr/textAppearanceBodyMedium"
             tools:text="@string/keep_import_result_already" />
 
+        <!-- The two actions share a row only on a width that can hold both labels in one line; below that the
+             bar becomes a column, in `KeepConfirmBar`, because a wrapped primary action was measured falling off
+             the bottom of this bar at 320dp with the font at 1.3. -->
         <LinearLayout
+            android:id="@+id/confirmActions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/spacing_small"

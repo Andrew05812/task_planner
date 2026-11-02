@@ -793,6 +793,186 @@ copy, `README.md`'s feature list, and `docs/LOCALIZATION.md`'s rule applied to t
 The known corpus is imported on a device, the counts on the screen equal the counts in the fixture, a second
 import adds nothing, and every dropped or flattened thing was shown to the reader before it happened.
 
+## 15.13 State after the Stage 15 work of 2026-11-02
+
+**Status: delivered, with the half of Stage 16 it needed and no more than that half.** A Google Keep *text* export
+pasted into Settings → «Импорт из Google Keep» becomes real topics and real tasks, with the indentation that
+decided them kept, the checks that were on them kept, the order they were written in kept, and nothing invented
+beside them. Stage 16 is **not** closed by this: what shipped is the storage and the drawing of a tree, and the
+editing of one is still that stage's, named in §16.7 and §16.8.
+
+**What was built, in the order it was needed.**
+
+| part | where | what it answers |
+|---|---|---|
+| the syntax | `data/keep/KeepTextParser.kt` + `KeepTextParserTest` (26) | `[X]`/`[x]`/`[ ]`, BOM, CRLF/CR/LF, tabs and spaces, four levels and a clamp, empty checkbox rows counted as separators apart from blank lines, titles kept byte-for-byte, a line with no box reported rather than guessed at |
+| the corpus | `KeepCorpusContractTest` (9) | reads `app/src/test/resources/keep/keep-corpus-shaped-like-the-original.txt` — the depersonalized file, not a constant — and counts it: 439 physical lines, 382 titled elements, 296 checked, 86 open, 57 separator rows, 56 root topics, 19 repeated titles, a 169-character title, and a maximum depth of 1 — the export the stage was written against nests one level, so the four-level contract is proven by the parser, the mapping tripwire and the device's own chain fixture, not claimed about this file |
+| the schema | `AppMigrations` 16 → 17, `AppMigrationsTest` | additive: `tasks.parent_uuid` + `index_tasks_user_id_parent_uuid`, `task_groups.is_completed DEFAULT 0`. Schema equality and a file round-trip are tested; no destructive migration is reachable |
+| the mapping | `KeepImportMapping.kt` + `KeepImportMappingTest` (25) | topic → `TaskGroup`, line → `Task`, parent links from indentation only, status from the box only, `completedAt` never written, and a deterministic identity per row |
+| the importer | `KeepImportRepository.kt` + `KeepImportTransactionTest` (19) | guards → safety copy → one Room transaction → `PRAGMA foreign_key_check` before the commit; ABORT inserts, so a name that exists is refused rather than replaced; a second paste of the same text writes nothing |
+| the screen | `ui/keep/` + `KeepImportViewModelTest` (15), `KeepImportScreenTest` (11) | paste → parse → preview → confirm, two phases, every sentence a resource, the tree opening and closing with the hidden count on the row that hid it |
+| the drawing | `ui/tasks/TaskTree.kt` + `TaskTreeDepthTest` (6), `TaskCardIndentTest` (4) | the depth a card is drawn at, measured from the parent links of the rows on screen, bounded at four levels |
+| the device | `KeepImportInstrumentedTest` (6) | the route, the paste through the real widget, the stored tree, the repeat paste, the nested cards, and the frame matrix |
+
+**The identity decision, because it is the one a later reader will want to change.** A row's uuid is
+`UUID.nameUUIDFromBytes` over `keep | KIND | profile | parent key | occurrence | title`, where the parent key is a
+topic's own uuid or the parent task's. Two things are deliberately **not** in that key: the fingerprint of the whole
+paste, and the row's position in it. The first version had the fingerprint and was wrong in a way the test found:
+fixing one typo in a 439-line export re-identified all 382 rows, so the second paste became a duplicate import.
+Position was excluded for the mirror reason — inserting one line would re-identify every sibling below it. The
+fingerprint still exists and still answers "has this exact text been imported before"; it just does not decide what
+a row *is*.
+
+**What the device corrected — seven things in the test, five in the app.** All twelve were found by running the
+route on `taskplanner_avd` and looking at what came back, not by reading the code.
+
+*The test side:*
+
+1. `Espresso.onView(keepImportButton).check(matches(isDisplayed()))` failed on a row the Settings panel keeps below
+   the fold. The row is `VISIBLE` at `y=315` of a window that is not showing that far down; the check now scrolls
+   first, which is what a reader does.
+2. `?.findViewById(R.id.rowToggle)` with no type argument compiled and died at runtime with
+   `MaterialButton cannot be cast to Void`: Kotlin inferred the generic from the `return@onScreen null` above it,
+   which is `Nothing?`. Two reads were written that way.
+3. `ViewActions.scrollTo()` refuses `confirmButton`, and is right to — the confirm bar is a pinned LinearLayout, not
+   a scroll container. The action that writes rows is deliberately never below a fold.
+4. `ViewActions.scrollTo()` cannot reach a task card the RecyclerView has not laid out: it is not an off-screen
+   view, it does not exist yet. Measured on the first device run, it answered `NoMatchingViewException` for a card
+   the list went on to draw one swipe later. The run asks the *drawn* rows instead — `paddingsFor` harvests every
+   card the list passes, `scrollPreviewTo` stops on one named row — and item 6 records why neither of them gets
+   there by swiping.
+5. **A frame was taken one composition early.** The matrix photographed a topic whose row had already been rebound
+   to "open this topic" while the pixels still said "close this topic", because the run waited on
+   `adapter.itemCount` — which changes a layout pass before the list rebinds, and two passes before the compositor
+   presents. Diffed against its neighbour frame, the only pixels that had moved were the scrollbar and the clock.
+   Every frame is now taken after the *drawn* row has been read (`toggleLabelFor`, `hiddenLabelFor`,
+   `visibleRowTitles`, `visibleCardTitles`) and after `onIdle` plus a 1.5 s settle, and the frame set is five rather
+   than four so the statistics card and the tree are each photographed at the scroll position that shows them.
+6. **A swipe travels a screenful, and a fling does not stop where the run looks.** Two helpers asked a list to
+   reach a row by swiping it, and both failed at 320dp with the font at 1.3, where a screenful is two rows.
+   `scrollPreviewTo` swiped the preview until a title appeared among the drawn rows; because the statistics card is
+   taller than the viewport there, the list starts with no tree row drawn at all, and the one swipe that reaches the
+   tree also flies past its first topic — the run reported the rows *below* it (`[open child, done child, grandchild,
+   🟨Завтра, lowercase done, repeated item, repeated item]`) and refused after eight swipes. `paddingsFor` harvested
+   every card at every rest, which is the fix for a *single* overshoot, and still found two of the three chain cards
+   in both languages: `swipeUp()` ends in a fling, and the instant Espresso calls idle can be mid-glide, so two
+   consecutive rests can skip a row anyway. Both now scroll a third of the list per step with `scrollBy`, which has
+   no inertia and leaves two thirds of the viewport overlapping between steps; the preview additionally asks whether
+   the row is drawn *inside* the list's bounds, because a row clipped at the bottom edge has a control that cannot be
+   pressed and a label no frame can be trusted to show.
+7. **The guard that refuses a blank frame was itself unprovable.** Its rule was a 9x9 grid across the window and a
+   minimum contrast between the brightest and darkest sample, and it refused `g4-preview-tree` in both dark
+   configurations at 33 and 32 levels. The refused picture — kept, because a refusal nobody can look at can only be
+   argued about — shows the whole tree in white text with a mint button and a bottom bar. The same measure had read
+   **238** on the previous run's dark frame of the same screen: the grid's 90 points landed on a glyph that time and
+   between the rows this time. Nothing about the app changed; the measurement was never measuring what it named. The
+   guard now reads the whole frame at a 3 px stride and asks the two questions a window that failed to draw cannot
+   answer — how many distinct luminances it holds, and how much of it is not its most common colour. Over the 32
+   frames this stage produced those read 189–225 and 18.5–62.2%, against 1 and 0 for a solid rectangle, with the
+   floors set at 32 and 5%. A refused frame is still written to the device as `x-refuse-*` before the run stops. Four
+   older frame classes carry the grid version of this guard — `Stage14LanguageFramesInstrumentedTest`,
+   `Stage8aScreensInstrumentedTest`, `TaskEditorFramesInstrumentedTest`, `BottomNavigationInstrumentedTest` — and
+   were not re-opened here: their screens are dense enough that the grid has always hit something.
+
+*The app side: two figures read off a screenshot, and three drawings.*
+
+8. **The preview's «rows to write» counted the rows on screen.** With one topic folded it read 5 where the same
+   paste had read 8 — the three rows of the branch the reader had just hidden. Folding is a way of looking; it is
+   not a smaller import. The two counted lines now come from `KeepImportPlan.rowsToWrite` and
+   `rowsAlreadyHere`, which are derived from the plan, and `KeepImportMappingTest` pins that they do not move when
+   `KeepPreviewRows.of` is handed an empty set of open topics.
+9. **«Nested under a task» went to 0 on a re-paste.** It was read from the plan's *write* statistics, so a paste the
+   profile already owned — writing nothing, correctly — described its own tree as flat beside a screen still
+   drawing the grandchild indented. Shape figures now come from `KeepImportPlan.nestedRows`, counted over every
+   candidate, and the write statistics say so in their own KDoc.
+10. **«Импортировать» arrived cut in half.** At 320dp with the font at 1.3 the confirm bar kept its two actions
+   side by side, each `weight=1`, so the Russian verb wrapped inside a button half the width of its own label and
+   the second line fell outside the bar: the drawn button was 81 px tall and only 67 px of it were inside the
+   window's visible rect — 82.7%. Every wide configuration looked right; only the narrow one showed it. The bar's
+   shape is now chosen from the width rather than fixed in XML: `KeepConfirmBar.shape(...)` reads
+   `R.bool.keep_confirm_actions_stacked`, `values/config.xml` says `true` and `values-w360dp/config.xml` says
+   `false`, and the stacked form gives each action the whole width. `KeepImportScreenTest` pins both halves of
+   that choice against a configuration whose `screenWidthDp` is the one under test — before this, `widthDp` only
+   steered the measure specs, so a test asking for 320dp still read the default screen and a width-dependent
+   decision could be asserted without being exercised.
+11. **The empty paste field drew two sentences on one line.** The layout's floating label «Pasted text» and the edit
+    text's own `android:hint` — the sentence that explains the format — are both drawn at the text position while the
+    field is empty, and the behaviour frame showed the dark label printed straight across «Paste here, one note per
+    line…». The guidance is now the layout's *helper text*, which Material draws in its own row under the box:
+    readable while the field is empty and while it is full, and announced with the field. `KeepImportScreenTest` pins
+    where the sentence lives and records why it cannot pin the drawing — read back under Robolectric,
+    `TextInputLayout` answers `pasteInput.hint` with its own label whether or not the XML gives the child a hint, so
+    an assertion about `getHint()` passes against the broken layout and proves nothing. The frame is the proof of the
+    drawing; the test is the guard against putting the hint back.
+12. **A preview row could lose its title entirely.** At 320dp with the font at 1.3 the topic row's title was measured
+    at **0 px** on the device and drew nothing. The title was the row's only weighted child, and the state mark, the
+    outcome caption, the hidden count and a Russian toggle label together took the whole width, so the weighted child
+    was handed the leftover — which was none. The frame read «☑ · новая · ещё 3 · РАЗВЕРНУТЬ ТЕМ…» with a blank where
+    the note's name belongs, while the binding still held «🟥Сегодня»: no assertion on `rowTitle.text` sees that, and
+    no Robolectric measure can, because LEGACY graphics answer `measureText` with a character count and the labels
+    that crowd the row out on a device measure almost nothing there. The captions now sit *under* the title, in the
+    column the row weights, and the topic's control is the row's one fixed competitor for width. The device run
+    measures every drawn row's title against a 48dp floor before it photographs it, and `KeepImportScreenTest` pins
+    the arrangement that floor depends on. The first version of that fix left a smaller mess in the same frame — the
+    two captions sharing one line reflowed inside their own words, «новая ещ / ё / 3» and "new 3 / hidden" — so each
+    statement now gets the column to itself, and the 320dp frames are what says so.
+
+**The numbers, measured on 2026-11-02.** JVM: **139 classes / 1761 tests / 0 failures / 0 skipped**. Lint:
+**0 errors, 150 warnings**. `check-localization.py`: **pass — 985 strings and 53 plurals in English, 980 and 53 in
+Russian, 0 missing, 0 placeholder mismatches** (the five keys English alone carries are the deliberately
+untranslated ones Stage 14 named: `app_name`, the two language names, the two format labels).
+Device, `taskplanner_avd` / `emulator-5584` / API 35, production bytes
+`a96e62e7b90dd891b662c467b6fcbe7fa0b09b65df019d37cc8e82cbeaf5afb9` read back from `/data/app` before and after
+(the instrumented APK beside it `95c115a65a0f277d91fae06e7c1bdcd5f55cd3d7bb49ea07ff7a437a23b74caf`):
+`KeepImportInstrumentedTest` **`OK (6 tests)`**, and the frame matrix in `docs/images/ui-redesign/after/s15/` —
+six configurations (en/ru × 393dp light, 393dp dark, 320dp light at font 1.3) × five frames, each
+configuration's run refusing a tag that lies about the device's own width, theme or font scale, refusing an
+installed APK whose bytes differ from the built one, and refusing any row whose drawn title is narrower than
+48dp — plus six behaviour frames, **36 pictures in all, every one from those bytes**. Four rebuilds of the
+instrumented APK and two of the app went into that set; the gallery holds only the last, because a frame is
+evidence about a build and the run says which one.
+
+**One finding about the device itself, recorded because it will bite the next stage.** The app came into Stage 15's
+first device run rendering Russian while `ro.product.locale` and `system_locales` both read `en-US`: a per-app
+language override from Stage 14's matrix was still set, and `am instrument -e clearPackageData true` does not take
+it back. The class now hands the language back in its own teardown and its frames method refuses a directory name
+the window does not agree with; the three resource-driven assertions in it read through
+`AppLocale.localized(context)` so they hold in either language.
+
+**What the review passes caught, recorded because the brief made each of them a rule.** Four things were right in
+the code and wrong in the writing about it, and one was wrong in the files themselves:
+
+* **A comment claimed a database guarantee that does not exist.** `KeepImportRepository` said the `ABORT` inserts
+  and `PRAGMA foreign_key_check` make a half-written import impossible. `task_groups.uuid` *is* the primary key, so
+  the topic side is real; `tasks.uuid` has no unique index (the PK is an autoincrement `id`), and
+  `tasks.group_id` / `tasks.parent_uuid` have no declared foreign key, so the pragma cannot see an orphaned subtree
+  and the task side rests on the mapping's ownership read. `KeepImportTransactionTest`'s KDoc likewise said an
+  ABORT race was tested; it is not — only the trigger-injected abort is. Both now say which half holds and name the
+  stage that owns the gap.
+* **Three English literals stood where a resource belongs.** The TalkBack row description joined the title and the
+  toggle's own label with a comma written in Kotlin; it is `R.string.keep_import_row_description` (`%1$s, %2$s` in
+  English, `%1$s: %2$s` in Russian) read from the row that is being described.
+* **A real line from the original export had been copied into the repo** — a date, a time and a street address, used
+  because it was the clearest example of a title that is not a due date. It sat in `KeepTextParserTest`,
+  `KeepImportMappingTest`, `KeepImportScreenTest`, the preview row's `tools:text` and `docs/IMPORT_KEEP.md`. All five
+  now carry an invented line of the same shape. The export itself, the JSON import artefact and the backup the
+  importer writes are `.gitignore`d (lines 100–103), were never staged, and nothing on the device or in the frame
+  gallery comes from the reader's notes: the instrumented run pastes the fixtures it builds in its own companion
+  object. The check is a sweep rather than a promise: each of the export's 234 distinct titles of twelve characters
+  or more was searched for inside all 616 text files the worktree would commit — none appears.
+* **A claim about the corpus's depth had been inherited from the brief rather than measured.** §15.13 and
+  `docs/IMPORT_KEEP.md` described four levels as a property of the original export; `KeepCorpusContractTest` counts
+  `maxDepth == 1`. The four-level contract is proven by the parser, the mapping tripwires and the device's chain
+  fixture, and the docs now say that instead.
+
+**What Stage 16 still owns, stated so this section cannot be read as that stage.** Move a task between parents,
+delete-with-children policy, a cycle guard at the moment a *user* attempts a reparent, a collapse control below the
+topic level, and the filtered-reorder collision `TaskReorderPersistenceTest` records but does not fix. The parent
+key, the index, the depth bound, the topic's own completed state, the indent and the sync fields are in.
+
+**Google Sign-In is unchanged by this stage and remains `BLOCKED — Firebase project / OAuth configuration
+required`.**
+
 ---
 
 # Stage 16 — A real topic and task hierarchy
@@ -808,7 +988,7 @@ nowhere to put it.
 - Indent and outdent a topic or a task with a left/right control, in the editor and from the list.
 - A child is visibly a child: an indent, a parent line, and a collapse control at every level.
 - Moving a parent moves its subtree; deleting a parent says what happens to the children before it does it.
-- Depth is bounded and stated (four levels, matching the Keep corpus), not unlimited and broken at the
+- Depth is bounded and stated (four levels; the reader's measured export nests one, so the bound is a promise about what the app can hold, not a description of the file it was written against), not unlimited and broken at the
   fourth.
 
 ## 16.3 What already exists
@@ -820,11 +1000,19 @@ nowhere to put it.
   `CategoryRepository` methods (`:25-32`) are dead code. No writer ever sets a non-null parent, and the
   string `label_parent_category` ("Parent Category", `strings.xml:36`) is referenced by no layout and no
   Kotlin file.
-- **`TaskGroup` has no parent column at all** (`TaskGroup.kt:27-58`), and **`Task` has no parent, depth,
-  level or indent column** (`Task.kt:47-158`).
-- The hierarchy that is rendered is an illusion of order: `TasksViewModel.render` (`:266-287`) emits a
-  `GroupHeader` then its tasks by `groupId` string equality, and everything not in a group as a bare row
-  (`:285-287`).
+- **Half of the schema landed on 2026-11-02, as Stage 15's prerequisite.** `Task.parent_uuid` exists
+  (`Task.kt:163-175`) with an `index_tasks_user_id_parent_uuid` beside it, `TaskGroup.is_completed` exists
+  (`TaskGroup.kt:59-71`), migration **16 → 17** is written and pinned by `AppMigrationsTest`, both fields ride
+  the sync documents (`SyncedTask.parentUuid`, `SyncedGroup.completed`), and the task list already indents by
+  the depth `TaskTree.depthsByTaskId` measures (`TaskTree.kt`, `TaskCardIndentTest`, `TaskTreeDepthTest`). What
+  that bought is the *storage and the drawing* of a tree, which is what an import needs; it is not the editing of
+  one, which is this stage.
+- **`TaskGroup` still has no parent column**: topics do not nest inside topics, and no Keep export syntax asks
+  for it. `Task.parent_uuid` is the only nesting key that exists.
+- The hierarchy that is rendered is one level of grouping plus a depth-driven indent inside it:
+  `TasksViewModel.render` emits a `GroupHeader`, then that group's tasks by `groupId`, each indented by
+  `TaskTree`. Collapsing is still per topic only, and there is no per-level chevron yet — §16.2's
+  "a collapse control at every level" is unbuilt.
 - Ordering primitives exist and are usable: `tasks.order` (`:141`), `TaskDao.updateTaskOrder` (`:190-191`),
   `updateTaskOrders` (`:193-196`), `TaskRepository.reorderTasks` (`:156`), `GroupDao.nextSortOrder` (`:30-34`).
 - **A known ordering defect this stage inherits**: `saveVisibleOrder` (`TasksViewModel.kt:594-603`) re-indexes
@@ -844,17 +1032,21 @@ categories join the same model.
 
 ## 16.5 Data changes
 
-Migration **16 → 17**, additive and non-destructive, in the style the repo already uses (a table rebuild with
-the old rows copied, as `MIGRATION_2_3` does):
+**Migration 16 → 17 is done** (Stage 15, additive: `tasks.parent_uuid` + its index, `task_groups.is_completed`),
+and it settled the two questions this section used to pose:
 
-- `task_groups.parent_uuid` (nullable, self-FK, index on `parent_uuid`) — the nesting key, matching the
-  existing `uuid`-as-primary-key convention.
-- `tasks.parent_uuid` or `tasks.parent_task_id` (nullable) — decide once, and note that `tasks.group_id`
-  already stores a *uuid string* while `category_id` stores a *numeric id*; the inconsistency is documented at
-  `Task.kt:100-103` and this stage has to pick a side deliberately.
-- A depth invariant enforced in code, not in SQLite: a cycle check on every move. SQLite cannot express
-  "no ancestor of yourself" and a recursive CTE guard is a per-query promise.
-- Backfill: every existing row stays a root. Nothing is inferred from titles or from order.
+- the key is a **uuid string** — `tasks.parent_uuid` matches `tasks.group_id`'s convention, and the inconsistency
+  with the numeric `category_id` is documented rather than deepened;
+- **backfill: every existing row stayed a root**, and nothing was inferred from titles or from order. `is_completed`
+  arrived with a `DEFAULT 0`, so no topic that ever existed changed state because of it.
+
+What this stage still needs, if anything, is **17 → 18** — the depth bound is enforced in code today
+(`KeepTextParser.MAX_DEPTH`, `TaskTree.MAX_INDENT_LEVEL`), cycles are made impossible by how the import builds a
+chain and bounded by how the walk reads one, and a *move* guard belongs to the move control that does not exist
+yet. A schema change is not assumed; it is the decision this section still owns.
+
+`task_groups.parent_uuid` is **out**, on purpose: nothing in the app or the source format asks for a topic inside
+a topic, and a column with no writer is how `Category.parent_category_id` became dead code (§16.3).
 
 ## 16.6 Risks
 
@@ -873,16 +1065,28 @@ the old rows copied, as `MIGRATION_2_3` does):
 
 ## 16.7 Dependencies
 
-Blocks Stage 15's nesting phase. Needs Stage 14's string discipline for the new controls. Interacts with
+**No longer blocks Stage 15**: the minimal hierarchy the import needed (parent key, index, depth bound, the
+topic's own completed state, the drawing) shipped inside Stage 15 on 2026-11-02, and a four-level chain is proven end to end — parser, mapping, importer, task list, device frames — though the reader's own export nests one level deep. What remains here is the *editing*. Needs Stage 14's string discipline for the new controls. Interacts with
 Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
 
 ## 16.8 Implementation phases
 
-1. **Fix the ordering defect first**, with a failing test: reorder while filtered, and assert rows outside the
-   filter keep their order.
-2. **Migration 16→17** with a schema-equality test and a round-trip on a copied database file.
-3. **Model + repository**: parent key, cycle guard, move-subtree, delete-with-children policy.
-4. **Rendering**: depth-driven indent as a token (`spacing_*`), a chevron per level, and a bounded depth.
+1. **Fix the ordering defect**, with a failing test: reorder while filtered, and assert rows outside the filter
+   keep their order. *Half done*: the defect is now written down and pinned by
+   `TaskReorderPersistenceTest`, which asserts parent, topic and owner survive a filtered reorder and records the
+   order collision it still produces. The re-densifying itself is unchanged, deliberately: `order` is
+   profile-wide in this app, and re-numbering it is a decision about the manual list that this stage owns.
+2. ~~Migration 16→17 with a schema-equality test and a round-trip on a copied database file.~~ **Done** as
+   Stage 15's foundation (`parent_uuid`, `is_completed`, the parent index). This stage's data work starts at
+   **17 → 18**, for whatever the move controls need beyond what exists — and it needs little: the key, the index
+   and the depth bound are already in.
+3. **Model + repository**: move-subtree, delete-with-children policy, and the cycle guard *for moves* — the
+   import's chain cannot cycle by construction and `TaskTree`'s walk is bounded, but a user-driven reparent
+   needs the check at the moment it is attempted, which nothing does today.
+4. **Rendering**: a chevron per level and a collapse that works below the topic, and the first visible mark
+   for a topic's own completed state. The depth-driven indent exists; a bounded depth exists; what is
+   missing is the control at every level, and `TaskGroup.is_completed` — stored since 16 → 17 and carried
+   by sync — is read by no screen yet.
 5. **Controls**: indent/outdent in the editor and on the row; a long-press move for whole subtrees.
 6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping.
 7. **Device proof** at 320dp and at font scale 1.3, light and dark.

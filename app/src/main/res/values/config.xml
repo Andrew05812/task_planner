@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Layout decisions that belong to a screen width rather than to a screen.
+
+  `keep_confirm_actions_stacked` is the one the Google Keep import screen needs, and it is here because of a
+  frame: at 320dp with the font at 1.3, in Russian, the confirm bar's two actions shared a row and «Импортировать»
+  wrapped inside its half — the second line fell below the bar's own bottom edge, so the primary action of the
+  screen that writes 382 rows had a cut-off label and a partly off-window touch target. Side by side is the right
+  shape at a wide screen and the wrong one at a narrow one, and only the width can say which.
+-->
+<resources>
+    <!-- The default is the narrow answer: a layout that has to choose gets the shape that always fits. -->
+    <bool name="keep_confirm_actions_stacked">true</bool>
+</resources>

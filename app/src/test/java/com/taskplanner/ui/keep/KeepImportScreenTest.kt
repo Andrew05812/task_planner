@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
@@ -18,8 +19,11 @@ import com.taskplanner.databinding.FragmentKeepImportBinding
 import com.taskplanner.databinding.FragmentSettingsBinding
 import java.util.Locale
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,6 +56,11 @@ class KeepImportScreenTest {
         val config = Configuration(app.resources.configuration).apply {
             this.fontScale = fontScale
             setLocale(Locale(language))
+            // The width a resource qualifier sees. Before this, `widthDp` only steered the measure specs and a
+            // test that asked for 320dp still read the default screen's configuration — which is how a
+            // width-dependent *layout decision* gets asserted without ever being exercised.
+            screenWidthDp = widthDp
+            smallestScreenWidthDp = widthDp
         }
         // ContextThemeWrapper does not override createConfigurationContext, so the theme goes on the configuration
         // context rather than wrapped before it — otherwise the inflated row resolves its attributes against the
@@ -156,6 +165,105 @@ class KeepImportScreenTest {
             2, binding.pasteInput.text!!.toString().lines().count { it.startsWith(" ") })
     }
 
+    /**
+     * The paste field explains its format in the row Material owns, not at the position it writes at.
+     *
+     * The behaviour frame of the empty field photographed two sentences on one line: the layout's floating label
+     * «Pasted text», drawn at the text position because the field is empty, and the edit text's own `android:hint` —
+     * the long sentence about one note per line — drawn at the same place. Zoomed, the first grey line reads
+     * «Paste here, one note per line…» with the dark label printed straight across «Paste here».
+     *
+     * What this test can pin, and what it cannot, are both measured. The collision is a *drawing* fact and Robolectric
+     * does not reproduce it: read back here, `TextInputLayout` reports its own label as the edit view's hint —
+     * `pasteInput.hint` is «Pasted text» whether or not the XML gives the child a hint — so an assertion about
+     * `getHint()` passes against the broken layout and would prove nothing. What does discriminate is where the
+     * guidance sentence lives: it is now the layout's helper text, which Material draws in its own row under the box,
+     * readable while the field is empty and while it is full, and announced with the field. The frame remains the
+     * proof of the drawing.
+     */
+    @Test
+    fun thePasteFieldExplainsItsFormatBelowTheBoxRatherThanInsideIt() {
+        val context = themed()
+        val binding = FragmentKeepImportBinding.inflate(LayoutInflater.from(context), FrameLayout(context), false)
+
+        assertEquals(
+            "the format guidance is the layout's helper text, not a second text at the writing position",
+            context.getString(R.string.keep_import_paste_placeholder),
+            binding.pasteFieldLayout.helperText?.toString()
+        )
+    }
+
+    /**
+     * The row spends its width on the note's name before the control that opens it.
+     *
+     * Measured on the device at 320dp with the font at 1.3: with the title, the outcome caption, the hidden count
+     * and a Russian toggle label all siblings of one horizontal row, the weighted title was left with nothing to
+     * take and was measured at **0 px** — the row drew its checkbox, its two captions and its button, and no title
+     * at all, while the binding still held «🟥Сегодня». A JVM assertion on `rowTitle.text` cannot see that and
+     * neither can a Robolectric measure (LEGACY graphics answer `measureText` with a character count), so this
+     * pins the *arrangement* the row depends on — the captions live under the title, in the column the row weights,
+     * and only the topic's control is outside it — and the device run measures the width.
+     */
+    @Test
+    fun theRowGivesItsWidthToTheTitleBeforeTheControlThatOpensIt() {
+        val context = themed(widthDp = 320, fontScale = 1.3f)
+        val row = LayoutInflater.from(context)
+            .inflate(R.layout.item_keep_preview_row, FrameLayout(context), false)
+        val column = row.findViewById<View>(R.id.rowTextColumn)
+        val title = row.findViewById<TextView>(R.id.rowTitle)
+        val status = row.findViewById<TextView>(R.id.rowStatus)
+        val toggle = row.findViewById<View>(R.id.rowToggle)
+
+        assertSame("the title is read inside the column the row weights", column, title.parent)
+        assertNotSame(
+            "the outcome caption is not a rival for the title's width — it sits under the title",
+            row, status.parent
+        )
+        assertNotSame(
+            "the topic's control is outside the column, which makes it the row's one fixed competitor",
+            column, toggle.parent
+        )
+        val params = column.layoutParams as LinearLayout.LayoutParams
+        assertTrue(
+            "and the column is the weighted part of the row, so it is what gives way rather than the title inside " +
+                "it vanishing",
+            params.weight >= 1f
+        )
+    }
+
+    /**
+     * The confirm bar's two actions sit one above the other when the width cannot hold them side by side.
+     *
+     * Measured at 320dp with the font at 1.3 in Russian: «Импортировать» wrapped inside a half-width button and
+     * its second line fell below the bar's own bottom edge — a primary action with a cut-off label, on the screen
+     * whose whole job is to be pressed. The bar's shape is therefore chosen from the width rather than fixed in
+     * XML, and the matrix's wide frames (side by side) and narrow ones (stacked) are the two halves of the proof.
+     */
+    @Test
+    fun theConfirmBarStacksItsActionsWhenTheWidthCannotHoldThemSideBySide() {
+        val narrow = themed(widthDp = 320, fontScale = 1.3f)
+        val wide = themed(widthDp = 393)
+
+        assertTrue("at 320dp the two Russian verbs cannot share a row",
+            narrow.resources.getBoolean(R.bool.keep_confirm_actions_stacked))
+        assertFalse("at 393dp they fit, and the bar keeps the shape the wide frames show",
+            wide.resources.getBoolean(R.bool.keep_confirm_actions_stacked))
+
+        val binding = FragmentKeepImportBinding.inflate(LayoutInflater.from(wide), FrameLayout(wide), false)
+
+        KeepConfirmBar.shape(binding.confirmActions, binding.backToTextButton, binding.confirmButton, true)
+        assertEquals("stacked", LinearLayout.VERTICAL, binding.confirmActions.orientation)
+        assertEquals("every action gets the whole width, which is what stops the wrap",
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            (binding.confirmButton.layoutParams as LinearLayout.LayoutParams).width)
+
+        KeepConfirmBar.shape(binding.confirmActions, binding.backToTextButton, binding.confirmButton, false)
+        assertEquals(LinearLayout.HORIZONTAL, binding.confirmActions.orientation)
+        assertEquals("side by side they split it", 0,
+            (binding.confirmButton.layoutParams as LinearLayout.LayoutParams).width)
+        assertEquals(1f, (binding.confirmButton.layoutParams as LinearLayout.LayoutParams).weight)
+    }
+
     // ---------------------------------------------------------------- the tree rows
 
     @Test
@@ -163,7 +271,7 @@ class KeepImportScreenTest {
         val context = themed(widthDp = 320, fontScale = 1.3f)
         val holder = bindOneRow(context, KeepPreviewRow(
             key = "0/0/0/0", parentKey = "0/0/0",
-            title = "🟥Сегодня — 26.12.26 - 11:00 - Ул. Петровка, д. 5", depth = 3, isTopic = false,
+            title = "🟥Сегодня — 12.03.27 - 09:30 - Ул. Примера, д. 7", depth = 3, isTopic = false,
             checked = false, status = KeepRowStatus.WILL_WRITE, expanded = true, descendants = 0, line = 4
         ))
         val row = holder.itemView
@@ -182,8 +290,12 @@ class KeepImportScreenTest {
         // What the screen promises about a title it cannot show at once: it is never cut. `maxLines` uncapped
         // and no ellipsis is the whole of that promise, and it is the part that can be proven here — whether the
         // row then wraps to three lines or two at this width is what the 320dp frames on the device are for.
-        assertEquals("the title column is given the row's leftovers, not a fixed box",
-            0, (title.layoutParams as ViewGroup.MarginLayoutParams).width)
+        // The leftovers are handed to the column the title lives in, not to the title itself: a weighted view
+        // inside a row whose other siblings are all fixed is what measured 0 px on the device at 1.3.
+        assertEquals("the title's column is given the row's leftovers, not a fixed box",
+            0, (row.findViewById<View>(R.id.rowTextColumn).layoutParams as ViewGroup.MarginLayoutParams).width)
+        assertEquals("and the title takes the whole of that column",
+            ViewGroup.LayoutParams.MATCH_PARENT, title.layoutParams.width)
         assertNull("no ellipsis on a reader's own note", title.ellipsize)
         assertTrue("and no line cap either: maxLines=${title.maxLines}", title.maxLines > 8)
     }

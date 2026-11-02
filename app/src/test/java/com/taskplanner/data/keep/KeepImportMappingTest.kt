@@ -117,10 +117,10 @@ class KeepImportMappingTest {
 
     @Test
     fun titlesAreCopiedCharacterForCharacter() {
-        val source = "[X] 🟥Сегодня — 26.12.26 - 11:00 - Ул. Петровка, д. 5"
+        val source = "[X] 🟥Сегодня — 12.03.27 - 09:30 - Ул. Примера, д. 7"
         val result = plan(source)
 
-        assertEquals("🟥Сегодня — 26.12.26 - 11:00 - Ул. Петровка, д. 5", result.groups.single().name)
+        assertEquals("🟥Сегодня — 12.03.27 - 09:30 - Ул. Примера, д. 7", result.groups.single().name)
     }
 
     @Test
@@ -318,6 +318,58 @@ class KeepImportMappingTest {
 
         assertTrue("the message points at the line: $failure", failure.contains("line 5"))
         assertFalse("and it does not repeat the reader's text", failure.contains("l4"))
+    }
+
+    /**
+     * The two figures the preview prints beside its tree belong to the plan, not to the list on screen.
+     *
+     * Found on the device, in a frame: with one topic folded, «rows to write» read 5 where the same paste had
+     * said 8, because the header was counting the rows the list was drawing. Folding a branch is a way of looking;
+     * it is not a smaller import, and a figure that moves when the reader scrolls is the kind of promise §11 asks
+     * the preview not to make. The plan is the only thing in the chain that knows both halves — what the paste
+     * named and what this profile already owns — so the counts live there, and the screen has one call to make.
+     */
+    @Test
+    fun thePlanCountsEveryRowItHoldsWhateverTheScreenHasFolded() {
+        val result = plan("[ ] a\n [ ] one\n  [ ] deep\n[ ] b\n [ ] two")
+        val opened = KeepPreviewRows.of(result, result.candidates.filter { it.isTopic }.map { it.key }.toSet())
+        val folded = KeepPreviewRows.of(result, emptySet())
+
+        assertEquals("two topics and three tasks, all of them to write", 5, result.rowsToWrite)
+        assertEquals("nothing of it is already here", 0, result.rowsAlreadyHere)
+        assertEquals("and the three figures the screen prints add up to the paste it came from",
+            result.candidates.size, result.rowsToWrite + result.rowsAlreadyHere + result.conflicts.size)
+
+        assertEquals("folding both topics takes rows off the *list* — that is what folding is",
+            2, folded.size)
+        assertEquals("and the drawn list is the thing that shrank, not the plan",
+            2, folded.count { it.status == KeepRowStatus.WILL_WRITE })
+        assertEquals("while every row of the opened list was headed for the database",
+            5, opened.count { it.status == KeepRowStatus.WILL_WRITE })
+    }
+
+    /**
+     * The shape figures describe the paste; the write figures describe this profile.
+     *
+     * Found in the same device frame as the count above: a re-paste of text the profile already owns writes
+     * nothing, and the preview's «nested under a task» figure — read from the plan's write statistics — went to 0
+     * beside a tree that still showed its grandchild indented. The paste did not stop nesting because the import
+     * had nothing to do.
+     */
+    @Test
+    fun theShapeOfThePasteIsStatedWhateverTheProfileAlreadyOwns() {
+        val fresh = plan(small)
+        val owned = plan(
+            small,
+            groups = fresh.candidates.filter { it.isTopic }.associate { it.uuid to userId },
+            tasks = fresh.candidates.filterNot { it.isTopic }.associate { it.uuid to userId }
+        )
+
+        assertEquals("a re-paste writes nothing", 0, owned.rowsToWrite)
+        assertEquals("and every line of it is already here", 4, owned.rowsAlreadyHere)
+        assertEquals("while the paste nests one line under a task, written or not",
+            fresh.nestedRows, owned.nestedRows)
+        assertEquals(1, owned.nestedRows)
     }
 
     @Test

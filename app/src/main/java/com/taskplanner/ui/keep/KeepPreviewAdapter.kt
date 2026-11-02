@@ -148,9 +148,12 @@ class KeepPreviewAdapter(
                     if (row.expanded) R.string.keep_import_collapse_topic else R.string.keep_import_expand_topic
                 )
                 // The button's own label says what it does and the title says which topic, so the pair reads as
-                // one sentence under TalkBack without a description invented for each row.
-                binding.rowToggle.contentDescription =
-                    "${binding.rowTitle.text}, ${binding.rowToggle.text}"
+                // one sentence under TalkBack without a description invented for each row. The punctuation between
+                // them is a resource, not a character in Kotlin: the two languages do not join a title to an
+                // action the same way, and Stage 14's rule is that the screen does not decide that.
+                binding.rowToggle.contentDescription = context.getString(
+                    R.string.keep_import_row_description, binding.rowTitle.text, binding.rowToggle.text
+                )
                 binding.rowToggle.setOnClickListener { onToggle(row.key) }
             }
         }

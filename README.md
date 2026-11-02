@@ -93,6 +93,10 @@ waking up to an empty list.
   states, pushed and pulled by WorkManager when a network is available. One document per entity in
   `users/{uid}/{tasks|categories|groups|recurrence_rules|reminders}/{uuid}`, so a series and the
   lead times set on a task reach the other device too.
+- **Import from Google Keep**: paste the text export Keep gives you and the app reads it back as topics and
+  tasks — every unindented line its own topic, every indented line a task of the line above it, up to four
+  levels deep, with each line's own checkbox kept. Nothing is written until you have seen the preview, and
+  pasting the same text twice adds nothing (see `docs/IMPORT_KEEP.md`).
 
 ## Languages
 
@@ -415,6 +419,11 @@ on a real screen — is still open.
 
 - `docs/FIREBASE_SETUP.md` — enabling Google sign-in and cloud sync.
 - `docs/BACKUP_AND_SYNC.md` — the backup file format, import rules and how sync resolves conflicts.
+- `docs/IMPORT_KEEP.md` — importing a pasted Google Keep text export: what the format means, what becomes a
+  topic and what becomes a task, what the app refuses to invent, why a repeat paste writes nothing, and what
+  can stop an import.
+- `docs/HIERARCHY.md` — the task tree as it stands: `parent_uuid`, the depth the list draws, and the editing
+  that Stage 16 still owns.
 - `docs/TIME_TRACKING.md` — the tracking schema, the clock rules, the aggregation contract and what the
   history screen is allowed to read.
 - `docs/REPORT_EXPORT.md` — the report screen's path, the csv and pdf the same figures become, where a

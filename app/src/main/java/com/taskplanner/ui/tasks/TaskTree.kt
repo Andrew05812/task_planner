@@ -20,10 +20,13 @@ import com.taskplanner.data.model.Task
 object TaskTree {
 
     /**
-     * The deepest indent a card draws — the fourth level, since a topic's own child is level 0.
+     * The deepest indent a card may draw, counted from zero at a topic's own child.
      *
-     * [com.taskplanner.data.keep.KeepTextParser.MAX_DEPTH] is the same four levels on the way in; the card stops
-     * counting at the same place so the indent a reader sees can never exceed the width the 320dp frames prove.
+     * A four-level paste — topic, task, subtask, subtask, which is what
+     * [com.taskplanner.data.keep.KeepTextParser.MAX_DEPTH] allows — reaches indent 2, because the topic is not a
+     * level of indentation. So this bound is not the paste's own limit; it is the ceiling on whatever else can
+     * write `parent_uuid`, and the reason it is 3 rather than 2 is that the indent a reader sees must never exceed
+     * the width the 320dp frames prove, whatever a sync pull or a future editor decides to chain.
      */
     const val MAX_INDENT_LEVEL: Int = 3
 

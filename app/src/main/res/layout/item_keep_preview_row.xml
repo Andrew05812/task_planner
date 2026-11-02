@@ -10,9 +10,16 @@
   light and dark frames at that width are for: the export the stage was written against holds a 169-character
   title, and it wraps rather than truncates, because a cut-off note is a note the reader cannot check before
   importing it.
+
+  The title is the row's weighted part, and the two captions sit under it rather than beside it. That order is not
+  taste: measured on the device at 320dp with the font at 1.3, a row whose title, outcome caption, hidden count and
+  Russian toggle label were all siblings left the weighted title with nothing to take — it was measured at 0 px and
+  drew nothing at all, while the binding still held the note's name. A caption under the title is metadata where the
+  task card already puts its metadata; a title that vanishes is the row losing the one thing it exists to say.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rowRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:baselineAligned="false"
@@ -39,40 +46,58 @@
         android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
         tools:text="☑" />
 
-    <TextView
-        android:id="@+id/rowTitle"
+    <!-- The column the row reads down: the note's own words, and under them what the import will do with them. -->
+    <LinearLayout
+        android:id="@+id/rowTextColumn"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
-        tools:text="🟥Сегодня — 26.12.26 - 11:00 — очень длинная строка из заметки" />
+        android:orientation="vertical">
 
-    <!-- "already here" / "belongs to another profile": what the confirm will actually do with this line. Hidden
-         for a plain new row, where there is nothing unusual to say. -->
-    <TextView
-        android:id="@+id/rowStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="@dimen/spacing_small"
-        android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
-        android:textColor="?attr/colorOnSurfaceVariant"
-        tools:text="@string/keep_import_row_already" />
+        <TextView
+            android:id="@+id/rowTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+            tools:text="🟥Сегодня — 12.03.27 - 09:30 — очень длинная строка из заметки" />
 
-    <!-- A closed topic says what it is hiding, so "3 hidden" survives a scroll away from the branch itself. -->
-    <TextView
-        android:id="@+id/rowHidden"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="@dimen/spacing_small"
-        android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
-        android:textColor="?attr/colorOnSurfaceVariant"
-        android:visibility="gone"
-        tools:text="3 hidden"
-        tools:visibility="visible" />
+        <!-- One caption under the other rather than side by side: at 320dp with the font at 1.3 two labels
+             sharing a line reflowed inside their own words — «новая ещ / ё / 3», "new 3 / hidden" — which the
+             frames showed and a reader has to decode. Each statement gets the column to itself and stays one
+             phrase. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-    <!-- A topic only. The row's title is deliberately not the touch target for opening a branch: the reader is
-         reading the text, and a tap that silently rearranges the list under their finger is not what they asked
-         for. -->
+            <!-- "already here" / "belongs to another profile": what the confirm will actually do with this line.
+                 Every row states its outcome, including the ordinary one. -->
+            <TextView
+                android:id="@+id/rowStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/spacing_small"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                tools:text="@string/keep_import_row_already" />
+
+            <!-- A closed topic says what it is hiding, so "3 hidden" survives a scroll away from the branch. -->
+            <TextView
+                android:id="@+id/rowHidden"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone"
+                tools:text="3 hidden"
+                tools:visibility="visible" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- A topic only, and outside the weighted column on purpose: it is the row's one fixed competitor for width,
+         which is why the column above it has to be the part that gives way. The row's title is deliberately not the
+         touch target for opening a branch — the reader is reading the text, and a tap that silently rearranges the
+         list under their finger is not what they asked for. -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/rowToggle"
         style="@style/Widget.TaskPlanner.Button.Text"

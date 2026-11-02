@@ -26,6 +26,10 @@ data class KeepImportConflict(
  * [KeepStats] describes the *source* — blank lines, separators, physical lines. These numbers describe the
  * *rows*, and they have to: the preview is about to ask for confirmation, and a summary that says "3 tasks"
  * while the plan contains none would get an import approved on the strength of the wrong arithmetic.
+ *
+ * Every figure here is therefore about the *write*. [nestedTasks] counts the rows this plan inserts under a task,
+ * so it is 0 for a paste the profile already owns — which is why the preview's shape line reads
+ * [KeepImportPlan.nestedRows] instead, and why a device frame is the reason both exist.
  */
 data class KeepImportStats(
     val topics: Int,
@@ -42,6 +46,13 @@ data class KeepImportStats(
  *
  * [alreadyImported] is not a failure — it is the honest answer to "I pasted the same text again", and the screen
  * has to be able to say it, because "0 topics, 0 tasks" with no explanation reads as a broken parser.
+ *
+ * [rowsToWrite] and [rowsAlreadyHere] are the two figures the preview prints beside its tree, and they are counted
+ * here rather than off the list the screen is drawing. Measured on a device: with one topic folded, «rows to
+ * write» had dropped from 8 to 5 — the three rows of the branch the reader had just hidden — which presents a
+ * scroll position as a promise about the database. Folding is a way of looking; the import is the same size either
+ * way. [candidates] is every line the paste named, so the two figures and [conflicts] split that count three ways,
+ * in the refused case as in the ordinary one.
  */
 data class KeepImportPlan(
     val candidates: List<KeepRowCandidate>,
@@ -49,8 +60,22 @@ data class KeepImportPlan(
     val tasks: List<Task>,
     val stats: KeepImportStats,
     val conflicts: List<KeepImportConflict>,
-    val alreadyImported: Boolean
-)
+    val alreadyImported: Boolean,
+    val rowsAlreadyHere: Int
+) {
+    /** What the transaction would insert if the reader confirmed this plan as it stands. */
+    val rowsToWrite: Int get() = groups.size + tasks.size
+
+    /**
+     * How many of the paste's lines hang under a *task* rather than under a topic.
+     *
+     * A shape figure, so it is read off [candidates] rather than off the rows being written: a re-paste of text the
+     * profile already owns writes nothing, and on a device its preview was seen to report «nested under a task 0»
+     * beside a tree still drawing its grandchild indented. The paste did not stop nesting because the import had
+     * nothing left to do.
+     */
+    val nestedRows: Int get() = candidates.count { !it.isTopic && it.parentUuid != null }
+}
 
 /**
  * A parsed Keep tree turned into the rows a Room transaction will insert.
@@ -163,6 +188,9 @@ object KeepImportMapping {
         var nestedTasks = 0
         var unknownStatus = 0
         var maxDepth = 0
+        // Counted as the loop goes, because it is the only place that sees each candidate's owner. `else` is a
+        // conflict and `null` is a write; this is the third answer, and the preview has to be able to give it.
+        var alreadyHere = 0
 
         for (candidate in candidates) {
             val node = candidate.node
@@ -187,7 +215,10 @@ object KeepImportMapping {
                         if (node.check == KeepCheck.UNKNOWN) unknownStatus++
                         reachable += candidate.uuid
                     }
-                    userId -> reachable += candidate.uuid
+                    userId -> {
+                        reachable += candidate.uuid
+                        alreadyHere++
+                    }
                     else -> conflicts += KeepImportConflict(candidate.uuid, node.title, owner, KeepNodeKind.TOPIC)
                 }
             } else {
@@ -212,7 +243,10 @@ object KeepImportMapping {
                         if (candidate.parentUuid != null) nestedTasks++
                         reachable += candidate.uuid
                     }
-                    userId -> reachable += candidate.uuid
+                    userId -> {
+                        reachable += candidate.uuid
+                        alreadyHere++
+                    }
                     else -> conflicts += KeepImportConflict(candidate.uuid, node.title, owner, KeepNodeKind.TASK)
                 }
             }
@@ -228,7 +262,8 @@ object KeepImportMapping {
                 tasks = emptyList(),
                 stats = KeepImportStats(0, 0, 0, 0, 0, 0, 0),
                 conflicts = conflicts.toList(),
-                alreadyImported = false
+                alreadyImported = false,
+                rowsAlreadyHere = alreadyHere
             )
         }
 
@@ -246,7 +281,8 @@ object KeepImportMapping {
                 maxDepth = maxDepth
             ),
             conflicts = emptyList(),
-            alreadyImported = candidates.isNotEmpty() && groups.isEmpty() && tasks.isEmpty()
+            alreadyImported = candidates.isNotEmpty() && groups.isEmpty() && tasks.isEmpty(),
+            rowsAlreadyHere = alreadyHere
         )
     }
 

@@ -3629,6 +3629,14 @@ drag and the pull-to-refresh have no agreement; bulk selection can delete and no
 line or report on this branch may say otherwise until the stage's own acceptance criteria have been met with
 quoted output.
 
+**Corrected on 2026-11-02, because the sentence above is now false and a dated paragraph is not a licence to
+leave it standing.** Stage 13 shipped its local half (Google Sign-In itself stays `BLOCKED — Firebase project /
+OAuth configuration required`); Stage 14 shipped Russian with the toggle and the device matrix; Stage 15 shipped
+the Keep import, and with it the part of Stage 16 that a four-level paste needs — `Task.parent_uuid`,
+`TaskGroup.is_completed`, migration 16 → 17, the depth the task list draws. Stage 16 is **not** complete: editing
+a tree is still unbuilt. Stage 17 and Stage 18 are untouched. Each stage's own state is in its roadmap section
+(`PRODUCT_ROADMAP.md` §13.13, §14.13–§14.16, §15.13, §16.3/§16.5/§16.7/§16.8) and in the ledger entries below.
+
 | stage | one line | depends on | roadmap section |
 |---|---|---|---|
 | **13** | Google Sign-In a user can actually reach, with absolute preservation of local data | nothing in code; needs a real Firebase project outside the repo | PRODUCT_ROADMAP §Stage 13 |
@@ -5962,3 +5970,89 @@ decoration, not evidence — grep it across both before reasoning from it (`acce
 ids is constant on this image). And when a fix's first attempt fails the assertion you wrote to prove the fix, write
 that assertion into the test instead of deleting it: it is what caught `Resources.getSystem()` riding the same
 configuration.
+
+## 20w — Stage 15 executed: the Keep import, and what a screenshot caught that a test could not
+
+**What closed.** A Google Keep *text* export pasted into Settings → «Импорт из Google Keep» becomes topics and
+tasks with its structure intact, on the device, in both languages. The chain is `KeepTextParser` (pure Kotlin, no
+Android) → `KeepImportMapping` with a derived identity → `KeepImportRepository` (guards, safety copy, one Room
+transaction, `PRAGMA foreign_key_check` before the commit) → `KeepImportViewModel`/`KeepImportFragment` (paste,
+preview, confirm) → `TaskTree`/`TaskCardIndent` (the task list draws the depth the import kept). The known corpus
+lands whole on the JVM: **56 topics and 326 tasks, 34 of the topics carrying their own `[X]`, 262 tasks arrived
+completed, none lost its topic, none invented a completion time** (`KeepImportTransactionTest`). Stage 15's own
+brief asked for the import to be the thing that preserves the tree, and §10 asked for only the minimal half of
+Stage 16 — which is what shipped, and what §16.7 now says out loud.
+
+**The identity decision, because it is the one a later reader will be tempted to change.** A row's uuid is
+`UUID.nameUUIDFromBytes` over `keep | KIND | profile | parent key | occurrence | title`. The whole document's
+fingerprint is deliberately *not* in that key: the first version had it, and a test that re-pasted an edited text
+showed +6 rows where +1 belonged — one typo re-identified all 382 rows and the second paste became a duplicate
+import. Position is out for the mirror reason: inserting one line would re-identify every sibling below it. The
+fingerprint still answers "has this exact text been imported before"; it does not decide what a row *is*.
+
+**Twelve corrections, all of them from running the route rather than reading it.** Seven were in the test harness —
+`isDisplayed` on a Settings row below the fold; `findViewById` inferring its generic from a `return@onScreen null`
+and dying as a cast to `Void`; `scrollTo()` refusing the pinned confirm bar (correctly); `scrollTo()` unable to
+reach a RecyclerView row that has not been laid out; a frame taken one composition before the state it named —
+its only pixels differing from its neighbour frame in the scrollbar and the clock; a `swipeUp()` that travels a whole
+screenful and then keeps going in a fling, which at 320dp with the font at 1.3 flew past the topic the preview was
+hunting and lost one of three chain cards in both languages; and the guard meant to catch a blank frame, whose 9x9
+sample grid read 238 on a dark tree it accepted and 33 on a picture of the same drawn screen it refused. Four were in
+the app, and two of them came from *reading a figure off a screenshot*; the other two were the drawing itself:
+
+- **«Rows to write» counted the rows on screen.** Fold one topic and it read 5 where the same paste had read 8. The
+  two counted lines now come from `KeepImportPlan.rowsToWrite` / `rowsAlreadyHere`, derived from the plan, and
+  `KeepImportMappingTest.thePlanCountsEveryRowItHoldsWhateverTheScreenHasFolded` pins that they do not move when the
+  drawn list shrinks.
+- **«Nested under a task» went to 0 on a re-paste.** It was read from the plan's *write* statistics, so a paste the
+  profile already owned — writing nothing, correctly — described its own tree as flat beside a screen still drawing
+  the grandchild indented. Shape figures come from `KeepImportPlan.nestedRows`, counted over every candidate.
+
+- **«Импортировать» arrived cut in half.** At 320dp with the font at 1.3 the confirm bar held its two actions side by
+  side, each `weight=1`, so the Russian verb wrapped inside a button half as wide as its own label and the second
+  line fell outside the bar: 67 of the drawn button's 81 px were inside the window. The bar's shape now comes from
+  `R.bool.keep_confirm_actions_stacked` — `true` under 360dp, `false` above — applied by `KeepConfirmBar.shape`, and
+  `KeepImportScreenTest` pins both halves against a configuration whose `screenWidthDp` is the one under test.
+- **The empty paste field printed two sentences on one line.** The outlined field's floating label and the edit
+  text's own `android:hint` are both drawn at the text position while the field is empty, so the label sat across
+  «Paste here, one note per line…». The format guidance is the layout's helper text now, in the row Material owns
+  under the box. Robolectric cannot see the collision — `pasteInput.hint` answers with the layout's label either
+  way, measured — so the test pins where the sentence lives and the frame stays the proof of the drawing.
+- **A preview row drew everything except the note's title.** At 320dp with the font at 1.3 the topic row's title was
+  measured on the device at **0 px**: it was the row's only weighted child, and the state mark, the outcome caption,
+  the hidden count and a Russian toggle label took the whole width between them, so the weighted child was handed the
+  leftover and the leftover was none. The captions now sit under the title in the column the row weights, and the
+  topic's control is the row's one fixed competitor. `KeepImportInstrumentedTest` measures every drawn row's title
+  against a 48dp floor before it photographs it — the only place this is visible, since the binding held
+  «🟥Сегодня» the whole time and LEGACY graphics measure a label by its character count. The first version of that fix left a smaller mess in the same frame — the two captions sharing one line reflowed
+  inside their own words («новая ещ / ё / 3», "new 3 / hidden") — so each statement now gets the column to itself.
+
+The first of the two figures is the one worth keeping in mind: every JVM test in the stage was green while the
+screen was showing a number that changed when the reader scrolled. A preview whose figures describe the preview is
+not a preview of the import.
+
+**The gates, measured on the final build.** JVM **139 classes / 1761 tests / 0 failures / 0 skipped**; lint **0
+errors / 150 warnings**; `check-localization.py` **pass** (985 EN strings + 53 plurals, 980 RU + 53, 0 missing, 0
+placeholder mismatches); `KeepImportInstrumentedTest` **`OK (6 tests)`** on `taskplanner_avd` / `emulator-5584` /
+API 35 against production bytes `a96e62e7b90dd891b662c467b6fcbe7fa0b09b65df019d37cc8e82cbeaf5afb9`, read back from
+`/data/app` before and after (instrumented APK `95c115a65a0f277d91fae06e7c1bdcd5f55cd3d7bb49ea07ff7a437a23b74caf`);
+and the frame matrix in `docs/images/ui-redesign/after/s15/` — six configurations (en/ru × 393dp light, 393dp dark,
+320dp light at font 1.3) × five frames, every one from those same bytes, plus six behaviour frames: **36 pictures
+from one build**, after four rebuilds of the instrumented APK and two of the app got the run to a state where
+every frame it accepts is a frame worth keeping. `scripts/capture-stage15-matrix.sh` refuses a lying tag, refuses an APK whose bytes differ from
+the built one, and copies nothing until the run said `OK`.
+
+**A device finding worth its own line.** The app entered the first Stage 15 device run rendering Russian while
+`ro.product.locale` and `system_locales` both answered `en-US`: a per-app language override from Stage 14 was still
+set, and `am instrument -e clearPackageData true` does not take it back. The class now hands the language back in
+its teardown, its frames method refuses a directory name the window does not agree with, and its three
+resource-driven assertions read through `AppLocale.localized(context)` so they hold in either language — which is
+the same hygiene rule Stage 14's error №5 records, now enforced by a class that photographs both languages.
+
+**What Stage 15 did not do, and no document on this branch may claim.** It did not complete Stage 16: there is no
+move control, no delete-with-children policy, no per-level collapse, and the filtered-reorder collision
+`TaskReorderPersistenceTest` records is still there. It did not touch Stage 13's auth status — Google Sign-In
+remains `BLOCKED — Firebase project / OAuth configuration required`. It did not re-open Stage 14's localization.
+And the reader's own export is not in this repository: the original text, the two JSON exports and any screenshot
+of private note titles stay out, and CI runs against `keep/keep-corpus-shaped-like-the-original.txt`, which is
+generated to have the same shape and none of the words.

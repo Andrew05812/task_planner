@@ -1221,6 +1221,7 @@
     <string name="keep_import_empty_preview">Из этого текста ничего не будет записано.</string>
     <string name="keep_import_hidden_rows">ещё %1$d</string>
     <string name="keep_import_row_new">новая</string>
+    <string name="keep_import_row_description">%1$s: %2$s</string>
     <string name="keep_import_row_already">уже есть</string>
     <string name="keep_import_row_conflict">принадлежит другому профилю</string>
     <string name="keep_import_state_checked">в источнике отмечено выполненным</string>

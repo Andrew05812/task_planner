@@ -18,7 +18,6 @@ import com.taskplanner.R
 import com.taskplanner.data.keep.KeepImportFailure
 import com.taskplanner.data.keep.KeepImportResult
 import com.taskplanner.data.keep.KeepParserIssue
-import com.taskplanner.data.keep.KeepPreviewRow
 import com.taskplanner.data.keep.KeepRowStatus
 import com.taskplanner.databinding.FragmentKeepImportBinding
 import com.taskplanner.ui.settings.AppLocale
@@ -69,6 +68,7 @@ class KeepImportFragment : Fragment() {
         setupField()
         setupList()
         setupButtons()
+        setupActions()
         observeState()
     }
 
@@ -112,6 +112,20 @@ class KeepImportFragment : Fragment() {
         binding.backToTextButton.setOnClickListener { viewModel.onTextChanged(viewModel.state.value.text) }
     }
 
+    /**
+     * Give the confirm bar the shape this width can hold — see [KeepConfirmBar]. The choice is made here rather
+     * than in XML because a layout cannot pick an orientation from a width on its own, and because the wrong
+     * choice was measured, not predicted: a wrapped «Импортировать» at 320dp with the font at 1.3.
+     */
+    private fun setupActions() {
+        KeepConfirmBar.shape(
+            binding.confirmActions,
+            binding.backToTextButton,
+            binding.confirmButton,
+            resources.getBoolean(R.bool.keep_confirm_actions_stacked)
+        )
+    }
+
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -151,7 +165,7 @@ class KeepImportFragment : Fragment() {
                 buildList<KeepPreviewEntry> {
                     add(
                         KeepPreviewEntry.Header(
-                            stats = statsOf(preview, rows),
+                            stats = statsOf(preview),
                             warningHeader = resources.getQuantityString(
                                 R.plurals.keep_import_warning_count,
                                 preview.document.issues.size,
@@ -174,15 +188,19 @@ class KeepImportFragment : Fragment() {
      * The figures the reader confirms against. The first ten describe the paste as [com.taskplanner.data.keep.
      * KeepTextParser] read it; the last two describe the rows this profile does or does not already own, which is
      * the difference §11 asks the preview to make visible rather than leave for the import to reveal.
+     *
+     * Those two come from the plan, not from the rows on screen. A folded topic takes rows off the list and nothing
+     * off the import, and on a device the figure was seen to drop from 8 to 5 the moment a branch was closed — a
+     * number about a scroll position, printed as a promise about the database.
      */
-    private fun statsOf(preview: com.taskplanner.data.keep.KeepImportPreview, rows: List<KeepPreviewRow>) =
+    private fun statsOf(preview: com.taskplanner.data.keep.KeepImportPreview) =
         preview.document.stats.let { stats ->
             listOf(
                 line(R.string.keep_import_stat_topics, stats.topics),
                 line(R.string.keep_import_stat_tasks, stats.tasks),
                 line(R.string.keep_import_stat_completed, stats.checked),
                 line(R.string.keep_import_stat_open, stats.unchecked),
-                line(R.string.keep_import_stat_nested, preview.plan.stats.nestedTasks),
+                line(R.string.keep_import_stat_nested, preview.plan.nestedRows),
                 line(R.string.keep_import_stat_no_box, stats.unknownStatus),
                 line(R.string.keep_import_stat_separators, stats.separatorLines),
                 line(R.string.keep_import_stat_blanks, stats.blankLines),
@@ -195,8 +213,8 @@ class KeepImportFragment : Fragment() {
                         R.plurals.keep_import_depth_levels, stats.maxDepth, stats.maxDepth
                     )
                 ),
-                line(R.string.keep_import_stat_new, rows.count { it.status == KeepRowStatus.WILL_WRITE }),
-                line(R.string.keep_import_stat_already, rows.count { it.status == KeepRowStatus.ALREADY_IMPORTED })
+                line(R.string.keep_import_stat_new, preview.plan.rowsToWrite),
+                line(R.string.keep_import_stat_already, preview.plan.rowsAlreadyHere)
             )
         }
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  At 360dp and wider the two actions fit on one row, which is the shape the Stage 15 wide frames show: «Pasted
+  text» beside «Import» at 393dp, in either language, at the largest font the app claims. The threshold is a
+  measurement, not a taste — see `values/config.xml` for the narrow case it exists to fix.
+-->
+<resources>
+    <bool name="keep_confirm_actions_stacked">false</bool>
+</resources>

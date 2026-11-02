@@ -44,11 +44,15 @@ import org.robolectric.RobolectricTestRunner
  * ## What this file cannot measure on a JVM
  *
  * The import guards a uuid twice: the plan refuses one that another profile already holds, and the write itself
- * goes through `OnConflictStrategy.ABORT` inserts so a row that appears *between* the plan and the commit — a pull
- * from cloud, a paste on another screen — aborts the transaction instead of replacing anything. The first guard is
- * asserted here. The second cannot be scheduled from a test thread: every write in [AppFixture] is serialised on
- * Room's own executors, so nothing can land in that window on a JVM. What the ABORT insert is for is exercised on
- * the device, in `KeepImportInstrumentedTest`, where a real sync runs beside the app.
+ * goes through `OnConflictStrategy.ABORT` inserts so a group whose uuid appears *between* the plan and the commit
+ * aborts the transaction instead of replacing anything. The first guard is asserted here. The second is asserted
+ * here too, but by an injected `BEFORE INSERT` trigger rather than by a concurrent writer, because every write in
+ * [AppFixture] is serialised on Room's own executors and nothing can be scheduled to land in that window from a
+ * test thread. What the real race would need is a second connection writing beside the app, and this suite does
+ * not have one: `KeepImportInstrumentedTest` runs the route on a device but does not run a sync beside it, so the
+ * race itself is **not proven anywhere** — only the abort that would catch a group collision is. `tasks.uuid` has
+ * no unique index at all, so for tasks the abort cannot fire even in principle; `KeepImportRepository`'s own note
+ * says which half of the guard is a constraint and which is a read.
  */
 @RunWith(RobolectricTestRunner::class)
 class KeepImportTransactionTest {

@@ -334,6 +334,33 @@ and a locale oracle that was asking the app what the device's language was — i
 `docs/PRODUCT_ROADMAP.md`. What remains open after Stage 14 is named there: Google Sign-In, the API 24–32 half of
 the locale behaviour, the calendar heading at 320dp/1.3, and one locale assertion that has not reproduced.
 
+## The Keep import strings (Stage 15, 2026-11-02)
+
+Forty-seven strings and five plurals, in both files, in the same commit that needed them — the rule this
+document states for Stage 14 and `scripts/check-localization.py` enforces on every run: no new key in one
+locale without its counterpart in the other, no positional placeholder missing, no plural quantity absent.
+
+Two things about this batch are worth the extra paragraph, because both were decisions rather than
+translations:
+
+* **Counts that travel inside a sentence are plurals; counts shown beside a label are not.** The preview's
+  statistics block is twelve rows of *label and number*, so neither language has to agree a noun it is not
+  being shown — a screen that assembled «56 тем» in Kotlin would be wrong in one of the two languages by
+  construction. Where a number sits inside a sentence — the result line, the warning header, the deepest
+  branch, a conflict — the resource is a `plurals` entry with all four Russian forms, and `keep_import_result_*`
+  is two of them joined by a **joiner that is itself a resource** (`keep_import_result_joiner`: ", " against
+  " и "), because "2 topics imported, 5 tasks added" and "импортировано 2 темы и добавлено 5 задач" are the
+  same code path with different glue. That is the shape Stage 14 established with `habit_weekday_joiner`.
+* **The result of a failed import is an enum, not a sentence.** `KeepImportResult.Failed` carries a
+  `KeepImportFailure` and the machine's own note; the fragment resolves the words. The gate that keeps it that
+  way (`EnglishLiteralAssertionTest`, `HardcodedFailureTextTest`) caught this stage twice on the way: once when
+  the importer started out writing English explanations into its result, and once when an instrumented assertion
+  compared a stored `status` to the literal `"COMPLETED"` — which is a column value, not UI text, and is now
+  compared to `TaskStatus.COMPLETED` instead.
+
+`python scripts/check-localization.py` on the final build: pass, 985 English strings against 980 Russian
+(the five keys English alone carries are deliberately untranslated: `app_name`, the two language names `language_english` and `language_russian` — each written in the script its own reader recognises — and the two format labels `report_format_csv` and `report_format_pdf`), 53 plurals on each side, 0 missing, 0 placeholder mismatches.
+
 ## Review ledger
 
 Every finding Stage 14 produced, the check that settled it, and where the evidence lives. `ИСПРАВЛЕНО` means a

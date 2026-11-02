@@ -103,14 +103,33 @@ sealed class KeepImportResult {
  *  4. one Room transaction: the topics, the tasks, and `PRAGMA foreign_key_check` before the commit;
  *  5. the commit, or none of it.
  *
- * ## What makes a half-written import impossible
+ * ## What makes a half-written import impossible — and what does not
  *
  * [GroupDao.insertImportedGroups] and [TaskDao.insertImportedTasks] are `OnConflictStrategy.ABORT` inserts, not
- * the `REPLACE` pair the rest of the app uses. That choice carries two of §13's rules at once: a uuid that another
- * profile holds aborts the transaction instead of deleting their row, and a row that lands *between* the plan and
- * the commit — a pull from cloud, a second paste on another screen — aborts it too. Either way the exception is
- * caught here, Room rolls the transaction back, and the reader gets [KeepImportResult.Failed] with the database
- * exactly as it was and the safety copy still on the disk.
+ * the `REPLACE` pair the rest of the app uses, and §13's rule that a name already in the database is never
+ * overwritten holds for both. What the two guards actually reach is not symmetric, and saying so is part of
+ * holding it:
+ *
+ *  * **Topics are protected twice.** `task_groups.uuid` *is* the primary key, so a group whose uuid appeared
+ *    between the plan and the commit aborts the transaction rather than replacing anything — and the abort is
+ *    what a JVM test can and does prove (`KeepImportTransactionTest`'s injected trigger).
+ *  * **Tasks are protected once, by the read.** `tasks.uuid` has no unique index (the primary key is an
+ *    autoincrement `id`), so `ABORT` has nothing to abort on for a task, and a row that lands in the window
+ *    between the plan and the commit writes a second task with the same uuid instead of refusing. The repo
+ *    already lives with that shape — `TaskDao`'s own note says two accounts can hold one uuid after an import —
+ *    so the honest statement is that the task side rests on the ownership read in [KeepImportMapping.plan], which
+ *    is serialised with the write inside this transaction but is not a database constraint. Closing that gap is a
+ *    policy question (a unique index would fail on the rows that already exist), and it belongs to the stage that
+ *    decides what a duplicate task uuid *means*, not to this one.
+ *
+ * Either way an exception here is caught, Room rolls the transaction back, and the reader gets
+ * [KeepImportResult.Failed] with the database exactly as it was and the safety copy still on the disk.
+ *
+ * `PRAGMA foreign_key_check` runs before the commit for the same reason the copy is taken first: it is a check,
+ * not a promise. It verifies the foreign keys the schema declares. `tasks.group_id` and `tasks.parent_uuid` are
+ * plain columns with no declared key (`Task.kt` records why), so an orphaned subtree is *not* something this
+ * pragma can see — the tree is held by [KeepImportMapping]'s tripwires, which refuse a row whose parent is
+ * neither in the plan nor owned by this profile, before any write is attempted.
  *
  * ## Privacy
  *

@@ -92,6 +92,27 @@ pattern are materialised and every restored lead time is put back on the clock �
 alarms and post notifications, so they deliberately run outside the transaction rather than holding
 it open while they do.
 
+## Import from Google Keep — not this format
+
+Settings has a second import, and it is a different route with different input: the reader pastes the **text**
+export Keep produces, and no file is chosen, no `formatVersion` is read and no `BackupFile` is parsed. The JSON
+backup above stays the only thing that can *replace* a profile; a Keep import merges into the signed-in profile
+and has no replace semantics at all.
+
+What the two have in common is the safety discipline, deliberately reused rather than rewritten: a verified
+whole-database copy (`ProfileSafetyCopy`, the Stage 13 mechanism) is taken and checked **before** anything is
+written, the write is one Room transaction, and a failure at either table rolls the whole paste back —
+`KeepImportTransactionTest` proves it by putting SQLite `BEFORE INSERT` triggers on `task_groups` and on `tasks`
+in turn, the same instrument the sign-in handover is measured with.
+
+What differs, and is the part a sync or a backup must not copy: an import's row identities are **derived** from
+the pasted text (profile + the parent row + the verbatim title + which copy of that title it is), so a repeat
+paste is recognised as the rows it already wrote. The app's own `insertTask`/`upsertGroup` are
+`OnConflictStrategy.REPLACE`, and REPLACE on an identity derived this way would delete somebody's topic and put
+the imported one where it was — so the import writes through ABORT inserts and refuses the paste on a collision
+instead. `docs/IMPORT_KEEP.md` §3 is the whole rule; `docs/HIERARCHY.md` is what the stored tree can and cannot
+do.
+
 ## Sync
 
 Firestore layout: `users/{uid}/tasks|categories|groups|recurrence_rules|reminders/{uuid}`, where

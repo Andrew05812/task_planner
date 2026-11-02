@@ -1412,6 +1412,7 @@
     <string name="keep_import_empty_preview">Nothing in this text would be written.</string>
     <string name="keep_import_hidden_rows">%1$d hidden</string>
     <string name="keep_import_row_new">new</string>
+    <string name="keep_import_row_description">%1$s, %2$s</string>
     <string name="keep_import_row_already">already here</string>
     <string name="keep_import_row_conflict">belongs to another profile</string>
     <string name="keep_import_state_checked">marked done in the source</string>
