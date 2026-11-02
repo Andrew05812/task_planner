@@ -286,6 +286,40 @@ class SyncDocumentFormatTest {
         assertEquals(1_699_500_000_000L, restored?.deletedAt)
     }
 
+    @Test
+    fun `a task document carries the parent it hangs off, and reading it back gives the same tree`() {
+        // §10 of Stage 15: a subtree that syncs as a flat list is a subtree that collapsed on the other device.
+        val nested = task().copy(parentUuid = "task-parent")
+
+        val fields = SyncedTask.of(nested, "category-1").fields()
+
+        assertEquals("task-parent", fields["parent_uuid"])
+        assertEquals(nested.parentUuid, SyncedTask.fromFields(fields)?.parentUuid)
+        assertNull(
+            "a topic's own child says it has no task parent by being absent, not by an empty string",
+            SyncedTask.of(task(), null).fields()["parent_uuid"]
+        )
+    }
+
+    @Test
+    fun `a topic document carries the completed state its own line said`() {
+        // The checkbox on a Keep root line is a fact about the topic, and the schema gave it a column in
+        // v17. A document that omits it would show the reader a finished topic on one device and an open one
+        // on the other, which is the same loss as dropping the tree — stated by the same paragraph of the brief.
+        val group = SyncedGroup.of(
+            TaskGroup(uuid = "group-1", userId = 42L, name = "Sprint", isCompleted = true)
+        )
+
+        assertEquals(true, group.fields()["is_completed"])
+        assertEquals(group, SyncedGroup.fromFields(group.fields()))
+        assertEquals(
+            "an open topic stays open across the wire rather than defaulting to done",
+            false, SyncedGroup.fromFields(SyncedGroup.of(
+                TaskGroup(uuid = "g2", userId = 42L, name = "Other")
+            ).fields())?.completed
+        )
+    }
+
     private companion object {
         /**
          * Local-only state. A row id, a numeric user id or the queue position belong to one device:

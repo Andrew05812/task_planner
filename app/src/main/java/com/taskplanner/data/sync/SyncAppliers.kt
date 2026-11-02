@@ -65,7 +65,8 @@ class SyncAppliers @Inject constructor(
                 endTime = remote.endTime,
                 estimatedMinutes = remote.estimatedMinutes,
                 seriesUuid = remote.seriesUuid,
-                occurrenceAt = remote.occurrenceAt
+                occurrenceAt = remote.occurrenceAt,
+                parentUuid = remote.parentUuid
             )
             // An instance of a series that this device already produced keeps its own row: the user
             // may have edited or finished it, and the (series, occurrence) pair is the same task.
@@ -102,6 +103,7 @@ class SyncAppliers @Inject constructor(
                 estimatedMinutes = remote.estimatedMinutes,
                 seriesUuid = remote.seriesUuid,
                 occurrenceAt = remote.occurrenceAt,
+                parentUuid = remote.parentUuid,
                 syncState = SyncState.SYNCED,
                 updatedAt = remote.updatedAt
             )
@@ -160,6 +162,7 @@ class SyncAppliers @Inject constructor(
                     name = remote.name,
                     collapsed = remote.collapsed,
                     sortOrder = remote.sortOrder,
+                    isCompleted = remote.completed,
                     isDeleted = remote.isDeleted,
                     deletedAt = remote.deletedAt,
                     syncState = SyncState.SYNCED,
@@ -176,6 +179,7 @@ class SyncAppliers @Inject constructor(
                 name = remote.name,
                 collapsed = remote.collapsed,
                 sortOrder = remote.sortOrder,
+                isCompleted = remote.completed,
                 isDeleted = remote.isDeleted,
                 deletedAt = remote.deletedAt,
                 syncState = SyncState.SYNCED,

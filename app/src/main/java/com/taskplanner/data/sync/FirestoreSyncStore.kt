@@ -113,6 +113,7 @@ private const val F_COLOR = "color"
 private const val F_ICON = "icon"
 private const val F_PARENT_UUID = "parent_uuid"
 private const val F_COLLAPSED = "collapsed"
+private const val F_IS_COMPLETED = "is_completed"
 private const val F_SORT_ORDER = "sort_order"
 private const val F_UNIT = "unit"
 private const val F_INTERVAL = "interval"
@@ -160,7 +161,13 @@ data class SyncedTask(
     val endTime: Long? = null,
     val estimatedMinutes: Int? = null,
     val seriesUuid: String? = null,
-    val occurrenceAt: Long? = null
+    val occurrenceAt: Long? = null,
+    /**
+     * The task this one is written under, as the reader's indentation said it. Schema v17 column, and the
+     * reason it is on the wire: a subtree that syncs as a flat list has collapsed on the other device, and
+     * there is no way to see that from either screen afterwards.
+     */
+    val parentUuid: String? = null
 ) {
     fun fields(): Map<String, Any?> = mapOf(
         F_UUID to uuid,
@@ -176,6 +183,7 @@ data class SyncedTask(
         F_STATUS to status.name,
         F_CATEGORY_UUID to categoryUuid,
         F_GROUP_UUID to groupUuid,
+        F_PARENT_UUID to parentUuid,
         F_ARCHIVED to archived,
         F_ARCHIVED_AT to archivedAt,
         F_STARTED_AT to startedAt,
@@ -209,7 +217,8 @@ data class SyncedTask(
             endTime = task.endTime,
             estimatedMinutes = task.estimatedMinutes,
             seriesUuid = task.seriesUuid,
-            occurrenceAt = task.occurrenceAt
+            occurrenceAt = task.occurrenceAt,
+            parentUuid = task.parentUuid
         )
 
         fun fromFields(fields: Map<String, Any?>): SyncedTask? {
@@ -237,7 +246,8 @@ data class SyncedTask(
                 endTime = fields.longOrNull(F_END_TIME),
                 estimatedMinutes = fields.intOrNull(F_ESTIMATED_MINUTES),
                 seriesUuid = fields.string(F_SERIES_UUID),
-                occurrenceAt = fields.longOrNull(F_OCCURRENCE_AT)
+                occurrenceAt = fields.longOrNull(F_OCCURRENCE_AT),
+                parentUuid = fields.string(F_PARENT_UUID)
             )
         }
     }
@@ -301,6 +311,8 @@ data class SyncedGroup(
     val name: String,
     val collapsed: Boolean,
     val sortOrder: Int,
+    /** The topic's own finished state — a Google Keep root line's `[X]`, and nothing computed from children. */
+    val completed: Boolean = false,
     val isDeleted: Boolean,
     val deletedAt: Long?,
     val createdAt: Long,
@@ -310,6 +322,7 @@ data class SyncedGroup(
         F_UUID to uuid,
         F_NAME to name,
         F_COLLAPSED to collapsed,
+        F_IS_COMPLETED to completed,
         F_SORT_ORDER to sortOrder,
         F_IS_DELETED to isDeleted,
         F_DELETED_AT to deletedAt,
@@ -323,6 +336,7 @@ data class SyncedGroup(
             name = group.name,
             collapsed = group.collapsed,
             sortOrder = group.sortOrder,
+            completed = group.isCompleted,
             isDeleted = group.isDeleted,
             deletedAt = group.deletedAt,
             createdAt = group.createdAt,
@@ -336,6 +350,7 @@ data class SyncedGroup(
                 name = fields.string(F_NAME).orEmpty(),
                 collapsed = fields.bool(F_COLLAPSED),
                 sortOrder = fields.int(F_SORT_ORDER),
+                completed = fields.bool(F_IS_COMPLETED),
                 isDeleted = fields.bool(F_IS_DELETED),
                 deletedAt = fields.longOrNull(F_DELETED_AT),
                 createdAt = fields.long(F_CREATED_AT),

@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -48,6 +49,56 @@ class SyncAppliersTest {
     }
 
     private suspend fun signedIn() = fixture.signIn(email = "appliers@example.com")
+
+    @Test
+    fun `a pulled task arrives under its parent instead of beside it`() = runTest {
+        val user = signedIn()
+        val group = fixture.addGroup(user.id, "Imported topic")
+        val parent = SyncedTask.of(
+            Task(uuid = "tree-parent", title = "Project", description = "", userId = user.id,
+                groupId = group.uuid, syncState = SyncState.SYNCED),
+            categoryUuid = null
+        )
+        val child = SyncedTask.of(
+            Task(uuid = "tree-child", title = "Backend", description = "", userId = user.id,
+                groupId = group.uuid, parentUuid = "tree-parent", syncState = SyncState.SYNCED),
+            categoryUuid = null
+        )
+
+        assertTrue(appliers.applyRemoteTask(user.id, parent, emptyMap()))
+        assertTrue(appliers.applyRemoteTask(user.id, child, emptyMap()))
+
+        val stored = fixture.taskDao.getAllTasksOnce(user.id).associateBy { it.uuid }
+        assertEquals("tree-parent", stored.getValue("tree-child").parentUuid)
+        assertNull(stored.getValue("tree-parent").parentUuid)
+        assertEquals("both rows still know their topic", group.uuid, stored.getValue("tree-child").groupId)
+    }
+
+    @Test
+    fun `a pull updates the parent link and the topic's own check, not only the name`() = runTest {
+        val user = signedIn()
+        val group = fixture.addGroup(user.id, "Sprint").copy(syncState = SyncState.SYNCED)
+        fixture.groupDao.upsertGroup(group)
+        val taskId = fixture.addTask(user.id, "Draft", groupId = group.uuid)
+        val task = fixture.taskDao.getTaskById(taskId)!!.copy(syncState = SyncState.SYNCED)
+        fixture.taskDao.updateTask(task)
+
+        appliers.applyRemoteGroup(
+            user.id,
+            SyncedGroup.of(group.copy(name = "Sprint v2", isCompleted = true, updatedAt = group.updatedAt + 1000))
+        )
+        appliers.applyRemoteTask(
+            user.id,
+            SyncedTask.of(task.copy(parentUuid = "someone-elses-row", updatedAt = task.updatedAt + 1000), null),
+            emptyMap()
+        )
+
+        assertEquals("the topic's own box is a field like any other", true,
+            fixture.groupDao.getGroupByUuid(group.uuid)!!.isCompleted)
+        assertEquals("and a tree edge edited on one device is not left behind by the pull",
+            "someone-elses-row", fixture.taskDao.getTaskById(taskId)!!.parentUuid)
+        assertEquals("the name came too", "Sprint v2", fixture.groupDao.getGroupByUuid(group.uuid)!!.name)
+    }
 
     private fun rule(
         userId: Long,
