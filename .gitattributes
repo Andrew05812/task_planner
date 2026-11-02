@@ -1,0 +1,12 @@
+# Line endings, stated rather than inherited from whoever cloned the repository.
+#
+# One rule, for one file, because a test reads that file's bytes. `KeepCorpusContractTest` counts 438 CR bytes in
+# `app/src/test/resources/keep/keep-corpus-shaped-like-the-original.txt` — the fixture is depersonalized, but it is
+# shaped like the export the stage was written against, and the export writes CRLF. Without this line the blob is
+# stored as LF and every Windows checkout rebuilds CRLF while a Linux one does not, so the same commit passed on the
+# machine that wrote it and failed on CI (`expected:<438> but was:<0>`, run 41416407024) for a fact about the
+# checkout rather than about the code. A fixture whose shape depends on the client that unpacked it is not a
+# contract, so the shape is pinned here.
+#
+# Nothing else is claimed: no `* text=auto`, no other path, no change to how the rest of the repository is stored.
+app/src/test/resources/keep/*.txt text eol=crlf
