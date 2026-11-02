@@ -53,6 +53,7 @@ import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.ReportRepository
 import com.taskplanner.data.repository.SessionRepository
+import com.taskplanner.data.repository.TaskHierarchyRepository
 import com.taskplanner.data.repository.TaskRepository
 import com.taskplanner.data.repository.WorkloadRepository
 import com.taskplanner.data.repository.WorkStatisticsRepository
@@ -301,6 +302,7 @@ class AppFixture(val context: Context) : AutoCloseable {
     val taskRepository = TaskRepository(
         taskDao, sessionRepository, recurrenceRepository, reminderRepository, workTrackingRepository
     )
+    val taskHierarchyRepository = TaskHierarchyRepository(database, taskDao, sessionRepository, timeBase)
     val categoryRepository = CategoryRepository(categoryDao, sessionRepository)
     val groupRepository = GroupRepository(groupDao, sessionRepository)
     val calendarRepository =

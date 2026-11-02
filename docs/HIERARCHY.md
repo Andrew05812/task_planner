@@ -32,18 +32,40 @@ round-trip contracts for it.
 * **Nothing about it invents structure.** A parent is only ever a line that was physically above it in the
   source. Titles never decide a parent, and depth is not inferred from indentation *after* the parse.
 
+## What Stage 16 has changed since
+
+**The ordering is fixed, and a drag has a boundary.** Both were listed below as Stage 16's owed work; phase 1 of
+§16.8 delivered them first, before any indent control existed, because a deeper tree makes each of them worse than a
+sorting bug.
+
+- One sequence, one position. `TaskHierarchyRepository.moveWithinSiblings` reads the profile's live rows in the order
+  they are stored, lifts the dragged row *and its whole subtree* out of that sequence, sets the block down on the
+  side of the row it was dropped on, numbers the result densely again, and writes **only the rows whose position
+  moved** — inside one transaction, so a row created or pulled while a finger is down cannot be handed a number the
+  re-numbering also just gave somebody. `TaskDao.updateTaskOrders`, which re-numbered `0..n` over whatever list it
+  was passed, is gone, and so is `TaskRepository.reorderTasks` and `TasksViewModel.saveVisibleOrder`.
+- A row hidden by a filter is not absent from the order. It keeps its place against every row the drag did not cross;
+  the screen sends an anchor and a side rather than a list of ids, which is what makes applying and clearing a filter
+  unable to change where a dropped row ends up. Measured in `TasksOrderingTest`.
+- The boundary is the sibling set: same profile, same topic, same parent. A cross-topic or cross-parent drop is
+  refused by name (`HierarchyMoveRefusal`) and writes nothing, so an ordinary drag can never reparent a row. The
+  screen refuses it before the list moves, and the repository re-checks against the stored rows.
+- A parent never travels alone. `TaskHierarchyPolicy.subtreeOf` gives the block in tree order, and the screen and the
+  write use the same function, so what the reader sees drop is what the database stores.
+- The first drag on a profile whose positions the old code left doubled or gapped renumbers the whole profile — the
+  reconciliation, named in the result as `rowsRewritten`. Every later drag costs the distance it travelled: a swap of
+  neighbours writes two rows and leaves the other four holding their stored `updated_at` and `sync_state`.
+
+A new task takes its position from `TaskRepository.nextFreeOrder()`, which counts **every** live row of the profile,
+archived ones included: the sequence a drag renumbers includes archived rows, so counting only the visible ones would
+land a new task on a number an archived row already holds.
+
 ## What Stage 16 still owns
 
-Everything that **changes** the tree, and it is deliberately not in this build:
+Everything that **changes the shape** of the tree, and it is deliberately not in this build:
 
-* No indent / outdent control in the editor or the list. A tree arrives through an import or not at all.
-* No "move this subtree there". Drag-reorder changes a row's position, never its parent — that is pinned by
-  `TaskReorderPersistenceTest`, which asserts `group_id`, `parent_uuid` and `user_id` are unchanged across a
-  reorder of a filtered subset.
-* **The known ordering defect is still open.** `TasksViewModel.saveVisibleOrder` re-indexes `0..n` over the
-  *filtered* subset, so a drag while a filter is active can collide with rows outside it.
-  `TaskReorderPersistenceTest` asserts the collision as measured behaviour rather than pretending it is fixed;
-  fixing it belongs to Stage 16, where arbitrary reparenting would turn it from a sorting bug into a data bug.
+* No indent / outdent control in the editor or the list. A tree arrives through an import or is edited by dragging
+  within one sibling set; nothing yet moves a row under another row.
 * Deleting a parent says nothing yet about its children — there is no path that creates one, so there is no path
   that orphans one. That sentence stops being true the moment indent/outdent ships, and Stage 16 has to answer it
   in the same change.

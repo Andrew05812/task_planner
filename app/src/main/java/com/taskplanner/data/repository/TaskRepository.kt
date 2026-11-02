@@ -152,8 +152,17 @@ class TaskRepository @Inject constructor(
         )
     }
 
-    /** Persists a manual drag-and-drop ordering transactionally. */
-    suspend fun reorderTasks(orderedIds: List<Long>) = taskDao.updateTaskOrders(orderedIds)
+    /**
+     * Where a new row of this profile goes: one past the last position the profile holds.
+     *
+     * Counted over every live row, archived ones included. The list the reader drags in is numbered over the whole
+     * profile too, so a position taken from the *visible* rows alone would land on a number an archived row still
+     * holds — and two rows of one profile sharing a position is exactly the ambiguity Stage 16 §3 removes.
+     */
+    suspend fun nextFreeOrder(): Int {
+        val userId = sessionRepository.currentUserId() ?: return 0
+        return taskDao.nextOrder(userId)
+    }
 
     private suspend fun transition(taskId: Long, transform: (Task) -> Task) {
         val task = taskDao.getTaskById(taskId) ?: return

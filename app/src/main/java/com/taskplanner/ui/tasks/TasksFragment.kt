@@ -20,6 +20,8 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
+import com.taskplanner.data.hierarchy.HierarchyMoveResult
+import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
@@ -39,6 +41,15 @@ class TasksFragment : Fragment() {
     private lateinit var tasksAdapter: TasksAdapter
     private lateinit var itemTouchHelper: ItemTouchHelper
     private var lastState: TasksState = TasksState()
+
+    /**
+     * The move the gesture in progress has last been allowed to make, kept until the finger lifts.
+     *
+     * ItemTouchHelper reports a drag one neighbour at a time, and the row the reader drops on is the answer to
+     * where it belongs; writing on every step would put the database in an order the reader never finished making.
+     * Null means the gesture moved nothing, so nothing is written.
+     */
+    private var pendingDrag: HierarchyMoveResult.Accepted? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -176,13 +187,30 @@ class TasksFragment : Fragment() {
                 target: RecyclerView.ViewHolder
             ): Boolean {
                 if (target.itemViewType != viewHolder.itemViewType) return false
-                val list = tasksAdapter.currentList.toMutableList()
+                val list = tasksAdapter.currentList
                 val from = viewHolder.adapterPosition
                 val to = target.adapterPosition
                 if (from !in list.indices || to !in list.indices) return false
-                list.add(to, list.removeAt(from))
-                tasksAdapter.submitList(list)
-                return true
+                val dragged = list[from] as? TasksListItem.TaskRow ?: return false
+                val droppedOn = list[to] as? TasksListItem.TaskRow ?: return false
+                val plan = TaskHierarchyPolicy.planSiblingDrag(
+                    list.filterIsInstance<TasksListItem.TaskRow>().map { it.task },
+                    dragged.task.id,
+                    droppedOn.task.id
+                ) as? HierarchyMoveResult.Accepted ?: return false
+                // Only a step the list actually took is a step worth writing: a plan recorded when the rows never
+                // moved would put the database somewhere the reader never dragged anything to.
+                val moved = applyDragToRows(plan)
+                if (moved) pendingDrag = plan
+                return moved
+            }
+
+            override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+                super.onSelectedChanged(viewHolder, actionState)
+                // A gesture starts with nothing accepted. Without this, a drag the reader abandoned — a tap, or a
+                // first step onto a row that is not a sibling — would let `clearView` commit the *previous*
+                // gesture's plan a second time.
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) pendingDrag = null
             }
 
             override fun isLongPressDragEnabled() = false
@@ -190,7 +218,7 @@ class TasksFragment : Fragment() {
             override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
                 super.clearView(recyclerView, viewHolder)
                 viewHolder.itemView.alpha = 1f
-                persistVisibleOrder()
+                commitPendingDrag()
             }
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
@@ -198,11 +226,39 @@ class TasksFragment : Fragment() {
         itemTouchHelper.attachToRecyclerView(binding.recyclerView)
     }
 
-    private fun persistVisibleOrder() {
-        val ids = tasksAdapter.currentList
-            .filterIsInstance<TasksListItem.TaskRow>()
-            .map { it.task.id }
-        viewModel.saveVisibleOrder(ids)
+    /**
+     * Moves the dragged row *and everything hanging under it*, as one piece, to the side of the row it was dropped on.
+     *
+     * A row the reader grabbed is the head of a branch, and moving only the head would leave its children sitting
+     * above their own parent — an order no reader asked for and no screen could undo. So the block lifts together and
+     * comes down in the order it already had, next to the neighbour the gesture ended on.
+     */
+    private fun applyDragToRows(plan: HierarchyMoveResult.Accepted): Boolean {
+        val moving = plan.movedTaskIds.toSet()
+        val rows = tasksAdapter.currentList
+        val block = rows.filter { (it as? TasksListItem.TaskRow)?.task?.id in moving }
+        val rest = rows.filterNot { (it as? TasksListItem.TaskRow)?.task?.id in moving }
+        val anchorAt = rest.indexOfFirst { (it as? TasksListItem.TaskRow)?.task?.id == plan.anchorTaskId }
+        if (anchorAt < 0 || block.isEmpty()) return false
+        val reordered = rest.toMutableList()
+        reordered.addAll(if (plan.placeAfter) anchorAt + 1 else anchorAt, block)
+        tasksAdapter.submitList(reordered)
+        return true
+    }
+
+    /**
+     * Writes the move the gesture finished, rather than the whole list the reader happened to be looking at.
+     *
+     * The list holds the rows the filters let through, so persisting it is what made a filtered drag renumber the
+     * profile from zero and collide with the rows the filter was hiding. The screen now says only "this row, beside
+     * that one, on this side" and lets [com.taskplanner.data.repository.TaskHierarchyRepository] place it in the
+     * profile's one sequence.
+     */
+    private fun commitPendingDrag() {
+        val plan = pendingDrag ?: return
+        pendingDrag = null
+        val head = plan.movedTaskIds.firstOrNull() ?: return
+        viewModel.moveTaskBeside(head, plan.anchorTaskId, plan.placeAfter)
     }
 
     private fun setupObservers() {

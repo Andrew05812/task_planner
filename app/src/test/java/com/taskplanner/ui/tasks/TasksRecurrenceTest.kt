@@ -67,7 +67,8 @@ class TasksRecurrenceTest {
             fixture.reminderRepository,
             fixture.sessionRepository,
             fixture.workTrackingRepository,
-            fixture.workStatisticsRepository
+            fixture.workStatisticsRepository,
+            fixture.taskHierarchyRepository
         )
     }
 

@@ -77,7 +77,7 @@ class TasksCardRenderTest {
         viewModel = TasksViewModel(
             fixture.taskRepository, fixture.categoryRepository, fixture.groupRepository,
             fixture.recurrenceRepository, fixture.reminderRepository, fixture.sessionRepository,
-            fixture.workTrackingRepository, fixture.workStatisticsRepository
+            fixture.workTrackingRepository, fixture.workStatisticsRepository, fixture.taskHierarchyRepository
         )
     }
 

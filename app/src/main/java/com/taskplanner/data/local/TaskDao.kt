@@ -213,13 +213,25 @@ interface TaskDao {
     @Query("DELETE FROM tasks WHERE user_id = :userId")
     suspend fun deleteAllTasks(userId: Long)
 
-    @Query("UPDATE tasks SET `order` = :order WHERE id = :id")
-    suspend fun updateTaskOrder(id: Long, order: Int)
+    /**
+     * The rows one profile owns that are not deleted, in the order the stored positions describe.
+     *
+     * The order a reader drags things into has to be read as one sequence, so the tie is settled here rather than
+     * left to SQLite: two rows sharing a position otherwise come back in whichever order the query planner happens
+     * to reach them, and a reorder that renumbers from a read like that can put the same pair in two different
+     * orders on two different days. Archived rows are in here because they still hold positions; a reorder that
+     * counted only the visible ones would hand a hidden row's number to a row on screen.
+     */
+    @Query(
+        "SELECT * FROM tasks WHERE user_id = :userId AND is_deleted = 0 " +
+            "ORDER BY `order` ASC, due_date ASC, id ASC"
+    )
+    suspend fun getRowsInStoredOrder(userId: Long): List<Task>
 
-    @Transaction
-    suspend fun updateTaskOrders(orderedIds: List<Long>) {
-        orderedIds.forEachIndexed { index, id -> updateTaskOrder(id, index) }
-    }
+    @Query(
+        "UPDATE tasks SET `order` = :order, updated_at = :now, sync_state = 'PENDING' WHERE id = :id"
+    )
+    suspend fun assignTaskOrder(id: Long, order: Int, now: Long)
 
     @Query(
         "UPDATE tasks SET archived = 1, archived_at = :now, status = 'COMPLETED', " +

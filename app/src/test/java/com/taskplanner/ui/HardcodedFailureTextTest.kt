@@ -170,9 +170,17 @@ class HardcodedFailureTextTest {
         /** How far to follow an open call for its arguments. No error sink in this module is deeper than three. */
         const val MAX_SCAN_LINES = 8
 
-        /** A first argument that is already the right shape: a resource, a resource property, or a named note. */
+        /**
+         * A first argument that is already the right shape: a resource, a resource property, or a named note.
+         *
+         * The last alternative is an argument qualified by the name of the enum it comes from, and it covers both
+         * spellings the module uses for that shape: `ReportFailure.EMPTY_FILE` and
+         * `HierarchyMoveRefusal.DIFFERENT_PARENT`. Neither is a sentence the app owns — it is a name the screen
+         * turns into words, which is what the class note asks for everywhere. A literal still fails here, and the
+         * five findings above are all literals.
+         */
         val ALLOWED = Regex(
-            """^(R\.string\.|\w*Res\b|detail\s*=|formatArgs\s*=|message\s*=|message$|null\b|\w*Failure\.)"""
+            """^(R\.string\.|\w*Res\b|detail\s*=|formatArgs\s*=|message\s*=|message$|null\b|\w*(Failure|Refusal)\.)"""
         )
 
         /**

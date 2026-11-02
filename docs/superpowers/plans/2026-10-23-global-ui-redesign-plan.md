@@ -6064,3 +6064,68 @@ remains `BLOCKED — Firebase project / OAuth configuration required`. It did no
 And the reader's own export is not in this repository: the original text, the two JSON exports and any screenshot
 of private note titles stay out, and CI runs against `keep/keep-corpus-shaped-like-the-original.txt`, which is
 generated to have the same shape and none of the words.
+
+## 20x — Stage 16 phase 1: the ordering one sequence, and what a review found in my own fix
+
+Stage 16's brief puts the ordering before the indent controls, and this block is that ordering. It closed 2026-11-02
+with 140 classes / **1781** JVM tests / 0 failures / 0 skipped (Stage 15's gate was 139 / 1761), `lintDebug` 0 errors /
+**150** warnings — the same number Stage 15 recorded — and `scripts/check-localization.py` pass at 985 EN + 53 plurals /
+980 RU + 53. No string was added, because a refused drag says nothing yet: the row the reader dropped snaps back and
+that is the whole message.
+
+**The RED was measured, not asserted.** Before any of the new production code existed, a test driving the ordering
+that shipped failed with its own number: `TaskReorderPersistenceTest > a_reordered_filtered_subset_still_leaves_the_profile_one_unambiguous_sequence`
+— `java.lang.AssertionError: no two rows of one profile may claim the same position expected:<4> but was:<2>`. Four
+rows, two positions. That test is now gone in favour of `the_positions_of_the_whole_profile_stay_unique_when_only_part_of_it_is_on_screen`,
+which asserts the same property against the fixed path; the collision assertion the Stage 15 pass left in
+`reordering_the_visible_subset_...` was replaced rather than kept as a record of a bug nobody intends to leave in.
+
+**The strategy, and why this one.** Of the four the brief allowed, the chosen shape is *the atomic renumber of the
+full sequence, written only where it moved*. A move is planned against the rows on screen — which is what the reader
+acted on — and applied to `getRowsInStoredOrder(userId)`: the whole live profile, archived rows included, because
+they hold positions too. The block lifts out, lands on one side of its anchor, and the result is numbered densely
+again; the rows written are exactly those whose number changed. So a neighbour swap on a dense profile writes 2 rows
+out of 6 (`only_the_rows_the_move_crossed_are_rewritten` proves it by checking that the four untouched rows still
+carry their seeded `updated_at` and `SYNCED`), while the first drag on a profile the old code left doubled renumbers
+it once and reconciles it (`a_profile_whose_positions_are_doubled_or_gapped_comes_back_as_one_sequence`). That is the
+cost of the strategy and it is named in the result as `rowsRewritten` rather than discovered later by a reader with
+ten thousand tasks; §16 measures it at 1k/5k/10k.
+
+**Five things the review found in the code I had just written.** All five were real, and the fixes are in this commit.
+
+1. **A blank identity is not a parent** (BLOCKER). `tasks.uuid` defaults to `''`, and `subtreeOf` grouped children by
+   `parentUuid` and looked them up by `next.uuid` — so the first legacy row with a blank uuid would have adopted
+   every other blank-parented row of the profile into its subtree and dragged them all along on one gesture. The walk
+   now ignores a blank link in both directions, and `a_row_with_a_blank_identity_does_not_adopt_every_other_blank_row`
+   seeds three rows exactly that way and asserts the block is one row. This is §4's audit made concrete: an ambiguous
+   identifier is not a theoretical data-quality note, it is a wrong subtree.
+2. **The screen and the write disagreed about the block's order** (MAJOR). `planSiblingDrag` used the list order,
+   `moveWithinSiblings` used the tree order — so on data where a subtree is not contiguous, the card lands somewhere
+   the reader did not drag it and then jumps. One function now answers for both, and the duplicate that invited the
+   divergence is deleted rather than documented.
+3. **The read was outside the transaction** (MAJOR). Deciding from a list read before the write could hand a row
+   created — or pulled from the cloud — in between a position the renumbering had just given somebody else: the same
+   collision, arriving from the other direction. The whole read/decide/write is now one `withTransaction`.
+4. **A refused step could still be committed** (MAJOR). `pendingDrag` was assigned before the list was checked, and
+   never cleared when a new gesture began, so a tap or an immediately-refused cross-topic drop would have re-committed
+   the *previous* gesture's plan. A plan is recorded only when the rows actually moved, and a drag begins by forgetting
+   the last one.
+5. **A new task counted its position from the visible rows** (MINOR, and outside the brief's list). `nextOrder()` was
+   `maxOf(active) + 1`, while the sequence a drag renumbers includes archived rows — so the fix would have shipped its
+   own collision. `TaskRepository.nextFreeOrder()` now delegates to the profile-wide `TaskDao.nextOrder`, and
+   `a_task_saved_from_the_editor_does_not_take_a_position_an_archived_row_holds` pins it.
+
+**Two gate changes this block had to make honestly.** `HardcodedFailureTextTest`'s `ALLOWED` pattern recognised an
+argument qualified by a type ending in `Failure` (`ReportFailure.EMPTY_FILE`) but not one ending in `Refusal`, so my
+`HierarchyMoveResult.Refused(HierarchyMoveRefusal.ROW_MISSING)` was counted as English the app owns and the ceiling of
+5 was reached at 11. The rule was widened to the shape its own class note names as the desired one — an enum the
+screen turns into words — and the ceiling stayed at 5, with all five existing findings still reported: a literal in
+those positions still fails the gate. Nothing was deleted and no assertion was loosened.
+
+**What is deliberately not here.** No indent, no outdent, no move-to, no per-level collapse, no delete policy — the
+brief's own order. `SwipeRefreshLayout` is untouched, the gesture arbitration between a drag and a re-render is
+Stage 17's, and the review's note that a state emission mid-drag can replace the list under the finger is recorded
+against Stage 17 rather than patched here. The `parent_uuid` KDoc still claims "cycles are impossible by
+construction", which stops being true the moment §5 ships and is corrected there, with the depth contract
+(`TaskTree.MAX_INDENT_LEVEL` narrowing to the parser's bound) — decided 2026-11-02 to be topic + three task levels,
+one shared constant, enforced in parser, mapping, move validation, renderer, backup and sync.

@@ -1028,12 +1028,13 @@ nowhere to put it.
   `TasksViewModel.render` emits a `GroupHeader`, then that group's tasks by `groupId`, each indented by
   `TaskTree`. Collapsing is still per topic only, and there is no per-level chevron yet — §16.2's
   "a collapse control at every level" is unbuilt.
-- Ordering primitives exist and are usable: `tasks.order` (`:141`), `TaskDao.updateTaskOrder` (`:190-191`),
-  `updateTaskOrders` (`:193-196`), `TaskRepository.reorderTasks` (`:156`), `GroupDao.nextSortOrder` (`:30-34`).
-- **A known ordering defect this stage inherits**: `saveVisibleOrder` (`TasksViewModel.kt:594-603`) re-indexes
-  `0..n` over the *filtered* subset, so a drag while a filter is active can collide with rows outside it, and
-  `onMove` only requires equal view types (`TasksFragment.kt:178`), so a row can be dragged across a group
-  boundary. Any hierarchy work must fix this first or inherit it into a deeper tree.
+- Ordering primitives exist and are usable: `tasks.order` (`:141`), `TaskDao.assignTaskOrder` (`:216-228`),
+  `TaskDao.getRowsInStoredOrder`, `TaskHierarchyRepository.moveWithinSiblings`, `GroupDao.nextSortOrder` (`:30-34`).
+- **The ordering defect this stage inherited is fixed** (2026-11-02, phase 1 below). `saveVisibleOrder` used to
+  re-index `0..n` over the *filtered* subset and `onMove` required only equal view types
+  (`TasksFragment.kt:178`), so a drag under a filter could collide with rows outside it and a row could be dropped
+  across a group boundary. Both are gone: one profile-wide sequence, a subtree that travels as one block, and a
+  sibling-set boundary that refuses the rest by name. `docs/HIERARCHY.md` describes what replaced them.
 - The row that would show an indent, `res/layout/item_group_header.xml`, has a fixed `marginStart="8dp"`
   (`:7`) and `paddingHorizontal="12dp"` (`:18`) with nothing depth-driven.
 
@@ -1066,8 +1067,11 @@ a topic, and a column with no writer is how `Category.parent_category_id` became
 ## 16.6 Risks
 
 1. **A move that creates a cycle** makes a subtree unreachable and the list render loop forever. Test it.
-2. **The flatten-and-reindex defect above** gets worse with depth: a partial re-index across three levels can
-   interleave siblings of different parents.
+2. ~~**The flatten-and-reindex defect above** gets worse with depth: a partial re-index across three levels can
+   interleave siblings of different parents.~~ **Closed by phase 1.** A reorder now splices one subtree block inside
+   the profile's whole sequence and refuses any drop outside the dragged row's sibling set, so the interleaving the
+   risk described has nowhere to come from. What is left of it is Stage 17's: the gesture arbitration between a drag
+   and a list that re-renders while the finger is down.
 3. **Sync and export must carry the new field** or a two-device user gets a tree that collapses on the other
    device: `FirestoreSyncStore` has a fixed field list (`:94-112`), `BackupFile`'s inner keys are the
    `@ColumnInfo` names, and `SyncAppliers` matches by uuid. All three need the parent key, and an
@@ -1087,10 +1091,15 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
 ## 16.8 Implementation phases
 
 1. **Fix the ordering defect**, with a failing test: reorder while filtered, and assert rows outside the filter
-   keep their order. *Half done*: the defect is now written down and pinned by
-   `TaskReorderPersistenceTest`, which asserts parent, topic and owner survive a filtered reorder and records the
-   order collision it still produces. The re-densifying itself is unchanged, deliberately: `order` is
-   profile-wide in this app, and re-numbering it is a decision about the manual list that this stage owns.
+   keep their order. **Done.** The RED came first, against the ordering that shipped:
+   `TaskReorderPersistenceTest.a_reordered_filtered_subset_still_leaves_the_profile_one_unambiguous_sequence` failed
+   with `no two rows of one profile may claim the same position expected:<4> but was:<2>` — four rows, two positions.
+   The fix put the decision in one place (`data/hierarchy/TaskHierarchyPolicy.kt`), the write in one transaction
+   (`data/repository/TaskHierarchyRepository.kt`), and the boundary in front of the gesture
+   (`TasksFragment.onMove`, which now refuses a target that is not a sibling and moves the whole subtree block).
+   19 tests in `TasksOrderingTest` + 3 in `TaskReorderPersistenceTest` cover the filtered cases, the refusals, the
+   subtree block, the bounded write, the cross-profile case, a blank `uuid`, and the reconciliation of a profile
+   whose positions were already doubled or gapped. `docs/HIERARCHY.md` records the strategy chosen and why.
 2. ~~Migration 16→17 with a schema-equality test and a round-trip on a copied database file.~~ **Done** as
    Stage 15's foundation (`parent_uuid`, `is_completed`, the parent index). This stage's data work starts at
    **17 → 18**, for whatever the move controls need beyond what exists — and it needs little: the key, the index

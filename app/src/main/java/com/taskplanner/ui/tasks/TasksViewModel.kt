@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.R
+import com.taskplanner.data.hierarchy.HierarchyMoveResult
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RecurrenceRule
@@ -17,6 +18,7 @@ import com.taskplanner.data.repository.GroupRepository
 import com.taskplanner.data.repository.RecurrenceRepository
 import com.taskplanner.data.repository.ReminderRepository
 import com.taskplanner.data.repository.SessionRepository
+import com.taskplanner.data.repository.TaskHierarchyRepository
 import com.taskplanner.data.repository.TaskRepository
 import com.taskplanner.data.repository.WorkStatisticsRepository
 import com.taskplanner.data.repository.WorkTrackingRepository
@@ -130,7 +132,8 @@ class TasksViewModel @Inject constructor(
     private val reminderRepository: ReminderRepository,
     private val sessionRepository: SessionRepository,
     private val workTrackingRepository: WorkTrackingRepository,
-    private val workStatisticsRepository: WorkStatisticsRepository
+    private val workStatisticsRepository: WorkStatisticsRepository,
+    private val hierarchyRepository: TaskHierarchyRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TasksState())
@@ -185,6 +188,17 @@ class TasksViewModel @Inject constructor(
         val work: WorkStatisticsRepository.WorkBoard,
         val filters: Filters
     )
+
+    /**
+     * The last thing this screen drew, kept so a refused edit can put the list back the way it was.
+     *
+     * A drag edits the rows on screen before it edits the stored ones, and the two can disagree: a repository that
+     * refuses a plan leaves the card sitting where the reader's finger put it, and nothing else would ever move it
+     * back. Drawing the last input again undoes the lie. It is not a re-read of the database — and it does not need
+     * to be one, because a *real* change to the rows makes Room's flow re-emit and render by itself; this is for the
+     * case where the data never moved and only the screen did.
+     */
+    private var lastRender: RenderInput? = null
 
     // keeps `filters` and selection observable by a single combine without re-launching collectors
     private val selectionFlow = MutableStateFlow<Pair<Set<Long>, Boolean>>(emptySet<Long>() to false)
@@ -244,6 +258,7 @@ class TasksViewModel @Inject constructor(
     private data class FilterWithSelection(val filters: Filters, val selected: Set<Long>, val mode: Boolean)
 
     private fun render(input: RenderInput) {
+        lastRender = input
         val categoryMap = input.categories.associateBy { it.id }
         var visible = input.tasks
 
@@ -614,13 +629,26 @@ class TasksViewModel @Inject constructor(
 
     // ---------------------------------------------------------------- ordering
 
-    /** Persists the manual order for the currently visible (filtered) subset. */
-    fun saveVisibleOrder(orderedIds: List<Long>) {
+    /**
+     * Reorders [taskId] among the rows that share its parent, landing it beside [anchorTaskId].
+     *
+     * The command names an anchor and a side rather than a list of ids, which is the whole point of it: what the
+     * screen used to do was renumber the rows it could see, so a drag made under a filter handed those rows the
+     * positions of rows the filter was hiding, and two rows of one profile could claim the same place. Asking for
+     * the anchor instead lets the repository place the row in the profile's one sequence and leave every other row's
+     * place against every row the drag did not cross exactly where it was.
+     *
+     * A refusal is not nothing: the list the reader is looking at was already moved by the gesture, so the screen
+     * draws the stored order again rather than showing an order that was never written.
+     */
+    fun moveTaskBeside(taskId: Long, anchorTaskId: Long, placeAfter: Boolean) {
         viewModelScope.launch {
             try {
-                taskRepository.reorderTasks(orderedIds)
+                val outcome = hierarchyRepository.moveWithinSiblings(taskId, anchorTaskId, placeAfter)
+                if (outcome is HierarchyMoveResult.Refused) lastRender?.let(::render)
             } catch (e: Exception) {
                 setError(e)
+                lastRender?.let(::render)
             }
         }
     }
@@ -806,8 +834,7 @@ class TasksViewModel @Inject constructor(
         }
     }
 
-    private suspend fun nextOrder(): Int =
-        taskRepository.getActiveTasksOnce().maxOfOrNull { it.order }?.plus(1) ?: 0
+    private suspend fun nextOrder(): Int = taskRepository.nextFreeOrder()
 
     fun resetTaskSaveState() {
         _taskSaveState.value = TaskSaveState.Initial
