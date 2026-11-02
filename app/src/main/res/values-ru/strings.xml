@@ -1203,4 +1203,85 @@
     <string name="error_stop_timer_first">Остановите таймер этого профиля, прежде чем переносить его данные</string>
     <string name="error_handover_failed">Ничего не перенесено</string>
     <string name="error_sign_out_incomplete">Выход из аккаунта не завершился</string>
+
+    <!-- Stage 15: импорт текстового экспорта Google Keep. См. комментарий в values/strings.xml: счётные
+         фразы — это plurals, а не число, склеенное со существительным в Kotlin; блок статистики намеренно
+         состоит из подписи и числа рядом. -->
+    <string name="title_keep_import">Импорт из Google Keep</string>
+    <string name="settings_keep_import_entry">Импорт из Google Keep</string>
+    <string name="settings_keep_import_hint">Вставьте текстовую копию заметок Keep. Приложение разберёт их на темы и задачи и покажет результат, прежде чем что-либо записать.</string>
+    <string name="keep_import_paste_label">Вставленный текст</string>
+    <string name="keep_import_paste_placeholder">Вставьте сюда, по одной заметке на строку. Строка без отступа станет темой; строка с отступом — задачей под ней. Отступы, орфография и даты останутся как у вас.</string>
+    <string name="keep_import_parse">Разобрать</string>
+    <string name="keep_import_clear">Очистить</string>
+    <string name="keep_import_confirm">Импортировать</string>
+    <string name="keep_import_loading">Чтение текста</string>
+    <string name="keep_import_stats_header">Что во вставленном тексте</string>
+    <string name="keep_import_tree_header">Дерево в том виде, как оно будет записано</string>
+    <string name="keep_import_empty_preview">Из этого текста ничего не будет записано.</string>
+    <string name="keep_import_hidden_rows">ещё %1$d</string>
+    <string name="keep_import_row_new">новая</string>
+    <string name="keep_import_row_already">уже есть</string>
+    <string name="keep_import_row_conflict">принадлежит другому профилю</string>
+    <string name="keep_import_state_checked">в источнике отмечено выполненным</string>
+    <string name="keep_import_state_open">в источнике не отмечено</string>
+    <string name="keep_import_state_unknown">на этой строке нет флажка</string>
+    <string name="keep_import_expand_topic">Развернуть тему</string>
+    <string name="keep_import_collapse_topic">Свернуть тему</string>
+    <string name="keep_import_metadata_note">Текстовый экспорт Keep не содержит сроков, меток, приоритетов и напоминаний, поэтому импортированные строки не получают выдуманных значений.</string>
+    <string name="keep_import_topic_state_note">Тема хранит собственный флажок. Он не завершает и не открывает задачи под ней.</string>
+    <string name="keep_import_merge_note">Импорт добавляет данные в этот профиль. Ничего существующего не заменяется, а повторная вставка того же текста не запишет его дважды.</string>
+    <string name="keep_import_result_no_profile">Войдите, прежде чем импортировать.</string>
+    <string name="keep_import_result_already">Этот текст уже импортирован. Ничего не записано.</string>
+    <string name="keep_import_result_nothing">Импортировать нечего: в этом тексте нет строк с флажком.</string>
+    <string name="keep_import_error_copy">Ничего не импортировано: сначала не удалось создать безопасную копию ваших данных.</string>
+    <string name="keep_import_error_write">Ничего не импортировано: запись не удалась, база возвращена к прежнему состоянию.</string>
+    <string name="keep_import_error_tree">Ничего не импортировано: этот текст не удалось разобрать как дерево.</string>
+    <string name="keep_import_issue_no_box">На строке %1$d нет флажка, поэтому она импортируется как невыполненная.</string>
+    <string name="keep_import_issue_no_parent">Строка %1$d с отступом, но над ней нет того, кто мог бы её принять, поэтому она станет темой.</string>
+    <string name="keep_import_issue_indent">Строка %1$d перескакивает уровень; она размещена под ближайшим возможным родителем.</string>
+    <string name="keep_import_issue_deep">Строка %1$d глубже четырёх уровней, которые сохраняет импорт; она размещена на четвёртом.</string>
+    <string name="keep_import_stat_topics">Темы</string>
+    <string name="keep_import_stat_tasks">Задачи</string>
+    <string name="keep_import_stat_completed">Отмечено выполненными</string>
+    <string name="keep_import_stat_open">Остались открытыми</string>
+    <string name="keep_import_stat_nested">Вложены в задачу</string>
+    <string name="keep_import_stat_no_box">Строк без флажка</string>
+    <string name="keep_import_stat_separators">Пустых строк с флажком пропущено</string>
+    <string name="keep_import_stat_blanks">Пустых строк пропущено</string>
+    <string name="keep_import_stat_duplicates">Повторяются в названии</string>
+    <string name="keep_import_stat_depth">Самая глубокая ветвь</string>
+    <string name="keep_import_stat_new">Будет записано</string>
+    <string name="keep_import_stat_already">Уже импортировано</string>
+    <string name="keep_import_result_joiner">" и "</string>
+    <plurals name="keep_import_depth_levels">
+        <item quantity="one">%1$d уровень</item>
+        <item quantity="few">%1$d уровня</item>
+        <item quantity="many">%1$d уровней</item>
+        <item quantity="other">%1$d уровня</item>
+    </plurals>
+    <plurals name="keep_import_conflict_count">
+        <item quantity="one">%1$d строка этого текста принадлежит другому профилю</item>
+        <item quantity="few">%1$d строки этого текста принадлежат другому профилю</item>
+        <item quantity="many">%1$d строк этого текста принадлежат другому профилю</item>
+        <item quantity="other">%1$d строки этого текста принадлежат другому профилю</item>
+    </plurals>
+    <plurals name="keep_import_warning_count">
+        <item quantity="one">%1$d замечание перед импортом</item>
+        <item quantity="few">%1$d замечания перед импортом</item>
+        <item quantity="many">%1$d замечаний перед импортом</item>
+        <item quantity="other">%1$d замечания перед импортом</item>
+    </plurals>
+    <plurals name="keep_import_result_topics">
+        <item quantity="one">импортирована %1$d тема</item>
+        <item quantity="few">импортировано %1$d темы</item>
+        <item quantity="many">импортировано %1$d тем</item>
+        <item quantity="other">импортировано %1$d темы</item>
+    </plurals>
+    <plurals name="keep_import_result_tasks">
+        <item quantity="one">добавлена %1$d задача</item>
+        <item quantity="few">добавлено %1$d задачи</item>
+        <item quantity="many">добавлено %1$d задач</item>
+        <item quantity="other">добавлено %1$d задачи</item>
+    </plurals>
 </resources>

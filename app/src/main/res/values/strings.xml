@@ -1393,4 +1393,76 @@
     <string name="error_stop_timer_first">Stop the timer running on this profile before moving its data</string>
     <string name="error_handover_failed">Nothing was moved</string>
     <string name="error_sign_out_incomplete">The account was left signed in</string>
+
+    <!-- Stage 15: importing a pasted Google Keep text export. A count that travels inside a sentence is a
+         plurals entry rather than a number joined to a noun in Kotlin, because "1 topic" / "5 topics" is
+         grammar the language owns. The statistics block is deliberately a label beside a number, so neither
+         language has to agree a noun it is not being shown. -->
+    <string name="title_keep_import">Google Keep import</string>
+    <string name="settings_keep_import_entry">Import from Google Keep</string>
+    <string name="settings_keep_import_hint">Paste a text copy of your Keep notes. The app reads it into topics and tasks and shows you the result before anything is written.</string>
+    <string name="keep_import_paste_label">Pasted text</string>
+    <string name="keep_import_paste_placeholder">Paste here, one note per line. A line with no indentation becomes a topic; an indented line becomes a task under it. Indentation, spelling and dates stay as you wrote them.</string>
+    <string name="keep_import_parse">Preview</string>
+    <string name="keep_import_clear">Clear</string>
+    <string name="keep_import_confirm">Import</string>
+    <string name="keep_import_loading">Reading the text</string>
+    <string name="keep_import_stats_header">What the paste holds</string>
+    <string name="keep_import_tree_header">The tree as it will be written</string>
+    <string name="keep_import_empty_preview">Nothing in this text would be written.</string>
+    <string name="keep_import_hidden_rows">%1$d hidden</string>
+    <string name="keep_import_row_new">new</string>
+    <string name="keep_import_row_already">already here</string>
+    <string name="keep_import_row_conflict">belongs to another profile</string>
+    <string name="keep_import_state_checked">marked done in the source</string>
+    <string name="keep_import_state_open">not marked in the source</string>
+    <string name="keep_import_state_unknown">this line has no checkbox</string>
+    <string name="keep_import_expand_topic">Open this topic</string>
+    <string name="keep_import_collapse_topic">Close this topic</string>
+    <string name="keep_import_metadata_note">A Keep text export carries no due dates, labels, priorities or reminders, so none is invented for the imported rows.</string>
+    <string name="keep_import_topic_state_note">A topic keeps its own checkbox. It does not complete or open the tasks under it.</string>
+    <string name="keep_import_merge_note">Importing adds to this profile. Nothing you already have is replaced, and pasting the same text again does not write it twice.</string>
+    <string name="keep_import_result_no_profile">Sign in before importing.</string>
+    <string name="keep_import_result_already">This text is already imported. Nothing was written.</string>
+    <string name="keep_import_result_nothing">Nothing to import: this text holds no checkbox lines.</string>
+    <string name="keep_import_error_copy">Nothing was imported: a safety copy of your data could not be taken first.</string>
+    <string name="keep_import_error_write">Nothing was imported: the write failed and the database was rolled back to what it was.</string>
+    <string name="keep_import_error_tree">Nothing was imported: this text could not be read as a tree.</string>
+    <string name="keep_import_issue_no_box">Line %1$d has no checkbox, so it is imported as not done.</string>
+    <string name="keep_import_issue_no_parent">Line %1$d is indented but nothing above it can hold it, so it becomes a topic.</string>
+    <string name="keep_import_issue_indent">Line %1$d skips a level; it is placed under the nearest one above it.</string>
+    <string name="keep_import_issue_deep">Line %1$d is deeper than the four levels this import keeps; it is placed at the fourth.</string>
+    <string name="keep_import_stat_topics">Topics</string>
+    <string name="keep_import_stat_tasks">Tasks</string>
+    <string name="keep_import_stat_completed">Marked done</string>
+    <string name="keep_import_stat_open">Left open</string>
+    <string name="keep_import_stat_nested">Nested under a task</string>
+    <string name="keep_import_stat_no_box">Lines with no checkbox</string>
+    <string name="keep_import_stat_separators">Empty checkbox rows skipped</string>
+    <string name="keep_import_stat_blanks">Blank lines skipped</string>
+    <string name="keep_import_stat_duplicates">Repeated titles</string>
+    <string name="keep_import_stat_depth">Deepest branch</string>
+    <string name="keep_import_stat_new">Rows to write</string>
+    <string name="keep_import_stat_already">Rows already here</string>
+    <string name="keep_import_result_joiner">", "</string>
+    <plurals name="keep_import_depth_levels">
+        <item quantity="one">%1$d level</item>
+        <item quantity="other">%1$d levels</item>
+    </plurals>
+    <plurals name="keep_import_conflict_count">
+        <item quantity="one">%1$d line of this text belongs to another profile</item>
+        <item quantity="other">%1$d lines of this text belong to another profile</item>
+    </plurals>
+    <plurals name="keep_import_warning_count">
+        <item quantity="one">%1$d thing to check before importing</item>
+        <item quantity="other">%1$d things to check before importing</item>
+    </plurals>
+    <plurals name="keep_import_result_topics">
+        <item quantity="one">%1$d topic imported</item>
+        <item quantity="other">%1$d topics imported</item>
+    </plurals>
+    <plurals name="keep_import_result_tasks">
+        <item quantity="one">%1$d task added</item>
+        <item quantity="other">%1$d tasks added</item>
+    </plurals>
 </resources>

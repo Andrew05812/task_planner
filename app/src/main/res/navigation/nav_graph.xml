@@ -160,7 +160,20 @@
     <fragment
         android:id="@+id/navigation_settings"
         android:name="com.taskplanner.ui.settings.SettingsFragment"
-        android:label="@string/title_settings" />
+        android:label="@string/title_settings">
+        <action
+            android:id="@+id/action_settings_to_keep_import"
+            app:destination="@id/navigation_keep_import" />
+    </fragment>
+
+    <!-- Importing a pasted Google Keep text export (Stage 15). Its own destination rather than a block on the
+         settings screen, because the reader is about to paste 439 lines and read a tree of 382 rows: the panel
+         that asks for that is the whole screen, and settings is where they decide to open it. -->
+    <fragment
+        android:id="@+id/navigation_keep_import"
+        android:name="com.taskplanner.ui.keep.KeepImportFragment"
+        android:label="@string/title_keep_import"
+        tools:layout="@layout/fragment_keep_import" />
 
     <!-- What the profile is working toward. Its own screen rather than a block on the task list because a
          goal is not a task: it is a figure the tasks answer to, and it is read from the account the way

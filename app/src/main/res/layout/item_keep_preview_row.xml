@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One line of the Keep preview tree.
+
+  The indent is a `Space` whose width is the row's depth times the level step, set in code. A spacer rather than
+  `paddingStart` because the row's own horizontal padding belongs to the screen margins, and a tree that moved its
+  whole content inward on every level would lose the title column the eye is reading down.
+
+  Four levels at the step this screen uses must still leave room for a title at 320dp, which is what the paired
+  light and dark frames at that width are for: the export the stage was written against holds a 169-character
+  title, and it wraps rather than truncates, because a cut-off note is a note the reader cannot check before
+  importing it.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="false"
+    android:gravity="center_vertical"
+    android:minHeight="@dimen/touch_target_min"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/screen_margin"
+    android:paddingEnd="@dimen/screen_margin"
+    android:paddingTop="@dimen/spacing_xs"
+    android:paddingBottom="@dimen/spacing_xs">
+
+    <Space
+        android:id="@+id/rowIndent"
+        android:layout_width="0dp"
+        android:layout_height="1dp" />
+
+    <!-- What the source's box said, in three states rather than two: done, open, and "this line carried no box",
+         which the importer refuses to guess a value for. -->
+    <TextView
+        android:id="@+id/rowStateMark"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="@dimen/spacing_small"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+        tools:text="☑" />
+
+    <TextView
+        android:id="@+id/rowTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+        tools:text="🟥Сегодня — 26.12.26 - 11:00 — очень длинная строка из заметки" />
+
+    <!-- "already here" / "belongs to another profile": what the confirm will actually do with this line. Hidden
+         for a plain new row, where there is nothing unusual to say. -->
+    <TextView
+        android:id="@+id/rowStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_small"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        tools:text="@string/keep_import_row_already" />
+
+    <!-- A closed topic says what it is hiding, so "3 hidden" survives a scroll away from the branch itself. -->
+    <TextView
+        android:id="@+id/rowHidden"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_small"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone"
+        tools:text="3 hidden"
+        tools:visibility="visible" />
+
+    <!-- A topic only. The row's title is deliberately not the touch target for opening a branch: the reader is
+         reading the text, and a tap that silently rearranges the list under their finger is not what they asked
+         for. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/rowToggle"
+        style="@style/Widget.TaskPlanner.Button.Text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_small"
+        android:minHeight="@dimen/touch_target_min"
+        android:visibility="gone"
+        tools:text="@string/keep_import_collapse_topic"
+        tools:visibility="visible" />
+</LinearLayout>

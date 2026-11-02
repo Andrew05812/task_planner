@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One figure of the Keep preview's statistics: the words the app supplies and the number the parse measured, on
+  the same line.
+
+  A label beside a number rather than a sentence, because a sentence would make every language agree a noun with a
+  count the screen built elsewhere — and this block shows thirteen of them at once. The count that travels inside a
+  sentence (the result line, the warning header) is a plurals entry; the count shown here is arithmetic.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="false"
+    android:orientation="horizontal"
+    android:paddingTop="@dimen/spacing_xs"
+    android:paddingBottom="@dimen/spacing_xs">
+
+    <TextView
+        android:id="@+id/statLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+        tools:text="@string/keep_import_stat_topics" />
+
+    <TextView
+        android:id="@+id/statValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_normal"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+        tools:text="56" />
+</LinearLayout>

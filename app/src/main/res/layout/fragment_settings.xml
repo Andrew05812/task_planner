@@ -309,6 +309,26 @@
                     android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/import_data" />
 
+                <!-- A separate route rather than a second file picker under the same button: this one takes text
+                     the reader pastes, not a file the app has to read, and §6 asks for the JSON backup path to be
+                     left alone. The line under the button says so before it is pressed, because "Import" and
+                     "Import from Google Keep" side by side invite the wrong guess. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/keepImportButton"
+                    style="@style/Widget.TaskPlanner.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/settings_keep_import_entry" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/settings_keep_import_hint"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

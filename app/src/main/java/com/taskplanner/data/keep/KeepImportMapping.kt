@@ -44,6 +44,7 @@ data class KeepImportStats(
  * has to be able to say it, because "0 topics, 0 tasks" with no explanation reads as a broken parser.
  */
 data class KeepImportPlan(
+    val candidates: List<KeepRowCandidate>,
     val groups: List<TaskGroup>,
     val tasks: List<Task>,
     val stats: KeepImportStats,
@@ -99,7 +100,9 @@ data class KeepRowCandidate(
     val node: KeepNode,
     val uuid: String,
     val parentUuid: String?,
-    val groupUuid: String
+    val groupUuid: String,
+    val key: String,
+    val parentKey: String?
 ) {
     val isTopic: Boolean get() = node.depth == 0
 }
@@ -117,7 +120,9 @@ object KeepImportMapping {
     fun candidates(document: KeepParsedDocument, userId: Long): List<KeepRowCandidate> {
         val out = ArrayList<KeepRowCandidate>()
         val occurrences = HashMap<String, Int>()
-        document.topics.forEach { topic -> collect(topic, "", null, null, userId, occurrences, out) }
+        document.topics.forEachIndexed { index, topic ->
+            collect(topic, "", null, null, index.toString(), null, userId, occurrences, out)
+        }
         return out
     }
 
@@ -218,6 +223,7 @@ object KeepImportMapping {
             // Refuse the whole import: no subset of the rows is safe to write, because the rows left out are the
             // ones the reader would notice missing.
             return KeepImportPlan(
+                candidates = candidates,
                 groups = emptyList(),
                 tasks = emptyList(),
                 stats = KeepImportStats(0, 0, 0, 0, 0, 0, 0),
@@ -227,6 +233,7 @@ object KeepImportMapping {
         }
 
         return KeepImportPlan(
+            candidates = candidates,
             groups = groups.toList(),
             tasks = tasks.toList(),
             stats = KeepImportStats(
@@ -260,6 +267,8 @@ object KeepImportMapping {
         parentKey: String,
         parentTaskUuid: String?,
         groupUuid: String?,
+        key: String,
+        parentRowKey: String?,
         userId: Long,
         occurrences: MutableMap<String, Int>,
         out: MutableList<KeepRowCandidate>
@@ -272,9 +281,10 @@ object KeepImportMapping {
         // A topic owns its own subtree; below a topic the group link stays the topic's uuid all the way down,
         // while the parent link chains task to task.
         val ownGroup = groupUuid ?: uuid
-        out += KeepRowCandidate(node, uuid, parentTaskUuid, ownGroup)
-        node.children.forEach { child ->
-            collect(child, uuid, if (isTopic) null else uuid, ownGroup, userId, occurrences, out)
+        out += KeepRowCandidate(node, uuid, parentTaskUuid, ownGroup, key, parentRowKey)
+        node.children.forEachIndexed { index, child ->
+            collect(child, uuid, if (isTopic) null else uuid, ownGroup, "$key/$index", key,
+                userId, occurrences, out)
         }
     }
 

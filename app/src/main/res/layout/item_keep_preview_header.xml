@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The head of the Keep preview list: the numbers first, then the tree underneath.
+
+  It is the list's first item rather than a fixed panel above it because the statistics block and the rows are one
+  argument — §11 asks the reader to see "56 topics" and the topics themselves together, and a header that scrolls
+  away from the list it describes lets the two disagree in the reader's eye.
+
+  The figures are label-and-number rows added in code (`statsContainer`), not sentences: a count written into a
+  string resource as "%1$d topics" is grammar, and a count shown beside its own label is arithmetic. Both belong
+  here; only the arithmetic is generated.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/screen_margin"
+    android:paddingEnd="@dimen/screen_margin"
+    android:paddingBottom="@dimen/spacing_small">
+
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.TaskPlanner.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding_horizontal">
+
+            <TextView
+                android:id="@+id/statsHeader"
+                style="@style/Widget.TaskPlanner.SectionHeader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/keep_import_stats_header" />
+
+            <LinearLayout
+                android:id="@+id/statsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
+                android:orientation="vertical"
+                tools:layout_height="48dp" />
+
+            <TextView
+                android:id="@+id/emptyPreviewText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
+                android:text="@string/keep_import_empty_preview"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:visibility="gone"
+                tools:visibility="visible" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Warnings arrive only when the parser had to decide something the source did not say. They are placed
+         above the tree rather than below it, because each one names a line the reader may want to fix in the
+         field before confirming. -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/warningsCard"
+        style="@style/Widget.TaskPlanner.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_normal"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding_horizontal">
+
+            <TextView
+                android:id="@+id/warningsHeader"
+                style="@style/Widget.TaskPlanner.SectionHeader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="3 things to check before importing" />
+
+            <LinearLayout
+                android:id="@+id/warningContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_small"
+                android:orientation="vertical"
+                tools:layout_height="24dp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <TextView
+        android:id="@+id/treeHeader"
+        style="@style/Widget.TaskPlanner.SectionHeader"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_normal"
+        android:text="@string/keep_import_tree_header" />
+</LinearLayout>

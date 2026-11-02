@@ -14,6 +14,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.fragment.findNavController
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.taskplanner.R
@@ -63,6 +64,13 @@ class SettingsFragment : Fragment() {
             }
             importButton.setOnClickListener {
                 importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+            }
+            // Its own route rather than another launcher on the same panel: a Keep export is text the reader
+            // pastes, and the screen that takes it has to show what the paste would become before any of it is
+            // written. The JSON backup path above is untouched, and so is its replace semantics — a Keep import
+            // only ever merges into the current profile.
+            keepImportButton.setOnClickListener {
+                findNavController().navigate(R.id.action_settings_to_keep_import)
             }
             syncNowButton.setOnClickListener { viewModel.syncNow() }
             signInButton.setOnClickListener {
