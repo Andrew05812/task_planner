@@ -965,6 +965,16 @@ the code and wrong in the writing about it, and one was wrong in the files thems
   `maxDepth == 1`. The four-level contract is proven by the parser, the mapping tripwires and the device's chain
   fixture, and the docs now say that instead.
 
+**And one thing CI caught that no local run could.** `KeepCorpusContractTest` counts 438 CR bytes in the corpus
+fixture — the file is depersonalized, but it is shaped like the export the stage was written against, and the export
+writes CRLF. That held on the machine that wrote it, where `core.autocrlf=true` rebuilds CRLF at checkout, and failed
+on GitHub's Linux runner, where the same blob unpacks as LF: run 41416407024 stopped at line 39 of a test that had
+passed in every local run, `expected:<438> but was:<0>`. The assertion was not the wrong claim and relaxing it would
+have been the wrong lesson — a fixture whose shape depends on which client unpacked it is not a contract — so
+`.gitattributes` now pins `app/src/test/resources/keep/*.txt` to `text eol=crlf` and nothing else. The failure was
+reproduced before it was fixed and the fix confirmed the same way: a clone with `core.autocrlf=false` of `676bbb2`
+reads `CRLF 0 / LF 438`, and of `1080dc2` reads `CRLF 438`.
+
 **What Stage 16 still owns, stated so this section cannot be read as that stage.** Move a task between parents,
 delete-with-children policy, a cycle guard at the moment a *user* attempts a reparent, a collapse control below the
 topic level, and the filtered-reorder collision `TaskReorderPersistenceTest` records but does not fix. The parent

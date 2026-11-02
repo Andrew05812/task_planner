@@ -6049,6 +6049,14 @@ its teardown, its frames method refuses a directory name the window does not agr
 resource-driven assertions read through `AppLocale.localized(context)` so they hold in either language — which is
 the same hygiene rule Stage 14's error №5 records, now enforced by a class that photographs both languages.
 
+**A CI finding worth its own line too.** `KeepCorpusContractTest` counts 438 CR bytes in the corpus fixture, which is
+true on a Windows checkout (`core.autocrlf=true` rebuilds CRLF) and false on GitHub's Linux runner (the same blob
+unpacks as LF): run 41416407024 failed with `expected:<438> but was:<0>` on a test that had passed in every local
+run. The assertion was not the wrong claim, so it was not relaxed — `.gitattributes` now pins
+`app/src/test/resources/keep/*.txt` to `text eol=crlf` (commit `1080dc2`), and the failure was reproduced before the
+fix and re-checked after it by cloning with `core.autocrlf=false`: `CRLF 0 / LF 438` at `676bbb2`, `CRLF 438` at
+`1080dc2`.
+
 **What Stage 15 did not do, and no document on this branch may claim.** It did not complete Stage 16: there is no
 move control, no delete-with-children policy, no per-level collapse, and the filtered-reorder collision
 `TaskReorderPersistenceTest` records is still there. It did not touch Stage 13's auth status — Google Sign-In
