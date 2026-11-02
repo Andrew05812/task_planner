@@ -5,10 +5,12 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskplanner.R
+import com.taskplanner.data.hierarchy.HierarchyCollapseResult
 import com.taskplanner.data.hierarchy.HierarchyDeletePolicy
 import com.taskplanner.data.hierarchy.HierarchyDeleteRefusal
 import com.taskplanner.data.hierarchy.HierarchyDeleteResult
 import com.taskplanner.data.hierarchy.HierarchyMoveResult
+import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.RecurrenceRule
@@ -66,7 +68,16 @@ sealed interface TasksListItem {
          * screen rather than a column the reader has to trust: [TaskTree] measures it over the list the filters
          * left, so a hidden parent moves its child to the margin instead of inventing a level for it.
          */
-        val depth: Int = 0
+        val depth: Int = 0,
+        /**
+         * How many rows this one would take off the list if the reader folded it — every descendant, not the
+         * generation below it alone, because that is what the tap actually costs.
+         *
+         * Zero means there is nothing to fold, and the card draws no chevron for it: a control over an empty branch
+         * is a decoration that lies about the notebook. Computed over the profile's rows rather than the visible
+         * ones, so a folded branch two levels up does not make its parent look like a leaf.
+         */
+        val hiddenDescendants: Int = 0
     ) : TasksListItem
 }
 
@@ -281,6 +292,17 @@ class TasksViewModel @Inject constructor(
             }
         }
 
+        // A fold hides a branch from the tree view, and a search is not the tree view — it is a question about it. So
+        // a query ignores folds: the alternative is a list that says "nothing found" about a row the reader can open
+        // in the editor, because a branch happened to be closed weeks ago. A *browsing* filter — category, status —
+        // does not uncover a folded branch, because it selects rows out of the same notebook rather than asking where
+        // something is. The hidden set is measured over the profile's rows either way, so a filter that dropped the
+        // row in between cannot reveal what an ancestor hides.
+        if (search.isBlank()) {
+            val away = TaskHierarchyPolicy.collapsedAwayIds(input.tasks)
+            if (away.isNotEmpty()) visible = visible.filter { it.id !in away }
+        }
+
         visible = when (sortOrder) {
             SortOrder.MANUAL -> visible.sortedWith(compareBy({ it.order }, { it.dueDate ?: Long.MAX_VALUE }))
             SortOrder.DATE_ASC -> visible.sortedBy { it.dueDate ?: Long.MAX_VALUE }
@@ -301,6 +323,9 @@ class TasksViewModel @Inject constructor(
         // imported is the tree they see, and a list that showed every imported task at the margin would have
         // taken the structure in and thrown the structure away.
         val depths = TaskTree.depthsByTaskId(visible)
+        // What each card would take off the list if the reader folded it, counted over the profile rather than over
+        // the rows that survived the filters: a branch closed above a row does not make that row a leaf.
+        val hiddenCounts = TaskHierarchyPolicy.descendantCountsByTaskId(input.tasks)
 
         val items = mutableListOf<TasksListItem>()
         val groupedTaskIds = mutableSetOf<Long>()
@@ -314,7 +339,7 @@ class TasksViewModel @Inject constructor(
             items += TasksListItem.GroupHeader(group, groupTasks.size, allSelected)
             if (!group.collapsed) {
                 groupTasks.forEach { task ->
-                    items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0)
+                    items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, hiddenCounts)
                     groupedTaskIds += task.id
                 }
             } else {
@@ -322,7 +347,7 @@ class TasksViewModel @Inject constructor(
             }
         }
         visible.filter { it.id !in groupedTaskIds }.forEach { task ->
-            items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0)
+            items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, hiddenCounts)
         }
 
         _categories.value = input.categories
@@ -347,7 +372,8 @@ class TasksViewModel @Inject constructor(
         input: RenderInput,
         categoryMap: Map<Long, Category>,
         selected: Set<Long>,
-        depth: Int
+        depth: Int,
+        hiddenCounts: Map<Long, Int>
     ) = TasksListItem.TaskRow(
         task,
         task.categoryId?.let { categoryMap[it] },
@@ -359,7 +385,8 @@ class TasksViewModel @Inject constructor(
             liveSeconds = input.work.liveSecondsOf(task.id),
             phase = input.work.phaseOf(task.id)
         ),
-        depth = depth
+        depth = depth,
+        hiddenDescendants = hiddenCounts[task.id] ?: 0
     )
 
     private fun Priority.rank(): Int = when (this) {
@@ -679,6 +706,32 @@ class TasksViewModel @Inject constructor(
                 taskRepository.moveTaskToGroup(taskId, groupUuid)
             } catch (e: Exception) {
                 setError(e)
+            }
+        }
+    }
+
+    /**
+     * Folds or opens one branch, and draws what the storage now says.
+     *
+     * The screen holds no collapse state of its own: the column is on the row, the task flow re-emits after the
+     * write, and the list re-renders from it — which is why the fold survives a rotation, a restart and a profile
+     * switch without a line of code that carries it between screens.
+     *
+     * A refusal redraws the last render rather than being reported as a failure. The only one a reader can reach is
+     * [com.taskplanner.data.hierarchy.HierarchyCollapseRefusal.NO_CHILDREN], and it means the card they tapped had
+     * stopped being a parent since it was drawn — someone else deleted its children, or a sync pull re-hung them.
+     * The list they are looking at is then the stale thing, so it is rebuilt from storage; nothing they asked for
+     * was lost, so there is nothing to apologise for.
+     */
+    fun toggleBranchCollapse(taskId: Long) {
+        viewModelScope.launch {
+            try {
+                if (hierarchyRepository.toggleBranchCollapse(taskId) is HierarchyCollapseResult.Refused) {
+                    lastRender?.let(::render)
+                }
+            } catch (e: Exception) {
+                setError(e)
+                lastRender?.let(::render)
             }
         }
     }

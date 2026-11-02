@@ -243,6 +243,19 @@ interface TaskDao {
     suspend fun setTaskParent(id: Long, parentUuid: String?, now: Long)
 
     /**
+     * Folding a branch away from the list, or opening it again.
+     *
+     * The one column a collapse touches: no parent link, no topic, no position. It stamps `updated_at` and queues
+     * `PENDING` for the same reason [setTaskParent] does — the fold is a fact about the reader's notebook that the
+     * other device should end up agreeing about — and it is keyed by row id rather than by uuid, because the row
+     * being folded is the one the screen just drew.
+     */
+    @Query(
+        "UPDATE tasks SET children_collapsed = :collapsed, updated_at = :now, sync_state = 'PENDING' WHERE id = :id"
+    )
+    suspend fun setChildrenCollapsed(id: Long, collapsed: Boolean, now: Long)
+
+    /**
      * The topic of every row of a subtree, written together.
      *
      * `group_id` says which topic owns the tree, and it is carried on every row of it — so a subtree that changes

@@ -19,6 +19,46 @@ owns its tree and the tree stays reachable from it. Migration `16 → 17` is add
 `CREATE INDEX`, no table rebuild — and `AppMigrationsTest` holds the schema-equality and old-database
 round-trip contracts for it.
 
+Schema **v18** added one column, for folding a branch:
+
+| Column | Table | Notes |
+| --- | --- | --- |
+| `children_collapsed` | `tasks` | `INTEGER NOT NULL DEFAULT 0`. Whether the reader hid this row's descendants from the list. A view state, not an edit: no parent link, topic, position or status moves with it |
+
+One column, no index — the flag is never a lookup key, only a fact about rows the profile read already holds — and
+`AppMigrationsTest` holds the two contracts §7 asks of a migration: that the result equals the schema Room exports
+for v18, and that the `ALTER` moved no row and changed no column the tree is built from. The default is open, because
+a notebook written before the column existed never asked to hide anything.
+
+## A branch can be folded, and the fold lives on the row
+
+`TaskHierarchyRepository.toggleBranchCollapse(taskId)` flips that one column and answers
+`HierarchyCollapseResult.Changed(taskId, collapsed, hiddenDescendants, rowsWritten)`; a row with nothing under it is
+refused `NO_CHILDREN`, and one whose branch cannot be named — an identity two rows claim — is refused
+`AMBIGUOUS_IDENTITY`. [TaskHierarchyPolicy](../app/src/main/java/com/taskplanner/data/hierarchy/TaskHierarchyPolicy.kt)
+answers the two questions the screen needs: `collapsedAwayIds(rows)` for what is hidden, and
+`descendantCountsByTaskId(rows)` for what a fold would take, both walking the ancestor chain once and bounded against
+a cycle. `TasksHierarchyRenderTest` is where the list's side of it is pinned.
+
+**Why it is a column rather than a screen's memory.** `TaskGroup.collapsed` has always been stored, and the reason
+holds for a branch: a reader who folds something, turns the phone, restarts the app or switches profile expects the
+branch to still be folded. In a `ViewModel` it would be lost, and the loss would look like the list rearranging
+itself. §7 asked for the state to be deterministic after leaving the screen and after a restart, and a column is the
+only answer that is not a synchronised cache.
+
+**The rule a renderer has to choose, chosen.** A fold hides a branch from the *tree view*, and a search is not the
+tree view — it is a question about it. So a query in the search box ignores folds: a reader who closed "Server
+migration" can still find the subtask whose name they typed, instead of being told "no tasks found" about a row the
+editor can open. A browsing filter — category, status — uncovers nothing, because it selects rows out of the same
+notebook rather than asking where something is. Both are asserted, in
+`a_search_ignores_the_fold_because_a_query_is_a_question_not_a_way_of_browsing` and
+`a_browsing_filter_that_drops_the_row_in_between_cannot_uncover_a_folded_branch`.
+
+**What is not there yet.** No chevron on the card, so no way to fold a branch by hand: the state is stored, the list
+obeys it, and the control arrives with the rest of §6's card work. A reader with a folded branch today got it there
+through the repository, not the screen — which is why this section says so rather than describing a control that
+does not exist.
+
 ## What that makes possible today
 
 * **An import keeps the depth a paste had.** A Google Keep export decides structure by indentation and nothing
@@ -225,6 +265,8 @@ Everything that **changes the shape** of the tree by hand, and it is deliberatel
 * No indent / outdent control in the editor or on the row, and no "move to" sheet. The operations exist and are
   tested at the repository; nothing offers them yet, so a tree still arrives through an import and is edited by
   dragging within one sibling set.
+* No chevron on the card either: the fold is stored, obeyed by the list and counted for the badge, and the control
+  that writes it is `toggleBranchCollapse`, which no screen calls yet (§7's state, §6's control).
 * Deleting a parent now asks which of the two deletes the reader meant (§9 below), but the question is asked *after*
   the first confirm, not instead of it: the list's dialog still opens with "Delete Task?", and the branch question
   follows only when the domain finds rows under the row. Reshaping that into one dialog is the §6 UI pass's.

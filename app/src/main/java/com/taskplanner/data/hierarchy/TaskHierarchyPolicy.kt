@@ -153,6 +153,59 @@ object TaskHierarchyPolicy {
     }
 
     /**
+     * The rows the reader cannot see because an ancestor of theirs is folded away.
+     *
+     * Measured over [rows] — the profile's own set rather than the screen's filtered subset — because the fold is a
+     * fact about the tree: a branch closed two levels up still hides what is under it even when a filter dropped the
+     * row in between, and a renderer that only looked at what survived its filter would uncover exactly the rows the
+     * reader closed. The fold belongs to the branch, not to the generation: a grandchild is away when its
+     * grandparent is folded and its own parent is open.
+     */
+    fun collapsedAwayIds(rows: List<Task>): Set<Long> {
+        val byUuid = rows.filter { it.uuid.isNotBlank() }.associateBy { it.uuid }
+        return rows.filter { row -> ancestorsOf(row, byUuid).any { it.childrenCollapsed } }.map { it.id }.toSet()
+    }
+
+    /**
+     * Task id to the number of rows hanging under it, at any depth.
+     *
+     * The card needs this to say what a fold would take away, and the whole map is built in one pass — each row adds
+     * itself to every ancestor on its chain — because calling [subtreeOf] once per row would rebuild the children
+     * index that often, which is quadratic in the size of the account and the first thing the §14 benchmark on 10k
+     * tasks would find.
+     *
+     * A row with a blank identity contributes no count to anybody: nothing can point at it as a parent, and the walk
+     * stops at whatever depth it reached if the chain cycles — the same two rules [subtreeOf] gives for the same
+     * reasons.
+     */
+    fun descendantCountsByTaskId(rows: List<Task>): Map<Long, Int> {
+        val byUuid = rows.filter { it.uuid.isNotBlank() }.associateBy { it.uuid }
+        val counts = HashMap<Long, Int>()
+        rows.forEach { row -> ancestorsOf(row, byUuid).forEach { ancestor -> counts[ancestor.id] = (counts[ancestor.id] ?: 0) + 1 } }
+        return counts
+    }
+
+    /**
+     * The chain of rows above [row], nearest first, as far as the given set reaches.
+     *
+     * Bounded by a visited set and by the two blank rules: `tasks.uuid` defaults to `''` and a pull can write an
+     * empty `parent_uuid`, so "the rows whose parent is the empty string" is a bucket of unrelated legacy rows
+     * rather than anybody's ancestors — and a cycle a sync pull left behind has to stop the walk rather than hang
+     * the reader's main thread.
+     */
+    private fun ancestorsOf(row: Task, byUuid: Map<String, Task>): List<Task> {
+        val chain = ArrayList<Task>()
+        val seen = hashSetOf(row.uuid)
+        var walker = row.parentUuid
+        while (walker != null && walker.isNotBlank() && seen.add(walker)) {
+            val ancestor = byUuid[walker] ?: break
+            chain += ancestor
+            walker = ancestor.parentUuid
+        }
+        return chain
+    }
+
+    /**
      * Why this pair of rows may not be ordered against each other, or null when they may.
      *
      * Checked in this order on purpose: a row dropped onto its own child is refused as a subtree problem rather than

@@ -1,6 +1,8 @@
 package com.taskplanner.data.repository
 
 import androidx.room.withTransaction
+import com.taskplanner.data.hierarchy.HierarchyCollapseRefusal
+import com.taskplanner.data.hierarchy.HierarchyCollapseResult
 import com.taskplanner.data.hierarchy.HierarchyDeletePolicy
 import com.taskplanner.data.hierarchy.HierarchyDeleteRefusal
 import com.taskplanner.data.hierarchy.HierarchyDeleteResult
@@ -333,6 +335,38 @@ class TaskHierarchyRepository @Inject constructor(
             affected += TaskHierarchyPolicy.subtreeOf(stored, head).map { it.id }
         }
         HierarchyDeleteSummary(branchRows, children, affected.size)
+    }
+
+    /**
+     * Folds [taskId]'s branch away from the list, or opens it again.
+     *
+     * One column moves: no parent link, no topic, no position, no status — which is the whole reason the state lives
+     * on the row rather than in a screen. A reader who folds a branch, lets the list re-render, rotates the device,
+     * switches profile and comes back is looking at the same fold they left, and the hidden rows are still stored
+     * exactly as they were (§7: collapsing hides descendants *from the list*, it does not edit them).
+     *
+     * A row with nothing under it is refused: [HierarchyCollapseRefusal.NO_CHILDREN] is the difference between a
+     * control and a decoration, and a card that folds zero rows teaches the reader that the app does not know their
+     * own notebook. The answer carries the count of what went away so the card can say it — the branch's descendants,
+     * not only the generation under it, because that is what the reader loses by the tap.
+     */
+    suspend fun toggleBranchCollapse(taskId: Long): HierarchyCollapseResult = database.withTransaction {
+        val userId = sessionRepository.currentUserId()
+            ?: return@withTransaction HierarchyCollapseResult.Refused(HierarchyCollapseRefusal.NO_PROFILE)
+        val stored = TaskHierarchyPolicy.canonicalSequence(taskDao.getRowsInStoredOrder(userId))
+        val head = stored.firstOrNull { it.id == taskId }
+            ?: return@withTransaction HierarchyCollapseResult.Refused(HierarchyCollapseRefusal.ROW_MISSING)
+        val block = TaskHierarchyPolicy.subtreeOf(stored, head)
+        if (!TaskHierarchyPolicy.blockIsKnowable(head, block, TaskHierarchyPolicy.ambiguousUuids(stored))) {
+            return@withTransaction HierarchyCollapseResult.Refused(HierarchyCollapseRefusal.AMBIGUOUS_IDENTITY)
+        }
+        val hidden = block.size - 1
+        if (hidden == 0) {
+            return@withTransaction HierarchyCollapseResult.Refused(HierarchyCollapseRefusal.NO_CHILDREN)
+        }
+        val collapseTo = !head.childrenCollapsed
+        taskDao.setChildrenCollapsed(head.id, collapseTo, timeBase.wallMillis())
+        HierarchyCollapseResult.Changed(head.id, collapseTo, hidden, rowsWritten = 1)
     }
 
     /**

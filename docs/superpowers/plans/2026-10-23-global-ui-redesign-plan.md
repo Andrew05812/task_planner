@@ -6350,3 +6350,68 @@ because the two-operation dialog now exists once, in `TasksFragment`, and §6 is
 hierarchy controls look like on more than one screen; copying the dialog into a second fragment before then would mean
 maintaining two of them and guessing at the shape the other one is heading for. `docs/HIERARCHY.md` carries the same
 sentence, so the claim "a parent's delete asks" is scoped to the tasks screen rather than read as stage-wide.
+
+## 20π — Stage 16 §7, first half: the fold is a column, and the list obeys it
+
+§7 asks for a collapse control at every level, and the first half of that is not the control — it is where the state
+lives. A `ViewModel` can hold a set of folded ids in fifty lines and lose them on rotation, on process death, on a
+profile switch and on the other device, and the reader would read that loss as the notebook rearranging itself.
+`TaskGroup.collapsed` has been a column since the topic header first folded; that is the precedent §7 names, and the
+reason this block starts in the schema rather than in the layout.
+
+**One column, one migration, no index.** `MIGRATION_17_18` adds `tasks.children_collapsed INTEGER NOT NULL DEFAULT 0`
+and nothing else — the flag is never a lookup key, because the rows it hides are found by walking parent links and
+that walk already got its index in v17. `AppMigrationsTest` holds the two contracts §7 asks of a migration: the
+migrated database equals the schema Room exports for v18, and the `ALTER` moved no row and touched no column the tree
+is built from — parent links, topics, positions and statuses compared as strings before and after. Default open,
+because a notebook written before the column existed never asked to hide anything.
+
+**The two walks the screen needs, in the policy, once.** `collapsedAwayIds(rows)` answers what is hidden and
+`descendantCountsByTaskId(rows)` what a fold would take; both share one private `ancestorsOf`, bounded by a visited
+set and by the two blank rules — `''` is what `tasks.uuid` defaults to, so "the rows whose parent is the empty
+string" is a bucket of unrelated legacy rows rather than anybody's branch, and a cycle a pull left behind has to stop
+a walk rather than hang the reader's thread. The counts walk each row *up* to its ancestors, one increment each, in a
+single pass: calling `subtreeOf` per row would rebuild the children index that often, which is quadratic in the size
+of the account and exactly what §14's 10k-task benchmark exists to catch.
+
+**What a fold means for a filter was decided, not left to the renderer.** A fold hides a branch from the *tree view*;
+a search is not the tree view but a question about it — so a query in the search box ignores folds, and a reader who
+closed "Server migration" can still find the subtask whose name they typed, instead of being told "no tasks found"
+about a row the editor can open. A browsing filter — category, status — uncovers nothing, because it selects rows out
+of the same notebook rather than asking where something is. Both are asserted as behaviour on the rendered list
+(`a_search_ignores_the_fold_because_a_query_is_a_question_not_a_way_of_browsing`,
+`a_browsing_filter_that_drops_the_row_in_between_cannot_uncover_a_folded_branch`). The hidden set is measured over the
+profile's rows and then applied to whatever survived the filters, which is the whole of §7's filter rule: a filter
+that drops the row in between cannot reveal what an ancestor hides, and cannot bring a hidden row back as a root.
+
+**Refusals, because a card is about to promise something.** A row with nothing under it is refused (`NO_CHILDREN`): a
+chevron over zero hidden rows is a decoration that lies about the reader's own notebook, and §7 says the field must
+not be added only to exist. A branch whose identity two rows claim is refused too (`AMBIGUOUS_IDENTITY`), because the
+card would report a count the walk cannot reproduce. A refusal in the screen command redraws the last render rather
+than reporting a failure — the only one a reader can reach means the card they tapped stopped being a parent since it
+was drawn, so the list is the stale thing, and rebuilding it is the answer.
+
+**RED, and three things wrong in my own work before a test could vouch for it.** The first compile failed with 23
+unresolved references — `childrenCollapsed` on the entity constructor, `HierarchyCollapseResult`,
+`HierarchyCollapseRefusal`, `toggleBranchCollapse`, `collapsedAwayIds`, `MIGRATION_17_18`; a second round added
+`TaskHierarchyPolicy` unresolved in the view model, which had never needed the import before. Then, read back before
+running: `if (search.isNotBlank())` had the fold applied exactly when the reader was searching and lifted when they
+were browsing — inverted, and a test written only for the browsing case would not have distinguished them, so the
+search case is asserted as its own test. Then an expectation of mine about a re-opened branch —
+`head, first, deep, second` — which assumed the list is drawn as a walk. It is drawn in stored positions, so the
+assertion moved to `head, first, second, deep` and the code stayed as it was; that is the kind of change the
+"never weaken a test" rule allows only when the code is right and the expectation was the thing that was wrong, and it
+is named here rather than passed over.
+
+**Deliberately not in this commit, and named so.** No chevron on the card: the state is stored, the list obeys it,
+and nothing on screen can write it yet — the control is §6's card work and lands next. And `children_collapsed` is not
+on the Firestore document yet, so a branch folded on one device is open on the other; that travels with §11's
+hierarchy convergence, which is the next-but-one commit of this stage rather than a later stage. Both sentences are in
+`docs/HIERARCHY.md` in the same words, not softer ones.
+
+**Gates after the block, measured on the tree this commit holds**: 146 classes / **1865** JVM tests / 0 failures /
+0 skipped (1842 before §7; the 23 are `HierarchyCollapseTest` 12, `TasksHierarchyRenderTest` 10 and the v18 case in
+`AppMigrationsTest`); `lintDebug` 0 errors / **150** warnings, unchanged; `assembleDebug` produced an
+`app-debug.apk` of 15 725 332 bytes, sha256 starting `dd277e22e3ad4b0b`. Room exported
+`app/schemas/com.taskplanner.data.local.AppDatabase/18.json` while the schema-equality test ran, and that file is what
+the migration is compared against, so it belongs in the commit rather than on one machine's disk.

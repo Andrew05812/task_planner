@@ -1026,8 +1026,9 @@ nowhere to put it.
   for it. `Task.parent_uuid` is the only nesting key that exists.
 - The hierarchy that is rendered is one level of grouping plus a depth-driven indent inside it:
   `TasksViewModel.render` emits a `GroupHeader`, then that group's tasks by `groupId`, each indented by
-  `TaskTree`. Collapsing is still per topic only, and there is no per-level chevron yet — §16.2's
-  "a collapse control at every level" is unbuilt.
+  `TaskTree`. **A per-task fold now exists in storage and in the list** (schema v18, `tasks.children_collapsed`,
+  hidden set computed by `TaskHierarchyPolicy.collapsedAwayIds`), so §16.2's "a collapse control at every level" is
+  half built: the state and the hiding are done and tested, the chevron on the card is not.
 - Ordering primitives exist and are usable: `tasks.order` (`:141`), `TaskDao.assignTaskOrder` (`:216-228`),
   `TaskDao.getRowsInStoredOrder`, `TaskHierarchyRepository.moveWithinSiblings`, `GroupDao.nextSortOrder` (`:30-34`).
 - **The ordering defect this stage inherited is fixed** (2026-11-02, phase 1 below). `saveVisibleOrder` used to
@@ -1064,10 +1065,13 @@ and it settled the two questions this section used to pose:
 - **backfill: every existing row stayed a root**, and nothing was inferred from titles or from order. `is_completed`
   arrived with a `DEFAULT 0`, so no topic that ever existed changed state because of it.
 
-What this stage still needs, if anything, is **17 → 18** — the depth bound is enforced in code today
-(`KeepTextParser.MAX_DEPTH`, `TaskTree.MAX_INDENT_LEVEL`), cycles are made impossible by how the import builds a
-chain and bounded by how the walk reads one, and a *move* guard belongs to the move control that does not exist
-yet. A schema change is not assumed; it is the decision this section still owns.
+What this stage still needed, if anything, was **17 → 18** — the depth bound is enforced in code today
+(`TaskHierarchyPolicy.MAX_TASK_LEVELS`, read by the parser, the mapping, the move validation and the renderer), cycles
+are made impossible by how the import builds a chain and refused by how a move writes one, and neither wanted a
+column. A schema change was not assumed; it was the decision this section still owned, and the decision went: **one
+column, for the fold.** `MIGRATION_17_18` adds `tasks.children_collapsed INTEGER NOT NULL DEFAULT 0` and nothing else
+— no index, since the flag is never a lookup key — so §7's per-level collapse is state on the row rather than memory
+in a screen. `AppMigrationsTest` pins the schema equality and that no other column of any task moved.
 
 **The identity audit ran before the move controls, and it decided against a schema change** (2026-11-02).
 Measured on the emulator's own `taskplanner.db` (v17, 58 rows): zero empty uuids, zero duplicate uuids inside a

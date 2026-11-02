@@ -673,6 +673,27 @@ object AppMigrations {
         }
     }
 
+    /**
+     * 17 → 18: a branch can be folded without editing it.
+     *
+     * `children_collapsed` is the per-task sibling of `task_groups.collapsed`, which has been a stored column since
+     * the topic header first folded — the reason Stage 16 §7 puts the new state in the schema rather than in a screen
+     * is that the topic's fold already survives a restart, a profile switch and a backup, and a reader who folds a
+     * branch and comes back to find it open again would reasonably call that a bug in the list rather than a
+     * limitation of their notebook.
+     *
+     * Additive, in the shape every migration in this file has kept since v1: one `ADD COLUMN` with a default, so the
+     * rows that predate the fold read back as open — the only honest answer for a tree that never asked to hide
+     * anything — and nothing is rewritten, re-typed or dropped. No index: the column is never a lookup key, only a
+     * flag on rows the profile read already holds. `AppMigrationsTest` compares the result against the schema Room
+     * exports for v18 and asserts no other column of any task moved.
+     */
+    val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `tasks` ADD COLUMN `children_collapsed` INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -689,6 +710,7 @@ object AppMigrations {
         MIGRATION_13_14,
         MIGRATION_14_15,
         MIGRATION_15_16,
-        MIGRATION_16_17
+        MIGRATION_16_17,
+        MIGRATION_17_18
     )
 }

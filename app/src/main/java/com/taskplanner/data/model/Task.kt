@@ -177,5 +177,21 @@ data class Task(
      * refuses an identity two rows claim, and refuses a tree deeper than the contract holds.
      */
     @ColumnInfo(name = "parent_uuid")
-    val parentUuid: String? = null
+    val parentUuid: String? = null,
+
+    /**
+     * Whether the reader has folded the branch under this row away from the list.
+     *
+     * Schema v18, and the same kind of state [TaskGroup.collapsed] has always been: a fact about how the notebook is
+     * being looked at, stored on the row so it survives the screen that set it — a restart, a profile switch, a
+     * backup, the other device. A `ViewModel` holding it instead would leave a reader whose list re-expanded itself
+     * after every rotation, and §7 asks for the fold to be deterministic.
+     *
+     * It is a view state and nothing else: no parent link, topic, position or status moves when it changes, and the
+     * renderer hides descendants rather than editing them. The default is open, because a notebook written before
+     * this column existed never asked for anything to be hidden — and a row with nothing under it cannot be folded
+     * at all, which [com.taskplanner.data.repository.TaskHierarchyRepository] refuses rather than store.
+     */
+    @ColumnInfo(name = "children_collapsed", defaultValue = "0")
+    val childrenCollapsed: Boolean = false
 ) : Parcelable

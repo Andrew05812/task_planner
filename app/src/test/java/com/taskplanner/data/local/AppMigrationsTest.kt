@@ -227,7 +227,7 @@ class AppMigrationsTest {
         assertEquals(
             listOf(
                 1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8, 8 to 9, 9 to 10, 10 to 11,
-                11 to 12, 12 to 13, 13 to 14, 14 to 15, 15 to 16, 16 to 17
+                11 to 12, 12 to 13, 13 to 14, 14 to 15, 15 to 16, 16 to 17, 17 to 18
             ),
             pairs
         )
@@ -272,6 +272,36 @@ class AppMigrationsTest {
     }
 
     private val latestVersion: Int = AppMigrations.ALL.maxOf { it.endVersion }
+
+    @Test
+    fun `migration 17 to 18 gives every stored task a fold that starts open`() {
+        val db = open(17)
+        val before = counts(db)
+        val beforeValues = db.rows(
+            "SELECT id, title, status, parent_uuid, group_id, `order`, is_deleted FROM tasks ORDER BY id"
+        )
+
+        db.migrate(AppMigrations.MIGRATION_17_18)
+        builder.assertMatchesSchema(db, 18, "MIGRATION_17_18")
+
+        assertEquals("adding a column moves no row", before, counts(db))
+        assertEquals(
+            "and changes nothing the tree is built from — a fold is a view state, so the migration may not edit " +
+                "the shape it is only learning to remember",
+            beforeValues,
+            db.rows("SELECT id, title, status, parent_uuid, group_id, `order`, is_deleted FROM tasks ORDER BY id")
+        )
+        assertEquals(
+            "a notebook that never had the state reads back as open, which is the only honest default for it",
+            0L,
+            db.firstLong("SELECT COUNT(*) FROM tasks WHERE children_collapsed != 0")
+        )
+        assertEquals(
+            "and it is a column on the row, so the fold outlives the screen that set it",
+            "0",
+            db.firstCell("SELECT children_collapsed FROM tasks WHERE id = ${Seeder.COMPLETED_TASK_ID}")
+        )
+    }
 
     @Test
     fun `migration 11 to 12 adds completed_at without touching a stored value`() {

@@ -41,7 +41,7 @@ import com.taskplanner.data.model.WorkSession
         Insight::class,
         Achievement::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
