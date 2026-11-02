@@ -91,6 +91,10 @@ class TaskCardWidthBudgetTest {
 
     private fun bindWorstCase(
         widthDp: Int = 320, fontScale: Float = 1.0f, sortOrder: SortOrder = SortOrder.MANUAL,
+        // A row with a branch under it, because the fold control is drawn only there, and the width it costs is
+        // the width this file exists to notice being spent. `12` rather than `3`: a two-digit count is the widest
+        // the digit can get on a tree this app allows (four levels, and the count is of descendants).
+        branch: Int = 0,
         // Thirty days ahead: an overdue row prints "3 days late", which is SHORTER than the full date the
         // 84dp allowance is defined against, so a fixture that was itself overdue never measured the
         // widest legal date. Ahead rather than behind also keeps the wording out of the today/tomorrow
@@ -107,7 +111,7 @@ class TaskCardWidthBudgetTest {
         val adapter = TasksAdapter(
             onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {},
             onDeleteRequest = {}, onStart = {}, onPause = {}, onResume = {}, onComplete = {},
-            onWorkToggle = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
+            onWorkToggle = {}, onToggleBranch = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
         )
         adapter.submitList(
             listOf(
@@ -122,6 +126,7 @@ class TaskCardWidthBudgetTest {
                     category = Category(id = 1, uuid = "c", name = "Диссертация", color = categoryColor,
                         icon = "", userId = 1),
                     isSelected = false, series = aWeeklyRule(), pendingReminders = 2,
+                    foldRows = branch,
                     work = CardWork(closedSeconds = 6_300, liveSeconds = 60, phase = TrackingPhase.RUNNING)
                 )
             )
@@ -252,6 +257,37 @@ class TaskCardWidthBudgetTest {
             "${column.asDp()}dp column", figures.width + group.width <= column)
         assertTrue("the cluster starts at ${group.left}, the figures end at ${figures.right}",
             group.left >= figures.right)
+    }
+
+    /**
+     * The same worst row with a branch under it, which is the case every measurement above was taken without.
+     *
+     * §7 puts a fold control on a parent card, and §4.1's give-way rule decides who pays: a control a thumb has to
+     * hit outlives a figure that only has to be read. So the pair below is the cost of the control stated as
+     * arithmetic — a leaf keeps its measured time at 320dp and a parent running the same stretch does not.
+     *
+     * LEGACY metrics make the figures *narrower* than a real renderer would (the class note), which is the direction
+     * that makes this assertion easy rather than hard: with real glyphs the figures want more of the 208dp column
+     * behind 194dp of cluster, not less. The widths the device answers with are
+     * `TaskCardWidthBudgetInstrumentedTest`'s and the frame matrix's.
+     */
+    @Test fun `a parent row spends its figures on the fold, and never its title`() {
+        val leaf = bindWorstCase(widthDp = 320)
+        val parent = bindWorstCase(widthDp = 320, branch = 12)
+        val gutter = parent.findViewById<View>(R.id.categoryDot).left
+
+        assertEquals("a leaf at 320dp still shows what the task has cost", View.VISIBLE,
+            leaf.findViewById<View>(R.id.workRow).visibility)
+        assertEquals("the parent gives that line up to the fold", View.GONE,
+            parent.findViewById<View>(R.id.workRow).visibility)
+        assertEquals("and the fold is drawn, because it is the thing that stayed", View.VISIBLE,
+            parent.findViewById<View>(R.id.branchFold).visibility)
+        assertTrue("the cluster still starts right of the left column: ${parent.findViewById<View>(R.id.buttonGroup).left} " +
+                "against $gutter — a control pushed over the indent is drawn over the fact the indent carries",
+            parent.findViewById<View>(R.id.buttonGroup).left >= gutter)
+        assertEquals("line A pays nothing: the title is the width it was before the fold existed",
+            leaf.findViewById<TextView>(R.id.taskTitle).width,
+            parent.findViewById<TextView>(R.id.taskTitle).width)
     }
 
 

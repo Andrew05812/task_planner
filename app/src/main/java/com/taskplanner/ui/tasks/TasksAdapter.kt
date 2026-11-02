@@ -35,6 +35,13 @@ class TasksAdapter(
     private val onComplete: (com.taskplanner.data.model.Task) -> Unit,
     /** The card's single work-tracking control: start, pause or resume, chosen by the stored phase. */
     private val onWorkToggle: (com.taskplanner.data.model.Task) -> Unit,
+    /**
+     * The card's fold control: hide this row's branch, or show it again.
+     *
+     * It is a view command, not an edit — the row's data does not change, only what the list draws under it — so it
+     * takes the task and nothing else, and the screen decides where the state is stored.
+     */
+    private val onToggleBranch: (com.taskplanner.data.model.Task) -> Unit,
     private val onToggleGroup: (TaskGroup) -> Unit,
     private val onGroupMenu: (View, TaskGroup) -> Unit,
     private val onStartDrag: (RecyclerView.ViewHolder) -> Unit,
@@ -296,6 +303,42 @@ class TasksAdapter(
             // they are the app's two amber/red tokens, and Stage 10 renames them, not this stage.
         }
 
+        /**
+         * The fold: the chevron, the number it carries, and the words that say which way the next press goes.
+         *
+         * Three facts decide what the control looks like, and none of them is computed here. The number is the one
+         * the ViewModel measured over the rows the filters left — what a press moves on *this* screen — so a card
+         * cannot advertise three rows while a fold two levels up is holding two of them, or while a filter has taken
+         * the branch out of view. The direction comes from
+         * [com.taskplanner.data.model.Task.childrenCollapsed], the stored column the list already obeyed to put those
+         * rows out of sight: a control that remembered its own last press would disagree with the screen it is drawn
+         * on. And the mode is read off the row rather than off this adapter's flag, because a `ListAdapter` rebinds
+         * only what changed — entering selection mode changes one row's tick mark, and every other card would go on
+         * offering a fold under a flag it never re-read.
+         *
+         * The whole wrapper is the control: it takes the click, the ripple and the accessible name. With the click on
+         * the chevron alone, the digit beside it was a dead zone inside the reader's aim — a press there fell through
+         * to the card's own touch handler and opened the task the reader was reaching to fold. The digit itself says
+         * nothing to a screen reader, because the words it stands for are already in the name.
+         */
+        private fun bindBranch(item: TasksListItem.TaskRow) {
+            val b = binding
+            val context = b.root.context
+            val branch = item.foldRows
+            val collapsed = item.task.childrenCollapsed
+
+            b.branchFold.visibility = if (branch > 0 && !item.selectionMode) View.VISIBLE else View.GONE
+            b.branchCount.text = branch.toString()
+            // The topic header's convention, kept: 90 degrees is "open, the rows are below me", 0 is "closed,
+            // the rows are what I am pointing at. Rotation alone would leave a reader who cannot see the screen
+            // with no direction at all, which is why the name below changes with it.
+            b.branchToggle.rotation = if (collapsed) 0f else 90f
+            b.branchFold.contentDescription = context.resources.getQuantityString(
+                if (collapsed) R.plurals.branch_expand else R.plurals.branch_collapse, branch, branch
+            )
+            b.branchFold.setOnClickListener { current?.task?.let { task -> onToggleBranch(task) } }
+        }
+
         fun bind(item: TasksListItem.TaskRow) {
             current = item
             panelWidth = 0f
@@ -370,6 +413,11 @@ class TasksAdapter(
                     if (last != null && last.right > figures.width - figures.paddingEnd) {
                         b.workTime.isVisible = false
                         b.workTicker.isVisible = false
+                        // The line goes with its figures. A lone 8dp dot in a box no wider than it is a mark that
+                        // says "work is happening here" about a card that can no longer say how much — and the dot
+                        // was the only part of line C left over when the fold control took the room the two figures
+                        // had been sharing with it.
+                        figures.isVisible = false
                     }
                 }
             }
@@ -417,6 +465,7 @@ class TasksAdapter(
             b.completeTaskButton.setOnClickListener { current?.task?.let { onComplete(it) } }
 
             bindWork(item)
+            bindBranch(item)
 
             b.dragHandle.visibility = if (selectionMode || !reorderEnabled) View.GONE else View.VISIBLE
             b.selectionCheck.visibility = if (selectionMode) View.VISIBLE else View.GONE

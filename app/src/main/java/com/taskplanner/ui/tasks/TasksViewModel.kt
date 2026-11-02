@@ -70,14 +70,26 @@ sealed interface TasksListItem {
          */
         val depth: Int = 0,
         /**
-         * How many rows this one would take off the list if the reader folded it — every descendant, not the
-         * generation below it alone, because that is what the tap actually costs.
+         * How many rows this card's fold would move if the reader pressed it right now.
          *
-         * Zero means there is nothing to fold, and the card draws no chevron for it: a control over an empty branch
-         * is a decoration that lies about the notebook. Computed over the profile's rows rather than the visible
-         * ones, so a folded branch two levels up does not make its parent look like a leaf.
+         * The number is about the screen, not about the notebook: an open row counts the rows on screen that hang
+         * under it, and a closed one counts the rows its own fold is holding back. Two cases make that difference
+         * matter, and both were wrong before it was stated — a branch closed *inside* a branch made the outer card
+         * promise rows that a press would not move, and a filter that dropped the children left a chevron offering
+         * to hide nothing. Zero therefore means "this card has nothing to fold", and the card draws no control for
+         * it: a chevron over an empty branch is a decoration that lies about the reader's own notebook.
          */
-        val hiddenDescendants: Int = 0
+        val foldRows: Int = 0,
+        /**
+         * Whether this row is drawn while the reader is picking a batch.
+         *
+         * It travels on the row rather than only on the adapter because a `ListAdapter` rebinds what *changed*, and
+         * entering selection mode changes one row's tick mark — so every other card would go on showing a fold
+         * control under an adapter flag it never re-read. Folding a branch while a batch is being picked would hide
+         * rows the reader has already committed to deleting, so the control stands down for the whole list, and the
+         * only way a diff can do that is if the mode is part of what the rows say about themselves.
+         */
+        val selectionMode: Boolean = false
     ) : TasksListItem
 }
 
@@ -120,8 +132,7 @@ data class TasksState(
     val filterCategoryId: Long? = null,
     val filterStatus: TaskStatus? = null,
     val searchQuery: String = "",
-    val sortOrder: SortOrder = SortOrder.MANUAL,
-    val collapseVersion: Int = 0
+    val sortOrder: SortOrder = SortOrder.MANUAL
 ) {
     /**
      * How many of the three filters are on: category, status, query.
@@ -298,6 +309,11 @@ class TasksViewModel @Inject constructor(
         // does not uncover a folded branch, because it selects rows out of the same notebook rather than asking where
         // something is. The hidden set is measured over the profile's rows either way, so a filter that dropped the
         // row in between cannot reveal what an ancestor hides.
+        //
+        // `afterFilters` is kept because the card's digit is measured over it rather than over the profile: the
+        // number says what a press moves on this screen, and a row a filter dropped is not something any press can
+        // bring back.
+        val afterFilters = visible
         if (search.isBlank()) {
             val away = TaskHierarchyPolicy.collapsedAwayIds(input.tasks)
             if (away.isNotEmpty()) visible = visible.filter { it.id !in away }
@@ -323,9 +339,12 @@ class TasksViewModel @Inject constructor(
         // imported is the tree they see, and a list that showed every imported task at the margin would have
         // taken the structure in and thrown the structure away.
         val depths = TaskTree.depthsByTaskId(visible)
-        // What each card would take off the list if the reader folded it, counted over the profile rather than over
-        // the rows that survived the filters: a branch closed above a row does not make that row a leaf.
-        val hiddenCounts = TaskHierarchyPolicy.descendantCountsByTaskId(input.tasks)
+        // What each card's fold would move on the screen the reader is looking at: the rows drawn under it, or the
+        // rows its own fold is holding back. Measured over the filter's survivors rather than over the whole profile,
+        // because a row a filter dropped is not something any press can bring back, and a card that counted it would
+        // advertise a fold that changes nothing the reader can see.
+        val drawn = visible.mapTo(HashSet()) { it.id }
+        val foldDeltas = TaskHierarchyPolicy.foldDeltas(afterFilters, drawn)
 
         val items = mutableListOf<TasksListItem>()
         val groupedTaskIds = mutableSetOf<Long>()
@@ -339,7 +358,7 @@ class TasksViewModel @Inject constructor(
             items += TasksListItem.GroupHeader(group, groupTasks.size, allSelected)
             if (!group.collapsed) {
                 groupTasks.forEach { task ->
-                    items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, hiddenCounts)
+                    items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, foldDeltas, mode)
                     groupedTaskIds += task.id
                 }
             } else {
@@ -347,7 +366,7 @@ class TasksViewModel @Inject constructor(
             }
         }
         visible.filter { it.id !in groupedTaskIds }.forEach { task ->
-            items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, hiddenCounts)
+            items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, foldDeltas, mode)
         }
 
         _categories.value = input.categories
@@ -361,8 +380,7 @@ class TasksViewModel @Inject constructor(
                 searchQuery = search,
                 sortOrder = sortOrder,
                 selectionMode = mode,
-                selectedIds = selected,
-                collapseVersion = it.collapseVersion + 1
+                selectedIds = selected
             )
         }
     }
@@ -373,7 +391,8 @@ class TasksViewModel @Inject constructor(
         categoryMap: Map<Long, Category>,
         selected: Set<Long>,
         depth: Int,
-        hiddenCounts: Map<Long, Int>
+        foldDeltas: Map<Long, TaskHierarchyPolicy.FoldDelta>,
+        selectionMode: Boolean
     ) = TasksListItem.TaskRow(
         task,
         task.categoryId?.let { categoryMap[it] },
@@ -386,7 +405,14 @@ class TasksViewModel @Inject constructor(
             phase = input.work.phaseOf(task.id)
         ),
         depth = depth,
-        hiddenDescendants = hiddenCounts[task.id] ?: 0
+        // Which of the two numbers the card prints is the stored state's decision, not the screen's: a row drawn
+        // closed advertises what opening it returns, and a row drawn open what folding it takes away.
+        foldRows = if (task.childrenCollapsed) {
+            foldDeltas[task.id]?.reveals ?: 0
+        } else {
+            foldDeltas[task.id]?.hides ?: 0
+        },
+        selectionMode = selectionMode
     )
 
     private fun Priority.rank(): Int = when (this) {

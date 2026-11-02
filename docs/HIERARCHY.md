@@ -36,9 +36,9 @@ a notebook written before the column existed never asked to hide anything.
 `HierarchyCollapseResult.Changed(taskId, collapsed, hiddenDescendants, rowsWritten)`; a row with nothing under it is
 refused `NO_CHILDREN`, and one whose branch cannot be named — an identity two rows claim — is refused
 `AMBIGUOUS_IDENTITY`. [TaskHierarchyPolicy](../app/src/main/java/com/taskplanner/data/hierarchy/TaskHierarchyPolicy.kt)
-answers the two questions the screen needs: `collapsedAwayIds(rows)` for what is hidden, and
-`descendantCountsByTaskId(rows)` for what a fold would take, both walking the ancestor chain once and bounded against
-a cycle. `TasksHierarchyRenderTest` is where the list's side of it is pinned.
+answers the two questions the screen needs: `collapsedAwayIds(rows)` for what is hidden, and `foldDeltas(rows, drawn)`
+for what a press would move, both walking the ancestor chain once and bounded against a cycle.
+`TasksHierarchyRenderTest` is where the list's side of it is pinned.
 
 **Why it is a column rather than a screen's memory.** `TaskGroup.collapsed` has always been stored, and the reason
 holds for a branch: a reader who folds something, turns the phone, restarts the app or switches profile expects the
@@ -54,10 +54,51 @@ notebook rather than asking where something is. Both are asserted, in
 `a_search_ignores_the_fold_because_a_query_is_a_question_not_a_way_of_browsing` and
 `a_browsing_filter_that_drops_the_row_in_between_cannot_uncover_a_folded_branch`.
 
-**What is not there yet.** No chevron on the card, so no way to fold a branch by hand: the state is stored, the list
-obeys it, and the control arrives with the rest of §6's card work. A reader with a folded branch today got it there
-through the repository, not the screen — which is why this section says so rather than describing a control that
-does not exist.
+**The card has the control now, and line C is where it sits.** `item_task.xml` carries `branchFold` — a digit and a
+chevron — as the first child of the action cluster, and `TasksAdapter.bindBranch` paints it from two facts it does not
+compute: `TaskRow.foldRows`, which is what a press moves on this screen, and `Task.childrenCollapsed`, which is the
+column the list already obeyed. Line A is where a tree control would normally go, and it is where this card cannot
+afford one: at 320dp the text column is 208dp, of which 16 is the dot and its gap and 40 is the repeat mark and the bell
+(16 + 4 twice), leaving the title the 152dp `TaskCardWidthBudgetTest` measures. A 48dp target bolted in front of the
+title takes a fully-marked parent row to about 100dp — twelve characters a line. So the fold is paid for out of line C,
+where the app already has a rule for a column that runs out: the measured figures give way before the buttons do. On a
+running parent at the narrowest widths that means the work line goes — now the whole line rather than its two numbers
+and an orphaned dot — and `a parent row spends its figures on the fold, and never its title` in
+`TaskCardWidthBudgetTest` states the cost as arithmetic instead of leaving it to a paragraph.
+
+Four decisions are asserted in [TaskCardBranchTest](../app/src/test/java/com/taskplanner/ui/tasks/TaskCardBranchTest.kt),
+and each was chosen rather than fallen into:
+
+* the control is drawn only when `foldRows > 0`, and recomputed from zero on every bind, so a recycled card that drew a
+  parent and then a leaf gives the chevron up instead of offering a fold that refuses;
+* the number is the screen's, not the notebook's. The first cut counted every descendant of the profile, which is a
+  fact about storage and a lie about the press: with a fold *inside* a fold, the outer card promised rows a press would
+  not move, and under a filter that had dropped the branch it offered a chevron that changed nothing the reader could
+  see. `foldDeltas` therefore answers two questions separately — rows drawn under this one, and rows this one's own
+  fold is holding back — and attributes a hidden row to the *nearest* folded ancestor, because opening a row above that
+  ancestor does not reveal it. A row drawn closed prints the second number, which is what keeps a folded branch
+  openable at all;
+* the mode travels on the row. A `ListAdapter` rebinds only what changed, and entering selection mode changes one row's
+  tick mark, so a flag read off the adapter at bind time would leave every *other* parent offering a fold that hides
+  rows the reader has already committed to deleting. `TaskRow.selectionMode` makes every row differ when the mode
+  flips, which is also what finally refreshes the drag handle;
+* the whole wrapper is one control: click, ripple and accessible name on `branchFold`, the chevron and the digit marked
+  decorative. With the click on the chevron alone the digit was a dead zone inside the reader's aim — a press there fell
+  through to the card's own touch handler and opened the task they were reaching to fold.
+
+The state is said twice on purpose: the chevron turns (90° open, 0° closed, the topic header's convention) and the
+accessible name changes with it (`branch_collapse` / `branch_expand`), each naming both the state and what the press
+does — "Свернуть" and "Развернуть" differ by one unstressed prefix, and TalkBack does not re-announce after a press, so
+a label that carries only the verb asks the reader to remember which way they last went. The count rides inside the name
+as a plural, so the digit is not also spoken.
+
+**What §7 still owes.** «Если фильтр скрывает родителя» — a category or status filter that drops a parent while keeping
+its child currently draws that child at the card's own margin, because `TaskTree.depthsByTaskId` measures over the rows
+that survived the filter. That is honest about what is on screen, and it is not what §7 asks for: the brief forbids
+showing a descendant as though it had become a root, and prefers keeping the ancestor rows as context. The fix is the
+next block, not this section, and a reader who filters by status today can therefore see a nested row at the margin
+without the row above it. `a_search_ignores_the_fold…` and `TaskCardIndentTest.depthComesFromTheRowsOnScreen…` pin the
+behaviour as it is, so the block that changes it has to say so in a failing test first.
 
 ## What that makes possible today
 
@@ -69,6 +110,9 @@ does not exist.
   card indents by one step of `@dimen/task_depth_indent` per level, so an imported subtree looks like the tree
   it came from instead of a flat run under a heading.
 * **Collapsing a topic hides its whole branch**, in the preview list; the topics themselves never disappear.
+* **A parent's own card folds its branch.** The chevron and the count on line C write
+  `tasks.children_collapsed` through `toggleBranchCollapse`, and the list redraws from the stored column, so the fold
+  survives a rotation, a restart and a profile switch without a screen carrying it.
 * **Nothing about it invents structure.** A parent is only ever a line that was physically above it in the
   source. Titles never decide a parent, and depth is not inferred from indentation *after* the parse.
 
@@ -265,8 +309,10 @@ Everything that **changes the shape** of the tree by hand, and it is deliberatel
 * No indent / outdent control in the editor or on the row, and no "move to" sheet. The operations exist and are
   tested at the repository; nothing offers them yet, so a tree still arrives through an import and is edited by
   dragging within one sibling set.
-* No chevron on the card either: the fold is stored, obeyed by the list and counted for the badge, and the control
-  that writes it is `toggleBranchCollapse`, which no screen calls yet (§7's state, §6's control).
+* **A filter that hides a parent still draws its child at the margin.** §7 asks for the ancestor rows to be kept as
+  context, or for the missing parent to be marked while the real depth is kept; neither exists yet, and the card's
+  indent is measured over the rows that survived the filter. It is named in the fold section above, and it is the
+  part of §7 this build does not deliver.
 * Deleting a parent now asks which of the two deletes the reader meant (§9 below), but the question is asked *after*
   the first confirm, not instead of it: the list's dialog still opens with "Delete Task?", and the branch question
   follows only when the domain finds rows under the row. Reshaping that into one dialog is the §6 UI pass's.

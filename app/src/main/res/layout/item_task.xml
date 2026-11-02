@@ -298,6 +298,60 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/lineBFlow">
 
+                <!-- The fold, at the head of the action cluster rather than at the head of the title.
+
+                     §7 asks every parent row for a chevron, a state, a count and a name. Line A is where a tree
+                     control would normally sit, and it is where this card cannot afford one: at 320dp the text
+                     column is 208dp, of which 16 is the dot and its gap and 40 is the repeat mark and the bell
+                     (16 + 4 twice), which leaves the title the 152dp that `TaskCardWidthBudgetTest` measures. A 48dp
+                     target bolted in front of the title takes a fully-marked parent row to about 100dp — twelve
+                     characters a line — and §15's "the title is always readable" is a promise about the title, not
+                     about the chevron. Line C is where this card already spends controls, and it already has a
+                     give-way rule for the column running out: the figures give way before the buttons do. So the
+                     fold joins the cluster and the work digits are what pay, on a running parent at the narrowest
+                     widths — a cost the frame matrix photographs rather than one this comment gets to hide.
+
+                     The whole wrapper is ONE control, and that is a fix rather than a style: with only the chevron
+                     clickable, the digit beside it is a dead zone inside the reader's aim — a press there falls
+                     through to the card's own touch handler, which opens the task it was aiming to fold. So the
+                     wrapper takes the click, the ripple and the accessible name, and the two children are
+                     decoration: `@null` on the chevron is how this app marks a picture that says nothing on its own
+                     (`item_group_header.xml` does the same), and the digit is `importantForAccessibility="no"`
+                     because the words it stands for are already in the name, and "3, collapse the open branch: hide
+                     3 nested tasks" tells a reader the same thing twice. -->
+                <LinearLayout
+                    android:id="@+id/branchFold"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/touch_target_min"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="@string/branch_toggle"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <TextView
+                        android:id="@+id/branchCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:importantForAccessibility="no"
+                        android:textAppearance="@style/TextAppearance.TaskPlanner.Meta"
+                        android:textColor="@color/ink_text_tertiary"
+                        tools:text="3" />
+
+                    <ImageView
+                        android:id="@+id/branchToggle"
+                        android:layout_width="@dimen/touch_target_min"
+                        android:layout_height="@dimen/touch_target_min"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:padding="12dp"
+                        android:src="@drawable/ic_chevron_right"
+                        app:tint="@color/ink_text_secondary" />
+                </LinearLayout>
+
                 <ImageButton
                     android:id="@+id/startTaskButton"
                     android:layout_width="@dimen/touch_target_min"

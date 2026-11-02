@@ -104,7 +104,7 @@ class TasksCardRenderTest {
         val adapter = TasksAdapter(
             onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {},
             onDeleteRequest = {}, onStart = {}, onPause = {}, onResume = {}, onComplete = {},
-            onWorkToggle = { task -> workToggles += task.id }, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {},
+            onWorkToggle = { task -> workToggles += task.id }, onToggleBranch = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {},
             timeBase = FixedTimeBase(now)
         )
         adapter.submitList(items)

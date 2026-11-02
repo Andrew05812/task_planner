@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -209,7 +210,7 @@ class TasksHierarchyRenderTest {
 
         fold(head)
 
-        assertEquals("three rows are away behind it", 3, rowOf("head").hiddenDescendants)
+        assertEquals("three rows are away behind it", 3, rowOf("head").foldRows)
     }
 
     @Test
@@ -217,7 +218,76 @@ class TasksHierarchyRenderTest {
         row("lone", position = 0)
         awaitTitles("the list", listOf("lone"))
 
-        assertEquals(0, rowOf("lone").hiddenDescendants)
+        assertEquals(0, rowOf("lone").foldRows)
+    }
+
+    @Test
+    fun a_fold_inside_a_fold_reports_only_the_rows_a_press_would_actually_move() {
+        val head = row("head", position = 0)
+        val child = row("child", parent = "head", position = 1)
+        row("grand", parent = "child", position = 2)
+        awaitTitles("the branch open", listOf("head", "child", "grand"))
+
+        // The inner branch closes first, so the outer card is now sitting above one row and one *hidden* row. A
+        // press on the head moves the one it can see; a press on the child brings back the one its own fold holds.
+        fold(child)
+        awaitTitles("the inner branch to go", listOf("head", "child"))
+
+        assertEquals("the head would take one row off this screen", 1, rowOf("head").foldRows)
+        assertEquals("and the child would bring one row back", 1, rowOf("child").foldRows)
+    }
+
+    @Test
+    fun a_parent_whose_children_the_filter_dropped_has_no_fold_to_offer() {
+        val work = runBlocking { fixture.addCategory(userId, "cat-work") }
+        row("head", position = 0, categoryId = work)
+        row("kid", parent = "head", position = 1)
+        row("errand", position = 2, categoryId = work)
+
+        runBlocking { viewModel.setCategoryFilter(work) }
+        awaitTitles("the filter to reach the list", listOf("head", "errand"))
+
+        assertEquals(
+            "nothing on this screen hangs under the head, so a chevron here would promise a fold that changes " +
+                "nothing the reader can see",
+            0, rowOf("head").foldRows
+        )
+    }
+
+    @Test
+    fun a_hidden_row_is_counted_for_the_fold_that_holds_it_and_for_nobody_above_it() {
+        val head = row("head", position = 0)
+        val child = row("child", parent = "head", position = 1)
+        val grand = row("grand", parent = "child", position = 2)
+        row("great", parent = "grand", position = 3)
+        awaitTitles("the four levels drawn", listOf("head", "child", "grand", "great"))
+
+        // Two folds, one inside the other. `great` is behind both of them, so opening `child` does not reveal it —
+        // it is still held by `grand` — and a card that credited every folded ancestor would promise `child` two
+        // rows back when its press returns one.
+        fold(child)
+        fold(grand)
+        awaitTitles("both branches to close", listOf("head", "child"))
+
+        assertEquals("the closed child gets back the row its own fold holds", 1, rowOf("child").foldRows)
+        assertEquals("and the open head moves the one row drawn under it", 1, rowOf("head").foldRows)
+    }
+
+    @Test
+    fun a_row_drawn_while_selecting_is_not_the_row_drawn_while_browsing() {
+        val head = row("head", position = 0)
+        row("kid", parent = "head", position = 1)
+        awaitTitles("the branch to be drawn", listOf("head", "kid"))
+        val browsing = rowOf("kid")
+
+        viewModel.enterSelection(head.id)
+        settle("selection mode to reach every row") { rowOf("kid").selectionMode }
+
+        assertNotEquals(
+            "the row the diff compares has to change when the mode does, or a card drawn in browsing mode keeps " +
+                "a fold the batch should not offer",
+            browsing, rowOf("kid")
+        )
     }
 
     @Test
@@ -232,6 +302,12 @@ class TasksHierarchyRenderTest {
             "the column is what the list drew from, not a flag the screen remembered",
             true,
             runBlocking { fixture.taskDao.getTaskById(head.id) }!!.childrenCollapsed
+        )
+        // The card's rotation reads the row it is handed, so the state has to travel on the row: a screen that kept
+        // the fold in its own map would still draw the list correctly and turn the chevron the wrong way.
+        assertTrue(
+            "and the row the card is given carries it too",
+            rowOf("head").task.childrenCollapsed
         )
         assertEquals("and the row under it is untouched", "head", child.parentUuid)
     }

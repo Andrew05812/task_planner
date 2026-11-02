@@ -63,7 +63,7 @@ class TaskCardIndentTest {
 
     private fun adapter() = TasksAdapter(
         onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {}, onDeleteRequest = {},
-        onStart = {}, onPause = {}, onResume = {}, onComplete = {}, onWorkToggle = {}, onToggleGroup = {},
+        onStart = {}, onPause = {}, onResume = {}, onComplete = {}, onWorkToggle = {}, onToggleBranch = {}, onToggleGroup = {},
         onGroupMenu = { _, _ -> }, onStartDrag = {}
     )
 

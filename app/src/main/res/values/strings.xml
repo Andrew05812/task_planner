@@ -122,6 +122,22 @@
     <string name="delete_policy_subtree">Delete the branch</string>
     <string name="delete_blocked_running">Stop the timer before deleting this task</string>
     <string name="delete_row_missing">This task is no longer in your list</string>
+    <!-- Stage 16 §7: the card's fold control. The resting description is what the layout carries before a row is
+         bound; `branch_collapse` and `branch_expand` replace it per state, and each names BOTH the state the row is
+         in and what the press does, because "Свернуть" and "Развернуть" differ by one unstressed prefix and a screen
+         reader does not re-announce after the press — a label that only gives the verb asks the reader to remember
+         which way they last went. The count is the number of rows this press moves, and it travels as a plural:
+         Russian needs four forms for it, English two. The noun is "nested task" rather than the delete dialog's
+         "subtask" on purpose — this number counts the whole branch under the row, not the generation below it. -->
+    <string name="branch_toggle">Show or hide this branch</string>
+    <plurals name="branch_collapse">
+        <item quantity="one">Collapse the open branch: hide %1$d nested task</item>
+        <item quantity="other">Collapse the open branch: hide %1$d nested tasks</item>
+    </plurals>
+    <plurals name="branch_expand">
+        <item quantity="one">Expand the collapsed branch: show %1$d hidden task</item>
+        <item quantity="other">Expand the collapsed branch: show %1$d hidden tasks</item>
+    </plurals>
     <string name="dialog_create_profile_title">Create New Profile</string>
     <string name="dialog_edit_profile_title">Edit Profile</string>
     <string name="dialog_delete_profile_title">Delete Profile</string>

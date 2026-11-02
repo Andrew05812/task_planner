@@ -6367,7 +6367,9 @@ is built from — parent links, topics, positions and statuses compared as strin
 because a notebook written before the column existed never asked to hide anything.
 
 **The two walks the screen needs, in the policy, once.** `collapsedAwayIds(rows)` answers what is hidden and
-`descendantCountsByTaskId(rows)` what a fold would take; both share one private `ancestorsOf`, bounded by a visited
+`descendantCountsByTaskId(rows)` what a fold would take — the second has since been replaced by `foldDeltas`, see §20ρ:
+it counted what the *storage* held under a row, and the card needed the number of rows a press would move on the screen
+the reader is looking at; both share one private `ancestorsOf`, bounded by a visited
 set and by the two blank rules — `''` is what `tasks.uuid` defaults to, so "the rows whose parent is the empty
 string" is a bucket of unrelated legacy rows rather than anybody's branch, and a cycle a pull left behind has to stop
 a walk rather than hang the reader's thread. The counts walk each row *up* to its ancestors, one increment each, in a
@@ -6415,3 +6417,137 @@ hierarchy convergence, which is the next-but-one commit of this stage rather tha
 `app-debug.apk` of 15 725 332 bytes, sha256 starting `dd277e22e3ad4b0b`. Room exported
 `app/schemas/com.taskplanner.data.local.AppDatabase/18.json` while the schema-equality test ran, and that file is what
 the migration is compared against, so it belongs in the commit rather than on one machine's disk.
+
+
+## 20ρ — Stage 16 §7, second half: the fold gets a control, and two reviews take it apart
+
+§7's first half shipped a stored state the list obeyed and no way for a reader to write it. This block is the writing:
+the chevron, the count, the direction, the name. It also turned out to be the block where my own first version was
+wrong four times, three of those found by review passes rather than by a failing test, which is the honest order to
+read the section in.
+
+**Why line C, and the arithmetic that decided it.** §7 asks every parent row for a chevron, a state, a count and a
+TalkBack name. Line A is where a tree control goes in every tree list I can name, and this card cannot pay for one
+there: at 320dp the text column is 208dp, the dot and its gap take 16 (8 + 8), the repeat mark and the bell take 40
+(16 + 4 twice), and what is left is the 152dp title that Stage 4 fixed as a floor. A 48dp target bolted in front of the
+title takes a fully-marked parent row to about 100dp — twelve characters a line, twice — and §15's promise is about the
+title, not about the chevron. Line C already spends controls and already has a rule for running out: the figures give
+way before the buttons do. So `branchFold` joined the cluster, and the cost is that a *running parent* at 320dp loses
+its measured time. That cost is now asserted rather than confessed: `a parent row spends its figures on the fold, and
+never its title` in `TaskCardWidthBudgetTest` binds the same worst-case row twice, with `branch = 0` and `branch = 12`,
+and says the leaf keeps `workRow` visible while the parent gives it up, the cluster stays right of the left column, and
+the title's width is identical in both. Giving the fold a 48dp box on line A would have failed the equality clause —
+and that is the clause the vacuity run was built to break, below.
+
+**Four things the reviews found, and what each one cost.** Both reviewers were told to be skeptical and given the diff,
+the stage requirement and the gates; neither was told what I believed.
+
+* **The digit was a dead zone inside the reader's aim.** I had put the click on `branchToggle` and left the count as a
+  plain TextView in the wrapper. A non-clickable child does not consume the DOWN, so a press on the digit fell through
+  to the card's own touch handler, which returns true on DOWN and calls `onTaskClick` on UP — tapping the number that
+  tells you how many rows a fold hides *opened the task instead of folding it*. My layout comment described that
+  behaviour as the design, which is how it survived the first pass. The whole wrapper is now the control: click, ripple
+  and accessible name on `branchFold`; the chevron is `@null`/not-important (the header's own decorative precedent) and
+  the digit stays `importantForAccessibility="no"`, because the words it stands for are in the name. No JVM test could
+  see the defect — `performClick()` does not go through the touch stack — so the assertion that guards it is
+  `a_press_on_the_control_asks_for_the_row_it_was_drawn_on` clicking the wrapper, and the mechanism is documented in the
+  layout and in `bindBranch`. A real-MotionEvent case belongs to `TaskCardRowGestureTest`'s style and to §19's device
+  pass; the reviewer who found this pointed out that a live-window test already exists in this repo, which is true, and
+  it is scheduled with the instrumented block rather than faked here.
+* **The selection-mode stand-down was not enforced on the rows that mattered.** `bindBranch` read the adapter's
+  `selectionMode` flag, but a `ListAdapter` rebinds only what *changed*: entering selection mode changes one row's
+  `isSelected`, so every other parent kept a live, pressable fold under a flag it never re-read — exactly the hazard
+  the doc comment claimed to prevent. `TaskRow` now carries `selectionMode`, which makes every row differ when the mode
+  flips and therefore rebinds the list, and `bindBranch` reads the row. The same change quietly fixes the older half of
+  the defect: the drag handle, which has read that flag since Stage 6, finally refreshes too. That is asserted at its
+  source (`a_row_drawn_while_selecting_is_not_the_row_drawn_while_browsing` compares the row before and after
+  `enterSelection`, and it fails when the flag leaves the row), not by a new handle test — the handle's own behaviour is
+  unchanged code, and pretending otherwise would claim coverage that is not there.
+* **The number was a storage fact wearing a screen's promise.** `TaskRow.hiddenDescendants` was every descendant of the
+  profile, and my comment said it was "what this row would take off the list". Two reachable cases made that false: a
+  fold *inside* a fold (the outer card promised rows its press would not move), and a filter that dropped the branch (a
+  chevron offering to hide nothing the reader can see). `TaskHierarchyPolicy.foldDeltas(rowsAfterFilters, drawn)`
+  replaces `descendantCountsByTaskId`: it answers two questions per row — drawn descendants under it, and descendants
+  whose *nearest* folded ancestor is this row — and the card prints one of them by state, which is also what keeps a
+  closed branch openable (a closed row's drawn descendants are zero by definition, so the old field would have hidden
+  the chevron exactly when it was needed most). `descendantCountsByTaskId` is gone, and §20π's paragraph now says so
+  instead of describing a function nobody can find.
+* **Two of my own assertions were vacuous.** They compared `branchToggle.right` — a coordinate local to its wrapper,
+  bounded by its own width — with the card's inner edge. `the_fold_is_a_real_target_and_stays_inside_the_card` could
+  not have failed for any layout. `leftIn`/`topIn` now walk to `cardContent` accumulating offsets, and the two claims
+  that can therefore actually fail are the right edge inside the inner edge and the cluster not crossing the left
+  column. The same reviewer also caught that `assertSame(fold, group.getChildAt(0))` pinned a child *index*, which is a
+  layout choice nobody is owed; the assertion is now about parentage, and the glyph test that grepped the layout file
+  between two ids is scoped to the element it names, so a reworded comment can no longer make it lie.
+
+**The copy review: a name that says which way, and Russian that says it correctly.** `Свернуть` and `Развернуть` differ
+by one unstressed prefix, and TalkBack does not re-announce after a press — a label carrying only the verb asks the
+reader to remember which way they last went. Both plurals now name the state and the action: "Collapse the open branch:
+hide N nested tasks" / "Expand the collapsed branch: show N hidden tasks", and in Russian
+`Свернуть открытую ветку: скрыть %1$d вложенных задач` /
+`Развернуть свёрнутую ветку: показать %1$d скрытых задач`, with the verb governing the numeral's case in all four
+quantities and `one/few/many/other` present as `PluralsContractTest` and `check-localization.py` require. The first cut's
+`%1$d задач скрыты` also broke the app's own convention for a count predicate (`задач выполнено`, `напоминаний
+установлено` — neuter short form), which the reviewer found by reading other entries in the same file rather than by
+reading mine. One judgement I did not take: the same review proposed replacing the two labels with a longer
+`Ветка открыта: свернуть, скрыть …` construction. The shorter state-adjective form says the same two facts in fewer
+words, so the recommendation was accepted and its exact wording was not. The noun stays `вложенная задача` rather than
+the delete dialog's `подзадача`, because this count is of descendants at any depth while that dialog is fed the direct
+children — a difference the strings comment now records.
+
+**My own arithmetic was wrong in the comment I wrote to justify the placement.** I stated line A's cost as "20 is the
+dot and its gap" against a measured 16 (8dp dot + `spacing_small` 8dp gap), and 208 − 20 − 40 is 148, not the 152 the
+test measures — a comment that argues with numbers has to add up, and `item_task.xml`, `docs/HIERARCHY.md` and the
+roadmap now say 16. The same pass found `android:padding="14dp"` on the chevron inside a 48dp box, which scales the
+24dp glyph to 20dp while every neighbouring action draws it at 24: the padding is 12dp now, on the scale, like the
+four buttons beside it.
+
+**Dead code the review surfaced: my own.** `TasksState.collapseVersion` was incremented in `render` and read by nobody.
+The fold survives without it because the task flow re-emits from Room and the rows themselves differ, so the field was
+deleted rather than wired to something.
+
+**RED, GREEN, and four vacuity runs.** The card tests were written against ids and a constructor parameter that did not
+exist yet — the same scaffolding-then-RED order as §20ω, named as such: `item_task.xml` gained `branchFold`,
+`branchCount`, `branchToggle` and `TasksAdapter` gained `onToggleBranch` with no bind logic, and the first run reported
+`14 tests completed, 10 failed` on the behavioural assertions (visibility, digit, both names, rotation, press routing,
+box, cluster membership) with the four invariant cases correctly green. The implementation turned that green. Then the
+deliberate breaks, each restored from a temp copy afterwards. Before the reviews, one break of the row's own state —
+`task.copy(childrenCollapsed = false)` where the render builds the row — failed exactly the new pin `and the row the
+card is given carries it too`, which is what ties the chevron's rotation to storage rather than to a screen's memory:
+run A — five breaks inside `bindBranch` (always draw the control; never write the digit; swap the two directions; swap
+the two rotations; an empty click listener) plus two in the layout (a 24dp-wide target; the repeat glyph instead of the
+chevron) → **11 of 14 failed**;
+run B — the selection guard deleted and the fold *moved onto line A* (re-parented into `cardContent`, the title's start
+constraint re-pointed at it) → **3 failed**, and they were the three the block's design rests on:
+`selection_mode_withdraws_the_fold_from_a_row_being_batched`,
+`the_fold_does_not_take_width_from_the_title_it_belongs_under`, and the cluster-membership test. A fold on line A is
+caught by the arithmetic, not by a photograph;
+run C — after the fixes, five more breaks (click back on the chevron; the adapter flag instead of the row; the name off
+the control; the digit back to counting every profile descendant; a hidden row credited to the *outermost* fold; the
+figures line no longer hidden) and run D — the wrapper at 200dp × 24dp and the glyph swapped again — were applied
+together and measured together, nine deliberate breaks in one pass so nothing could be confused by a rebuild between
+them: **12 of 32 failed**, one failure per break, none masking another, and the three that stayed green (a branch gets
+the control, a leaf does not, the chevron turns with the state) had each already been broken in run A. The count
+semantics were then re-broken on their own by restoring the pre-review behaviour literally,
+`foldRows = subtreeOf(input.tasks, task).size - 1`, which failed
+`a_fold_inside_a_fold_reports_only_the_rows_a_press_would_actually_move`,
+`a_parent_whose_children_the_filter_dropped_has_no_fold_to_offer` and
+`a_hidden_row_is_counted_for_the_fold_that_holds_it_and_for_nobody_above_it`. Every test in `TaskCardBranchTest` and
+every new render test has now been made to fail by breaking the thing it guards.
+
+**Deliberately not in this commit, and named so.** The §7 filter clause about a hidden *parent* is still open — a
+category or status filter that drops a parent draws its child at the card's own margin, where §7 wants the ancestors
+kept as context or the missing parent marked while the real depth holds. It is in `docs/HIERARCHY.md` under "What §7
+still owes", and it is the next block of §7 rather than a paragraph here. `children_collapsed` is still not on the
+Firestore document or in the backup JSON — §11 and §12 carry it. There is no indent/outdent or "move to" affordance on
+the card yet — §6. And nothing in this block has been seen on a device: the control's boxes are measured in a JVM, its
+glyph widths are not, and the frame matrix with the SHA-matched APK is §19's.
+
+**Gates after the block, measured on the tree this commit holds**: 147 classes / **1888** JVM tests / 0 failures /
+0 errors / 0 skipped (1865 before §7's second half; the +23 are `TaskCardBranchTest` 18, four new
+`TasksHierarchyRenderTest` cases and the one new `TaskCardWidthBudgetTest` case); `lintDebug` 0 errors / **150**
+warnings, unchanged from §9 and §7's first half; `assembleDebug` produced `app-debug.apk` of 15 435 120 bytes, sha256
+`912521fde974a3408cc579639febd6b776051751c96e834ab9a18ebf702b6f08`, 1243 entries, both dex files and `resources.arsc`
+present — the debug APK's size moves between builds by more than this block's code weighs, so the number is reported
+without a trend claim. `scripts/check-localization.py`: **pass**, 993 EN strings / 988 RU / 57 plurals, 0 missing,
+0 quantity gaps, 0 placeholder mismatches.

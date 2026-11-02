@@ -98,6 +98,22 @@
     <string name="delete_policy_subtree">Удалить ветку</string>
     <string name="delete_blocked_running">Сначала остановите отсчёт времени</string>
     <string name="delete_row_missing">Этой задачи больше нет в списке</string>
+    <string name="branch_toggle">Показать или скрыть эту ветку</string>
+    <!-- Both labels name the state and the press: свернуть and развернуть differ by one unstressed prefix, and
+         TalkBack does not re-announce after a press, so a name that carries only the verb asks the reader to
+         remember which way they last went. The verb governs the numeral's case (скрыть/показать + винительный). -->
+    <plurals name="branch_collapse">
+        <item quantity="one">Свернуть открытую ветку: скрыть %1$d вложенную задачу</item>
+        <item quantity="few">Свернуть открытую ветку: скрыть %1$d вложенные задачи</item>
+        <item quantity="many">Свернуть открытую ветку: скрыть %1$d вложенных задач</item>
+        <item quantity="other">Свернуть открытую ветку: скрыть %1$d вложенной задачи</item>
+    </plurals>
+    <plurals name="branch_expand">
+        <item quantity="one">Развернуть свёрнутую ветку: показать %1$d скрытую задачу</item>
+        <item quantity="few">Развернуть свёрнутую ветку: показать %1$d скрытые задачи</item>
+        <item quantity="many">Развернуть свёрнутую ветку: показать %1$d скрытых задач</item>
+        <item quantity="other">Развернуть свёрнутую ветку: показать %1$d скрытой задачи</item>
+    </plurals>
     <string name="dialog_create_profile_title">Новый профиль</string>
     <string name="dialog_edit_profile_title">Изменить профиль</string>
     <string name="dialog_delete_profile_title">Удалить профиль</string>

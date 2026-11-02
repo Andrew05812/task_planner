@@ -152,6 +152,7 @@ class TasksFragment : Fragment() {
             onResume = { task -> viewModel.resumeTask(task) },
             onComplete = { task -> viewModel.completeTask(task) },
             onWorkToggle = { task -> viewModel.toggleWork(task) },
+            onToggleBranch = { task -> viewModel.toggleBranchCollapse(task.id) },
             onToggleGroup = { group -> viewModel.toggleGroupCollapsed(group) },
             onGroupMenu = { anchor, group -> showGroupMenu(anchor, group) },
             onStartDrag = { vh -> itemTouchHelper.startDrag(vh) }

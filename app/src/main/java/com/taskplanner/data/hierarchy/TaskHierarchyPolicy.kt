@@ -167,23 +167,48 @@ object TaskHierarchyPolicy {
     }
 
     /**
-     * Task id to the number of rows hanging under it, at any depth.
+     * What one card's fold would move, as the reader sees the screen right now.
      *
-     * The card needs this to say what a fold would take away, and the whole map is built in one pass — each row adds
-     * itself to every ancestor on its chain — because calling [subtreeOf] once per row would rebuild the children
-     * index that often, which is quadratic in the size of the account and the first thing the §14 benchmark on 10k
-     * tasks would find.
+     * Two numbers, because a fold is a pair of presses: [FoldDelta.hides] is how many rows on screen hang under this
+     * row, and [FoldDelta.reveals] is how many rows this row's *own* fold is holding back. A card drawn open shows
+     * the first, a card drawn closed shows the second, and either way the digit on it is the truth about what the
+     * next press does — which is the only thing a reader can check it against.
      *
-     * A row with a blank identity contributes no count to anybody: nothing can point at it as a parent, and the walk
-     * stops at whatever depth it reached if the chain cycles — the same two rules [subtreeOf] gives for the same
-     * reasons.
+     * Two cases the older "count every descendant" answer got wrong, and that a card would have advertised:
+     *
+     *  * **A fold inside a fold.** Close the child, then look at the head above it: the head's subtree is two rows
+     *    and its press moves one, because the second is already away behind the child. Attributing a hidden row to
+     *    the *nearest* folded ancestor rather than to every folded ancestor is what says so — opening the head does
+     *    not reveal a row another fold is holding.
+     *  * **A filter that dropped the branch.** A parent whose children are all out of view has nothing on screen to
+     *    hide, so it gets no chevron: a control that changes nothing a reader can see is a decoration.
+     *
+     * [rowsAfterFilters] is the set the filters left *before* the fold was applied, and [drawn] is the set that
+     * reached the list — which is what separates "hidden by a fold" from "not in this question". One pass, each row
+     * walking its own chain, so a 10k-task profile costs 10k walks bounded by the depth rather than 10k subtree
+     * rebuilds (§14).
      */
-    fun descendantCountsByTaskId(rows: List<Task>): Map<Long, Int> {
-        val byUuid = rows.filter { it.uuid.isNotBlank() }.associateBy { it.uuid }
-        val counts = HashMap<Long, Int>()
-        rows.forEach { row -> ancestorsOf(row, byUuid).forEach { ancestor -> counts[ancestor.id] = (counts[ancestor.id] ?: 0) + 1 } }
-        return counts
+    fun foldDeltas(rowsAfterFilters: List<Task>, drawn: Set<Long>): Map<Long, FoldDelta> {
+        val byUuid = rowsAfterFilters.filter { it.uuid.isNotBlank() }.associateBy { it.uuid }
+        val deltas = HashMap<Long, FoldDelta>()
+        rowsAfterFilters.forEach { row ->
+            val chain = ancestorsOf(row, byUuid)
+            if (row.id in drawn) {
+                chain.forEach { ancestor ->
+                    deltas[ancestor.id] = deltas.getOrDefault(ancestor.id, FoldDelta()).let { it.copy(hides = it.hides + 1) }
+                }
+            } else {
+                val holder = chain.firstOrNull { it.childrenCollapsed }
+                if (holder != null) {
+                    deltas[holder.id] = deltas.getOrDefault(holder.id, FoldDelta()).let { it.copy(reveals = it.reveals + 1) }
+                }
+            }
+        }
+        return deltas
     }
+
+    /** What a card's fold would move: see [foldDeltas]. */
+    data class FoldDelta(val hides: Int = 0, val reveals: Int = 0)
 
     /**
      * The chain of rows above [row], nearest first, as far as the given set reaches.

@@ -48,7 +48,7 @@ class TaskCardClosedPanelTest {
         val adapter = TasksAdapter(
             onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {},
             onDeleteRequest = {}, onStart = {}, onPause = {}, onResume = {}, onComplete = {},
-            onWorkToggle = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
+            onWorkToggle = {}, onToggleBranch = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
         )
         adapter.submitList(
             listOf(
