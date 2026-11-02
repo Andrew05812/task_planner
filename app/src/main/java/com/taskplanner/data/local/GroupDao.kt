@@ -39,6 +39,27 @@ interface GroupDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertGroups(groups: List<TaskGroup>)
 
+    /**
+     * Writes topics that must not already be there.
+     *
+     * [upsertGroup] and [upsertGroups] resolve a primary-key conflict by REPLACE, which in SQLite means the
+     * existing row is deleted and the new one takes its place. For an import that derives its uuid from the pasted
+     * text, "delete what is there" is the one outcome that cannot be allowed — a uuid belonging to another profile
+     * would cost that profile its topic — so a Keep import writes through this insert, which aborts and throws
+     * instead. `KeepImportTransactionTest` proves the difference is real by putting a foreign row on the uuid.
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertImportedGroups(groups: List<TaskGroup>)
+
+    /**
+     * Which profile holds each of [uuids], for the collision and idempotency decision an import has to make.
+     *
+     * Asked by uuid rather than by reading the whole table, because a reader with ten thousand tasks should not
+     * have their entire account loaded to answer a question about 382 uuids.
+     */
+    @Query("SELECT uuid AS uuid, user_id AS userId FROM task_groups WHERE uuid IN (:uuids)")
+    suspend fun getGroupOwners(uuids: List<String>): List<RowOwner>
+
     @Update
     suspend fun updateGroup(group: TaskGroup)
 

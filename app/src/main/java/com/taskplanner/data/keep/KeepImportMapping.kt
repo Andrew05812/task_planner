@@ -88,27 +88,42 @@ data class KeepImportPlan(
  * nor already owned by the importing profile. Both are `IllegalStateException` carrying a line number and no
  * title; §14's error path catches them and shows a failed import with nothing written.
  */
+/**
+ * One line of the paste with its derived identity, its place in the tree and the topic that owns it — the unit
+ * both [KeepImportMapping.candidates] and [KeepImportMapping.plan] work on.
+ *
+ * @param parentUuid the task above it, or null when a topic (or nothing) holds it
+ * @param groupUuid the topic this row's whole subtree belongs to; for a topic row, its own uuid
+ */
+data class KeepRowCandidate(
+    val node: KeepNode,
+    val uuid: String,
+    val parentUuid: String?,
+    val groupUuid: String
+) {
+    val isTopic: Boolean get() = node.depth == 0
+}
+
 object KeepImportMapping {
 
     /**
-     * One line of the paste with its derived identity, before anybody says whether it may be written.
+     * The rows this paste names, in source order, before anybody says whether they may be written.
      *
-     * @param parentUuid the task above it, or null when a topic (or nothing) holds it
-     * @param groupUuid the topic this row's whole subtree belongs to — for a topic row, its own uuid
+     * Public because the question "is this uuid already taken?" can only be asked once the identities exist:
+     * [com.taskplanner.data.keep.KeepImportRepository] derives them here, reads the owners of exactly those uuids,
+     * and hands both to [plan]. Recomputing them is cheap and cannot disagree with itself — that is the property
+     * §13 asked for.
      */
-    private class Candidate(
-        val node: KeepNode,
-        val uuid: String,
-        val parentUuid: String?,
-        val groupUuid: String
-    ) {
-        val isTopic: Boolean get() = node.depth == 0
+    fun candidates(document: KeepParsedDocument, userId: Long): List<KeepRowCandidate> {
+        val out = ArrayList<KeepRowCandidate>()
+        val occurrences = HashMap<String, Int>()
+        document.topics.forEach { topic -> collect(topic, "", null, null, userId, occurrences, out) }
+        return out
     }
 
     /**
      * @param document what [KeepTextParser.parse] produced from the paste
      * @param userId the profile asking; every row is owned by it and no other profile's rows are read or touched
-     * @param fingerprint [KeepImportIdentity.fingerprintOf] of that same paste, so identity is scoped to this text
      * @param existingGroups uuid to owning profile, for the group uuids this plan could land on
      * @param existingTasks uuid to owning profile, likewise for tasks. A map rather than a set because the two
      *   cases look identical from a uuid alone and must not be treated alike: a row this profile wrote from this
@@ -124,17 +139,12 @@ object KeepImportMapping {
     fun plan(
         document: KeepParsedDocument,
         userId: Long,
-        fingerprint: String,
         existingGroups: Map<String, Long>,
         existingTasks: Map<String, Long>,
         firstGroupSortOrder: Int = 0,
         firstTaskOrder: Int = 0
     ): KeepImportPlan {
-        val candidates = ArrayList<Candidate>()
-        val occurrences = HashMap<String, Int>()
-        document.topics.forEachIndexed { index, topic ->
-            collect(topic, index.toString(), null, null, userId, fingerprint, occurrences, candidates)
-        }
+        val candidates = candidates(document, userId)
 
         val groups = ArrayList<TaskGroup>()
         val tasks = ArrayList<Task>()
@@ -247,27 +257,24 @@ object KeepImportMapping {
      */
     private fun collect(
         node: KeepNode,
-        path: String,
+        parentKey: String,
         parentTaskUuid: String?,
         groupUuid: String?,
         userId: Long,
-        fingerprint: String,
         occurrences: MutableMap<String, Int>,
-        out: MutableList<Candidate>
+        out: MutableList<KeepRowCandidate>
     ) {
         val isTopic = node.depth == 0
-        val occurrence = occurrence(occurrences, path.substringBeforeLast("/", ""), node.title)
+        val occurrence = occurrence(occurrences, parentKey, node.title)
         val uuid = KeepImportIdentity.uuidOf(
-            if (isTopic) KeepNodeKind.TOPIC else KeepNodeKind.TASK,
-            userId, fingerprint, path, node.title, occurrence
+            if (isTopic) KeepNodeKind.TOPIC else KeepNodeKind.TASK, userId, parentKey, node.title, occurrence
         )
+        // A topic owns its own subtree; below a topic the group link stays the topic's uuid all the way down,
+        // while the parent link chains task to task.
         val ownGroup = groupUuid ?: uuid
-        out += Candidate(node, uuid, parentTaskUuid, ownGroup)
-        node.children.forEachIndexed { index, child ->
-            collect(
-                child, "$path/$index", if (isTopic) null else uuid, ownGroup,
-                userId, fingerprint, occurrences, out
-            )
+        out += KeepRowCandidate(node, uuid, parentTaskUuid, ownGroup)
+        node.children.forEach { child ->
+            collect(child, uuid, if (isTopic) null else uuid, ownGroup, userId, occurrences, out)
         }
     }
 
@@ -280,7 +287,7 @@ object KeepImportMapping {
     }
 
     private fun requireParentKnown(
-        candidate: Candidate,
+        candidate: KeepRowCandidate,
         reachable: Set<String>,
         existingTasks: Map<String, Long>,
         existingGroups: Map<String, Long>,

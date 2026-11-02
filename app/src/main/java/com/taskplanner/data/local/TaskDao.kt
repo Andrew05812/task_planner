@@ -165,6 +165,32 @@ interface TaskDao {
     suspend fun insertTasks(tasks: List<Task>)
 
     /**
+     * Writes tasks that must not already be there.
+     *
+     * The pair to [insertTask]'s `OnConflictStrategy.REPLACE`, for the one caller that cannot afford it: a Keep
+     * import derives a uuid from the pasted text, so a conflict means a row of somebody else's is sitting on the
+     * identity it wants, and REPLACE would delete that row and put the imported one where it was. This insert
+     * aborts instead, inside the import's transaction, so the whole paste comes back with nothing written.
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertImportedTasks(tasks: List<Task>)
+
+    /** Which profile holds each of [uuids] — see [GroupDao.getGroupOwners] for why an import asks. */
+    @Query("SELECT uuid AS uuid, user_id AS userId FROM tasks WHERE uuid IN (:uuids)")
+    suspend fun getTaskOwners(uuids: List<String>): List<RowOwner>
+
+    /**
+     * The next free position in this profile's manual list.
+     *
+     * [com.taskplanner.ui.tasks.TasksViewModel] keeps `order` as a profile-wide position and computes the next one
+     * from the *active* rows; an import needs the whole picture, because a paste writes hundreds of rows at once
+     * and one that landed on a position an archived task already holds would put the reader's notebook in an order
+     * nothing can explain.
+     */
+    @Query("SELECT COALESCE(MAX(`order`), -1) + 1 FROM tasks WHERE user_id = :userId")
+    suspend fun nextOrder(userId: Long): Int
+
+    /**
      * Materialises a series instance. Conflicts are ignored on purpose: an instance that already
      * exists (from an earlier retry, a restart, or a pull from another device) must never be
      * overwritten, because the user may have edited it in the meantime.

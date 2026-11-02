@@ -17,9 +17,11 @@ import org.junit.Test
  *  * **Nothing is invented.** No due date, no priority, no category, no reminder, no completion timestamp. The
  *    source says a thing is done and says nothing about when, so `completedAt` stays null and the status is what
  *    the box said.
- *  * **Identity is derived, not generated.** A uuid comes from the profile, the source fingerprint, the node's
- *    path, its title and which occurrence of that title it is — so pasting the same text twice writes the same
- *    rows, and the second paste adds nothing. A random uuid per row would make every paste a duplicate import.
+ *  * **Identity is derived, not generated.** A uuid comes from the profile, the identity of the row above it,
+ *    its title and which copy of that title it is — so pasting the same text twice writes the same rows, the
+ *    second paste adds nothing, and a paste with one line edited adds that line alone. A random uuid per row
+ *    would make every paste a duplicate import, and the paste's own fingerprint in the key would make a typo
+ *    re-import the notebook.
  *  * **A name that already exists is never overwritten.** `GroupDao.upsertGroup` is an `OnConflictStrategy.REPLACE`
  *    insert, which for a topic means "delete the reader's row and put ours where it was". The mapping therefore
  *    reports a collision and refuses, and the importer never reaches for an upsert.
@@ -27,7 +29,6 @@ import org.junit.Test
 class KeepImportMappingTest {
 
     private val userId = 7L
-    private val fingerprint = "c0ffee"
 
     private fun doc(source: String) = KeepTextParser.parse(source)
 
@@ -43,7 +44,6 @@ class KeepImportMappingTest {
     ) = KeepImportMapping.plan(
         document = doc(source),
         userId = userId,
-        fingerprint = fingerprint,
         existingGroups = groups,
         existingTasks = tasks
     )
@@ -148,8 +148,8 @@ class KeepImportMappingTest {
 
     @Test
     fun aDifferentProfileGetsDifferentRowsForTheSameText() {
-        val mine = KeepImportMapping.plan(doc(small), userId = 7L, fingerprint, emptyMap(), emptyMap())
-        val theirs = KeepImportMapping.plan(doc(small), userId = 8L, fingerprint, emptyMap(), emptyMap())
+        val mine = KeepImportMapping.plan(doc(small), 7L, emptyMap(), emptyMap())
+        val theirs = KeepImportMapping.plan(doc(small), 8L, emptyMap(), emptyMap())
 
         assertNotEquals(mine.groups.single().uuid, theirs.groups.single().uuid)
     }
@@ -169,6 +169,45 @@ class KeepImportMappingTest {
         assertNotEquals(KeepImportIdentity.fingerprintOf("a\nb"), KeepImportIdentity.fingerprintOf("a\nB"))
     }
 
+    @Test
+    fun aLineInsertedAboveItsSiblingsDoesNotReIdentifyThem() {
+        // Position is deliberately not part of a row's identity, and this is the case that pays for it: the reader
+        // adds one line to the top of a topic in Keep and pastes again. Only that line becomes a row.
+        val before = plan("[ ] topic\n [ ] one\n [ ] two")
+        val after = plan("[ ] topic\n [ ] brand new\n [ ] one\n [ ] two")
+
+        assertEquals(2, before.tasks.size)
+        assertEquals(3, after.tasks.size)
+        assertEquals(
+            "the two untouched lines are the same rows even though they both moved down",
+            before.tasks.map { it.uuid },
+            after.tasks.takeLast(2).map { it.uuid }
+        )
+    }
+
+    @Test
+    fun theSameTitleUnderTwoDifferentTopicsIsTwoRows() {
+        val result = plan("[ ] Alpha\n [ ] buy milk\n[ ] Beta\n [ ] buy milk")
+
+        assertEquals(2, result.groups.size)
+        assertEquals(2, result.tasks.size)
+        assertNotEquals("same words, different parents, different identities",
+            result.tasks[0].uuid, result.tasks[1].uuid)
+        assertNotEquals(result.tasks[0].groupId, result.tasks[1].groupId)
+    }
+
+    @Test
+    fun aFingerprintNamesThePasteWithoutEnteringARowIdentity() {
+        // The paste digest is what the screen reports and a log could quote; it is not what a row is keyed on. Were
+        // it in the key, these two texts would share nothing and an edited paste would duplicate all six rows.
+        val shorter = plan("[ ] topic\n [ ] one")
+        val longer = plan("[ ] topic\n [ ] one\n [ ] two")
+        assertNotEquals(KeepImportIdentity.fingerprintOf("[ ] topic\n [ ] one"),
+            KeepImportIdentity.fingerprintOf("[ ] topic\n [ ] one\n [ ] two"))
+        assertEquals("the unchanged line keeps its identity even though the paste changed",
+            shorter.tasks.single().uuid, longer.tasks.first().uuid)
+    }
+
     // ---------------------------------------------------------------- collisions and idempotency
 
     @Test
@@ -177,7 +216,6 @@ class KeepImportMappingTest {
         val second = KeepImportMapping.plan(
             document = doc(small),
             userId = userId,
-            fingerprint = fingerprint,
             existingGroups = planned.groups.associate { it.uuid to userId },
             existingTasks = planned.tasks.associate { it.uuid to userId }
         )
@@ -272,7 +310,7 @@ class KeepImportMappingTest {
         val document = KeepParsedDocument(listOf(tooDeep), doc("[ ] topic").stats, emptyList())
 
         val failure = try {
-            KeepImportMapping.plan(document, userId, fingerprint, emptyMap(), emptyMap())
+            KeepImportMapping.plan(document, userId, emptyMap(), emptyMap())
             error("expected the mapping to refuse a fifth level")
         } catch (expected: IllegalStateException) {
             expected.message.orEmpty()
@@ -287,7 +325,6 @@ class KeepImportMappingTest {
         val result = KeepImportMapping.plan(
             document = doc("[ ] a\n [ ] one\n[ ] b\n [ ] two"),
             userId = userId,
-            fingerprint = fingerprint,
             existingGroups = emptyMap(),
             existingTasks = emptyMap(),
             firstGroupSortOrder = 12,
