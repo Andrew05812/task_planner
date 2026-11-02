@@ -53,7 +53,15 @@ sealed interface TasksListItem {
         /** Lead times still armed on this task — what puts the bell on the card. */
         val pendingReminders: Int = 0,
         /** The measured-time line, read from the same snapshot for every card on the screen. */
-        val work: CardWork = CardWork()
+        val work: CardWork = CardWork(),
+        /**
+         * How deep this task sits inside its topic, counted from [Task.parentUuid].
+         *
+         * Zero for a topic's own child and for anything with no parent at all. It is a fact about the rows on
+         * screen rather than a column the reader has to trust: [TaskTree] measures it over the list the filters
+         * left, so a hidden parent moves its child to the margin instead of inventing a level for it.
+         */
+        val depth: Int = 0
     ) : TasksListItem
 }
 
@@ -271,6 +279,11 @@ class TasksViewModel @Inject constructor(
 
         val (selected, mode) = selectionFlow.value
 
+        // Measured over the rows that survived the filters, in the order they will be drawn: the tree the reader
+        // imported is the tree they see, and a list that showed every imported task at the margin would have
+        // taken the structure in and thrown the structure away.
+        val depths = TaskTree.depthsByTaskId(visible)
+
         val items = mutableListOf<TasksListItem>()
         val groupedTaskIds = mutableSetOf<Long>()
         val groupsWithTasks = input.groups.map { group ->
@@ -283,7 +296,7 @@ class TasksViewModel @Inject constructor(
             items += TasksListItem.GroupHeader(group, groupTasks.size, allSelected)
             if (!group.collapsed) {
                 groupTasks.forEach { task ->
-                    items += taskRow(task, input, categoryMap, selected)
+                    items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0)
                     groupedTaskIds += task.id
                 }
             } else {
@@ -291,7 +304,7 @@ class TasksViewModel @Inject constructor(
             }
         }
         visible.filter { it.id !in groupedTaskIds }.forEach { task ->
-            items += taskRow(task, input, categoryMap, selected)
+            items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0)
         }
 
         _categories.value = input.categories
@@ -315,7 +328,8 @@ class TasksViewModel @Inject constructor(
         task: Task,
         input: RenderInput,
         categoryMap: Map<Long, Category>,
-        selected: Set<Long>
+        selected: Set<Long>,
+        depth: Int
     ) = TasksListItem.TaskRow(
         task,
         task.categoryId?.let { categoryMap[it] },
@@ -326,7 +340,8 @@ class TasksViewModel @Inject constructor(
             closedSeconds = input.work.closedSecondsOf(task.id),
             liveSeconds = input.work.liveSecondsOf(task.id),
             phase = input.work.phaseOf(task.id)
-        )
+        ),
+        depth = depth
     )
 
     private fun Priority.rank(): Int = when (this) {

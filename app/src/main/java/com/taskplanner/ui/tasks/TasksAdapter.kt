@@ -106,6 +106,16 @@ class TasksAdapter(
         private var longPressFired = false
         private var panelWidth = 0f
 
+        /**
+         * The title's own padding, taken before the first bind, and the step a nested task is moved by.
+         *
+         * The indent is written as an absolute padding on every bind — base plus depth times the step — because a
+         * recycled card that *added* to whatever the previous row left behind would walk sideways down a list of
+         nested tasks, and the reader would take that drift for the shape of their own notebook.
+         */
+        private val titleBasePadding = binding.taskTitle.paddingStart
+        private val indentPerLevel = binding.root.context.resources.getDimensionPixelSize(R.dimen.task_depth_indent)
+
         private val longPressRunnable = Runnable {
             if (!dragging && current != null) {
                 longPressFired = true
@@ -293,6 +303,14 @@ class TasksAdapter(
             val task = item.task
             val b = binding
 
+            // The indent is the depth, and it is set from zero every time rather than added: a recycled card
+            // that remembered the previous row's padding would drift sideways down a list of nested tasks.
+            b.taskTitle.setPadding(
+                titleBasePadding + item.depth * indentPerLevel,
+                b.taskTitle.paddingTop,
+                b.taskTitle.paddingEnd,
+                b.taskTitle.paddingBottom
+            )
             b.taskTitle.text = task.title
             b.taskDescription.text = task.description
             b.taskDescription.visibility =

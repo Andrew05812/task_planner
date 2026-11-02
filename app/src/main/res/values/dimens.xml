@@ -14,6 +14,13 @@
     <dimen name="spacing_medium">12dp</dimen>
     <dimen name="spacing_section">20dp</dimen>
     <dimen name="screen_margin">20dp</dimen>
+    <!-- One level of a Google Keep tree in the import preview. Four levels at this step is 48dp, which is the
+         budget that still leaves a title readable beside the state mark and its label at 320dp (Stage 15 §17). -->
+    <dimen name="keep_preview_indent">12dp</dimen>
+    <!-- The same step, in the task list: an imported Keep subtree indents its nested tasks by this much per
+         level, so the tree the reader pasted is the tree the list draws. Four levels of it is 36dp, which is
+         the budget `TaskCardIndentTest` measures against the 320dp title column. -->
+    <dimen name="task_depth_indent">12dp</dimen>
     <dimen name="card_padding_vertical">14dp</dimen>
     <dimen name="card_padding_horizontal">16dp</dimen>
     <dimen name="card_gap">8dp</dimen>
