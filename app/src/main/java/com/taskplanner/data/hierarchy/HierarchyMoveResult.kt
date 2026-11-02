@@ -27,7 +27,14 @@ enum class HierarchyMoveRefusal {
     DIFFERENT_TOPIC,
 
     /** The two rows hang under different parents: an ordinary reorder is not a reparenting. */
-    DIFFERENT_PARENT
+    DIFFERENT_PARENT,
+
+    /**
+     * More than one live row of this profile carries the identity the moved block is determined by, so "everything
+     * under it" has no single answer. `tasks.uuid` has no unique index — Stage 16 §4 records why one was not added
+     * blind — which is exactly why an ambiguous identity is refused at the write rather than resolved by a `LIMIT 1`.
+     */
+    AMBIGUOUS_PARENT
 }
 
 /**

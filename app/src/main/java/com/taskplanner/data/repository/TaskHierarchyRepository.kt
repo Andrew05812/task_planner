@@ -55,6 +55,12 @@ class TaskHierarchyRepository @Inject constructor(
             val anchor = stored.firstOrNull { it.id == anchorTaskId }
                 ?: return@withTransaction HierarchyMoveResult.Refused(HierarchyMoveRefusal.ANCHOR_MISSING)
             val block = TaskHierarchyPolicy.subtreeOf(stored, head)
+            // A block whose members are determined by a doubled identity is not a block, it is a guess about whose
+            // children these are. Stage 16 §4: the column carries no unique index, so the write is where the
+            // ambiguity gets refused rather than resolved by whichever row a `LIMIT 1` happened to reach first.
+            if (!TaskHierarchyPolicy.blockIsKnowable(head, block, TaskHierarchyPolicy.ambiguousUuids(stored))) {
+                return@withTransaction HierarchyMoveResult.Refused(HierarchyMoveRefusal.AMBIGUOUS_PARENT)
+            }
             TaskHierarchyPolicy.reorderRefusal(head, anchor, block.map { it.id }.toSet())?.let {
                 return@withTransaction HierarchyMoveResult.Refused(it)
             }

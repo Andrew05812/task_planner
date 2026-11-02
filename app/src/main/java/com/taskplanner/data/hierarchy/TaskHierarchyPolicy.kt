@@ -42,6 +42,32 @@ object TaskHierarchyPolicy {
         rows.sortedWith(compareBy({ it.order }, { it.dueDate ?: Long.MAX_VALUE }, { it.id }))
 
     /**
+     * The identities more than one row of this set claims, blank ones excluded.
+     *
+     * `tasks.uuid` carries no unique index, so this is not a hypothetical: a pull, a restored backup or a legacy row
+     * can leave two live rows on one identity, and then "everything under that identity" is a question with two
+     * answers. A blank uuid is not on this list because nothing is ever looked up by it — [subtreeOf] treats a blank
+     * identity and a blank link as "no parent", which is what they mean.
+     */
+    fun ambiguousUuids(rows: List<Task>): Set<String> =
+        rows.filter { it.uuid.isNotBlank() }
+            .groupingBy { it.uuid }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+
+    /**
+     * Whether the block a move would carry can be named: the head's own identity, and every identity inside the
+     * block, have to belong to exactly one row.
+     *
+     * Narrow on purpose. Two children of a doubled parent are still siblings of each other, and reordering them
+     * needs no answer about who their parent is — refusing that would turn one bad row into a reader who cannot use
+     * their list at all.
+     */
+    fun blockIsKnowable(head: Task, block: List<Task>, ambiguous: Set<String>): Boolean =
+        head.uuid !in ambiguous && block.none { it.uuid in ambiguous }
+
+    /**
      * The head and everything hanging under it, in the order a reader reads a tree: parent first, then each child's
      * own branch complete before the next sibling starts.
      *

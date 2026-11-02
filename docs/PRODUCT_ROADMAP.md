@@ -1061,6 +1061,20 @@ What this stage still needs, if anything, is **17 → 18** — the depth bound i
 chain and bounded by how the walk reads one, and a *move* guard belongs to the move control that does not exist
 yet. A schema change is not assumed; it is the decision this section still owns.
 
+**The identity audit ran before the move controls, and it decided against a schema change** (2026-11-02).
+Measured on the emulator's own `taskplanner.db` (v17, 58 rows): zero empty uuids, zero duplicate uuids inside a
+profile, zero uuids shared across profiles, zero parent links, zero cycles — and **eight reminder rows whose
+`task_uuid` matches no task**, which is the proof that a key without a foreign key does dangle in this app's real
+storage. `UNIQUE(user_id, uuid)` for non-empty uuids would build cleanly on that data, but a
+`CREATE UNIQUE INDEX` that meets a duplicate fails the migration on a database nobody here has measured, and the
+reader is left with an app that will not open; there is no safe automatic backfill either, because re-issuing a uuid
+means rewriting `reminders`, `goal_tasks`, `work_sessions` and `tracking_sessions` — the tables the audit just showed
+to hold dead references. So no index and no backfill were attempted, nothing was repaired with `INSERT OR REPLACE`,
+and the guarantee moved into the write path: parent identities are resolved scoped to the profile, and
+`HierarchyMoveRefusal.AMBIGUOUS_PARENT` refuses a move whose block cannot be named. `TaskIdentityAuditTest` pins it,
+including the narrow case the refusal must *not* block — reordering two children of a doubled parent, which needs no
+answer about who their parent is. Full table of measurements and the reminder-path finding left open: `docs/HIERARCHY.md`.
+
 `task_groups.parent_uuid` is **out**, on purpose: nothing in the app or the source format asks for a topic inside
 a topic, and a column with no writer is how `Category.parent_category_id` became dead code (§16.3).
 
@@ -1104,6 +1118,13 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    Stage 15's foundation (`parent_uuid`, `is_completed`, the parent index). This stage's data work starts at
    **17 → 18**, for whatever the move controls need beyond what exists — and it needs little: the key, the index
    and the depth bound are already in.
+
+   **1.b — the identity audit ran before the move controls (2026-11-02) and refused a schema change.** Measured on the
+   emulator's own database: 0 empty uuids, 0 duplicate uuids per profile, 0 shared across profiles, 0 parent links,
+   0 cycles — and 8 of 8 `reminders` pointing at a task that is not there. A unique index would build on that data and
+   was still not added, because a `CREATE UNIQUE INDEX` that meets a duplicate on an unmeasured account fails the
+   migration; the ambiguity is refused at the write instead (`HierarchyMoveRefusal.AMBIGUOUS_PARENT`,
+   `TaskIdentityAuditTest`), and the reproducible measurement lives in `scripts/audit-task-identity.py`.
 3. **Model + repository**: move-subtree, delete-with-children policy, and the cycle guard *for moves* — the
    import's chain cannot cycle by construction and `TaskTree`'s walk is bounded, but a user-driven reparent
    needs the check at the moment it is attempted, which nothing does today.

@@ -6129,3 +6129,47 @@ against Stage 17 rather than patched here. The `parent_uuid` KDoc still claims "
 construction", which stops being true the moment §5 ships and is corrected there, with the depth contract
 (`TaskTree.MAX_INDENT_LEVEL` narrowing to the parser's bound) — decided 2026-11-02 to be topic + three task levels,
 one shared constant, enforced in parser, mapping, move validation, renderer, backup and sync.
+
+## 20y — Stage 16 §4: the identity audit, and the schema change it refused to make
+
+The brief puts this audit before the move controls, and it earned that place: `parent_uuid` names a parent by
+`tasks.uuid`, `uuid` defaults to `''`, and `TaskDao.getTaskByUuid` is `LIMIT 1` with no owner. The question was
+measured, not argued — read off the emulator's own `taskplanner.db` (`user_version` 17, 58 task rows) with the `-wal`
+copied alongside so the read saw live state, and nothing on the device was touched.
+
+**The numbers.** Empty uuids 0. Duplicate uuids inside one profile 0. One uuid held by two profiles 0. Rows carrying a
+`parent_uuid` at all 0 — so there was nothing to resolve, and the cycle / wrong-owner / wrong-topic questions came
+back 0 for the honest reason that the column is unused on this device. Live rows sharing a position: 50 rows across 10
+groups, all in the ten five-row profiles instrumented fixtures insert with the default `order`, which never went
+through the drag code. And the one that decides the design: **8 of 8 `reminders` rows point at a `task_uuid` that
+matches nothing in `tasks`.**
+
+**The limit is stated in the doc, not buried.** `users` is empty, `task_groups` is empty and every row is
+`TODO`/`PENDING`: this handset holds instrumented-test residue, not anyone's notebook. So the audit proves the shape
+of the hazard, not its size in a real account — which is precisely why it could not license a schema change.
+
+**No unique index, no backfill, no `INSERT OR REPLACE`.** `UNIQUE(user_id, uuid)` for non-empty uuids would build
+cleanly on the data above. It was still refused, because the `CREATE UNIQUE INDEX` runs inside a migration on databases
+nobody here measured, and one duplicate makes the migration fail — an app that will not open is worse than the
+ambiguity the index was meant to prevent. A backfill is worse: re-issuing a uuid means rewriting `reminders`,
+`goal_tasks`, `work_sessions` and `tracking_sessions`, and the audit has already shown two of those holding references
+to rows that no longer exist. The blocker is concrete (no user database available to audit), so it is recorded as a
+blocker rather than worked around.
+
+**What guarantees an unambiguous parent instead** — in the write, where a test can reach it: parent identities resolved
+only from the signed-in profile's rows; `TaskHierarchyPolicy.ambiguousUuids` + `blockIsKnowable` refusing with
+`HierarchyMoveRefusal.AMBIGUOUS_PARENT` when the head or its block carries an identity two rows claim; a blank uuid
+and a blank link read as "no parent" in both directions; and the refusal kept deliberately narrow — two children of a
+doubled parent are still siblings, and reordering them needs no answer about who their parent is, because freezing a
+whole profile would turn one bad row into a reader who cannot use their list. `TaskIdentityAuditTest` pins all of it,
+including the cross-profile case and the child-of-a-tombstone case (whose link is left exactly as it was).
+
+**Found while auditing, not fixed here.** `ReminderRepository` reaches its task through the unscoped `getTaskByUuid`
+(`:211`, `:253`, `:265`) — with eight dangling links that path already answers null today, and with a shared identity it
+could answer with another account's row. The hierarchy no longer depends on it; it belongs to the stage that owns
+reminders, so it is written down in `docs/HIERARCHY.md` instead of being quietly rewired inside a hierarchy commit.
+
+**RED for this block** was one compile error, recorded verbatim: `TaskIdentityAuditTest.kt:95:34 Unresolved reference:
+AMBIGUOUS_PARENT`. Two of the five tests then failed on my own scenarios before the code was blamed — a tombstoned
+parent had left its child with no sibling to be dragged against, and a profile-isolation case asserted the order the
+opposite gesture produces — both fixed in the test, both honest about what the gesture actually was.

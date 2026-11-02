@@ -60,6 +60,69 @@ A new task takes its position from `TaskRepository.nextFreeOrder()`, which count
 archived ones included: the sequence a drag renumbers includes archived rows, so counting only the visible ones would
 land a new task on a number an archived row already holds.
 
+## Can a parent be ambiguous? measured, and what the write does about it
+
+`tasks.parent_uuid` names a parent by `tasks.uuid`, and nothing in the schema makes that name unique: `uuid` carries
+`@ColumnInfo(defaultValue = "''")` and `TaskDao.getTaskByUuid` is a `LIMIT 1` with no owner. Stage 16 §4 asks what
+that costs before a move control trusts it, so the question was measured rather than argued.
+
+**What the device's own database holds** (read 2026-11-02 from the emulator's `taskplanner.db`, `user_version` 17,
+58 live rows over 18 profile ids; the `-wal` was copied alongside so the read saw the live state, and nothing on the
+device was modified — the measurement is reproducible with `py scripts/audit-task-identity.py <copy-of-the-db>`):
+
+| Question | Measured |
+| --- | --- |
+| rows with an empty `uuid` | 0 |
+| duplicate `uuid` inside one profile | 0 groups |
+| one `uuid` held by two profiles | 0 |
+| rows carrying a `parent_uuid` at all | 0 |
+| parents that resolve to no row, to another profile, or to another topic | 0 — there is nothing to resolve |
+| cycles | 0 |
+| live rows sharing a position within one profile | 50 rows across 10 groups, in the ten 5-row profiles instrumented classes create |
+| `reminders` whose `task_uuid` matches no row in `tasks` | **8 of 8** |
+| a unique index over `(user_id, uuid)` | none; the only unique index on `tasks` is `(series_uuid, occurrence_at)` |
+
+The honest limit on that table: **this device has no user data.** `users` is empty, `task_groups` is empty, every row
+is `TODO`/`PENDING`, and the doubled positions sit in the profiles that instrumented fixtures insert with the default
+`order` — they never went through the drag code at all. So the audit proves the *shape* of the hazard, not its size in
+anyone's notebook.
+
+And one row of that table is the proof that matters for Stage 16: **eight reminders point at tasks that do not exist.**
+A key without a foreign key does dangle in this app's real storage, in a column that shipped three stages before the
+tree did. `parent_uuid` is the same kind of column, so the code that reads it behaves as if dangling and doubled links
+were ordinary — because on this device, one of the two already is.
+
+**No unique index was added, and why that is a blocker rather than a preference.** `UNIQUE(user_id, uuid)` for
+non-empty uuids would make an ambiguous parent impossible by construction, and on the data above it would build
+cleanly. But the `CREATE UNIQUE INDEX` runs inside a migration on databases nobody here has measured, and an index
+that meets a duplicate fails — which leaves a reader with an app that will not open, an outcome worse than the
+ambiguity it was added to prevent. There is no safe automatic backfill either: re-issuing a uuid means rewriting every
+table that references it (`reminders.task_uuid`, `goal_tasks.task_uuid`, `work_sessions.task_uuid`,
+`tracking_sessions.task_uuid`), and the device measurement above shows those references already point at rows that are
+gone. So no migration was attempted and nothing was repaired with `INSERT OR REPLACE`.
+
+**What guarantees an unambiguous parent instead** — in the write path, where it can be tested:
+
+* every read that decides a tree is scoped to the signed-in profile (`getRowsInStoredOrder(userId)`), so another
+  account's row sharing an identity is not a candidate parent and not part of a block;
+* `TaskHierarchyPolicy.ambiguousUuids` names the identities more than one live row claims, and `blockIsKnowable`
+  refuses a move whose head or block carries one: `HierarchyMoveRefusal.AMBIGUOUS_PARENT`. "Everything under this
+  uuid" is a question with two answers, and the app does not pick one;
+* a blank uuid and a blank `parent_uuid` are treated as "no parent" in both directions, so legacy rows are not
+  silently adopted into one giant subtree;
+* the refusal is deliberately narrow: two children of a doubled parent are still siblings, and reordering them needs
+  no answer about who their parent is. Freezing the whole profile would turn one bad row into a reader who cannot use
+  their list;
+* a link to a deleted row is left alone. A reorder neither clears it nor invents a new parent.
+
+`TaskIdentityAuditTest` pins all five, including the cross-profile case and the tombstone case.
+
+**What is still open, named rather than hidden.** `ReminderRepository` resolves a reminder's task through the
+unscoped `getTaskByUuid` (`:211`, `:253`, `:265`). With the device's eight dangling links that code path already
+returns null today, and with two profiles sharing an identity it could answer with the wrong account's row. The
+hierarchy no longer depends on it; the reminder path is not Stage 16's subject, so it is recorded here for the stage
+that owns reminders rather than quietly rewired in a hierarchy commit.
+
 ## What Stage 16 still owns
 
 Everything that **changes the shape** of the tree, and it is deliberately not in this build:
