@@ -135,6 +135,19 @@
          name would occupy says so instead — the shape at the head of the title and the card sitting back are the two
          channels a sighted reader gets, and this sentence is the one a screen reader and a magnified reader both get. -->
     <string name="row_shown_for_context">shown for context</string>
+    <!-- §8: a topic's own completed mark. Three strings, because the fact on the header, the offer in the menu,
+         and the offer that undoes it are three different sentences: «тема выполнена» states what is, while the menu
+         says what the press will do — and a menu that offered «Mark topic completed» on a topic already marked would
+         be a lie the reader has no way to check. The mark is a fact about the topic alone: completing it never
+         completes a task under it, and the note the Keep import already shows («A topic keeps its own checkbox») says
+         the same thing, so the two screens agree without one quoting the other. -->
+    <string name="topic_completed">topic completed</string>
+    <!-- The topic header's kebab opens three things — rename, the state, delete — so it cannot honestly be named
+         «Edit», which is the card's own word for opening one task. §8 asks the header for a TalkBack description;
+         this is the part of that which was actually wrong on the row. -->
+    <string name="topic_actions">Topic actions</string>
+    <string name="mark_topic_completed">Mark topic completed</string>
+    <string name="mark_topic_open">Clear the topic’s completion</string>
     <plurals name="branch_collapse">
         <item quantity="one">Collapse the open branch: hide %1$d nested task</item>
         <item quantity="other">Collapse the open branch: hide %1$d nested tasks</item>

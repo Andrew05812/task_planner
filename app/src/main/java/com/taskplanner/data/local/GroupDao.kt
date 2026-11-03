@@ -5,7 +5,6 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import com.taskplanner.data.model.TaskGroup
 import kotlinx.coroutines.flow.Flow
 
@@ -60,14 +59,34 @@ interface GroupDao {
     @Query("SELECT uuid AS uuid, user_id AS userId FROM task_groups WHERE uuid IN (:uuids)")
     suspend fun getGroupOwners(uuids: List<String>): List<RowOwner>
 
-    @Update
-    suspend fun updateGroup(group: TaskGroup)
-
+    // No `@Update suspend fun updateGroup(group: TaskGroup)` here, and the reason is §8: a whole-row update writes
+    // back whatever `is_completed` the caller happened to be holding, which is exactly the "topic mark quietly
+    // reverted" a screen cannot see coming. It had no caller in `app/src` (main, test or instrumented) when this
+    // line was written. The two whole-row writers that *are* real — `upsertGroup` for sync and restore,
+    // `insertImportedGroups` for a Keep import — each carry the column deliberately, and §11 and §12 own them.
     @Query(
         "UPDATE task_groups SET collapsed = :collapsed, updated_at = :now, sync_state = 'PENDING' " +
             "WHERE uuid = :uuid"
     )
     suspend fun setCollapsed(uuid: String, collapsed: Boolean, now: Long = System.currentTimeMillis())
+
+    /**
+     * §8's own column, and nothing else's.
+     *
+     * `collapsed`, `name` and `sort_order` are absent from the SET clause because a topic's mark is not a way of
+     * folding it, renaming it or moving it, and `TaskRepository` has no line in this statement at all — which is
+     * how "completing a topic completes its tasks" is impossible rather than merely discouraged. `TopicCompletionTest`
+     * reads the two sibling columns and every child row back after the write to prove the shape holds and not just
+     * that this file says so.
+     *
+     * No completion timestamp: `task_groups` has no such column, and a Google Keep export carries no time for a
+     * root line's checkbox, so inventing one would put a date in the reader's notebook that no one entered.
+     */
+    @Query(
+        "UPDATE task_groups SET is_completed = :completed, updated_at = :now, sync_state = 'PENDING' " +
+            "WHERE uuid = :uuid"
+    )
+    suspend fun setCompleted(uuid: String, completed: Boolean, now: Long = System.currentTimeMillis())
 
     @Query(
         "UPDATE task_groups SET name = :name, updated_at = :now, sync_state = 'PENDING' " +

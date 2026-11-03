@@ -2,6 +2,7 @@ package com.taskplanner.ui.tasks
 
 import android.annotation.SuppressLint
 import android.content.res.ColorStateList
+import android.graphics.Paint
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -92,11 +93,41 @@ class TasksAdapter(
             binding.groupName.text = item.group.name
             binding.groupCount.text = item.taskCount.toString()
             binding.groupChevron.rotation = if (item.group.collapsed) 0f else 90f
+            bindTopicCompletion(item.group.isCompleted)
             binding.root.setOnClickListener { onToggleGroup(item.group) }
             binding.groupMenu.setOnClickListener { onGroupMenu(it, item.group) }
             binding.root.setOnLongClickListener {
                 onGroupHeaderLongPress?.invoke(item.group)
                 true
+            }
+        }
+
+        /**
+         * §8's completed mark: the sentence, its glyph, and the strike through the topic's own name.
+         *
+         * All three are written on both branches, because a recycled header that keeps the previous topic's mark tells
+         * the reader a finished story about a topic that is not finished — the same reuse rule [bindBranch] states for
+         * the fold control, and the reason the text is set to empty rather than left alone. The glyph is put on in code
+         * rather than in the layout for the same reason: a `drawableStart` written in XML would be carried by an open
+         * header too — invisible, but present — and no test could tell a mark that is withdrawn from one that is only
+         * hidden.
+         *
+         * Three channels, and colour is the last of them: the words say it, the strike shapes it, and `status_done`
+         * only emphasises what the other two already carry. The glyph itself is unnamed, so the sentence is spoken
+         * once rather than twice.
+         */
+        private fun bindTopicCompletion(finished: Boolean) {
+            val name = binding.groupName
+            val state = binding.groupState
+            state.visibility = if (finished) View.VISIBLE else View.GONE
+            state.text = if (finished) state.context.getString(R.string.topic_completed) else ""
+            state.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                if (finished) R.drawable.ic_topic_completed else 0, 0, 0, 0
+            )
+            name.paintFlags = if (finished) {
+                name.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+            } else {
+                name.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
             }
         }
     }

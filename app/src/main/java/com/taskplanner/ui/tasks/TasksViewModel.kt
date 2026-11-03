@@ -812,6 +812,26 @@ class TasksViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Writes a topic's own completed mark (§8), and the header redraws from the stored row.
+     *
+     * The command takes the state to write rather than a row to flip, because the one door a reader uses — the ⋮ menu —
+     * has two decisions behind it, the sentence on the row and the state the press asks for, and [GroupHeaderMenu]
+     * decides both from the same `TaskGroup` so they cannot point different ways.
+     *
+     * Nothing here reads a task: a topic's mark says one thing about one row, and the tasks under it keep the statuses
+     * the reader gave them.
+     */
+    fun setGroupCompleted(uuid: String, completed: Boolean) {
+        viewModelScope.launch {
+            try {
+                groupRepository.setCompleted(uuid, completed)
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
     fun moveTaskToGroup(taskId: Long, groupUuid: String?) {
         viewModelScope.launch {
             try {

@@ -149,6 +149,61 @@ restore left a row whose ancestor names another, filing the ancestor under its o
 child it exists to lead — the false root again, in a shape §7's clause does not cover. `TaskHierarchyRenderTest`'s
 sibling, `TasksFilterContextTest`, holds that case.
 
+## A topic's own completed mark, drawn and switchable
+
+Stage 15 saved `task_groups.is_completed` — the `[X]` a Keep export puts on a root line — and carried it to the cloud,
+and the tasks screen never drew it. A reader who imported 56 topics, 34 of them checked, got a notebook whose topics
+were all identical. §8 is that mark and the press that changes it, and its first rule is that the mark is *only* about
+the topic.
+
+**Three channels, and colour is the last of them.** A finished topic's header shows a caption line under its name — a
+16dp check in `status_done` beside the words «тема выполнена» / "topic completed" — and the name is struck through,
+which is this app's own shape for finished: `ArchiveAdapter` strikes an archived title the same way, so the two screens
+say "done" with one vocabulary. An open topic draws neither the line nor the strike. The words are the channel a screen
+reader and a magnified reader both get, and the glyph rides inside the same text element as its compound drawable,
+which is what keeps the fact spoken once rather than twice — the drawable carries no name of its own, deliberately. And
+because §8 asks the header for a TalkBack description, the button that opens the topic's menu is now named «Действия с
+темой» / "Topic actions" instead of borrowing the card's word for editing one task. `TopicCompletionTest` reads all of
+this off the header the adapter actually paints, including what a recycled holder gives up: the sentence, the glyph and
+the strike are each written on both branches, the rule §7 set for the fold control.
+
+**The state lives under the name, not beside it.** A horizontal row gives its weighted child the leftover, so a new
+sibling would constrain the topic's name — and this header has no title floor like the card's 152dp to make that
+measurable. Put the line beside the name and the JVM width case fails, with the state itself measuring 0px wide: that is
+Stage 15's «a weighted view is the one that disappears» in the other direction. Under the name it costs the header
+nothing it cannot take back, and an open topic pays nothing at all. Whether the Russian sentence *fits* at 320dp and
+font scale 1.3 is a glyph question, and no JVM test in this repository can answer it — §19 photographs it.
+
+**The menu is the door, and it owns the pairing.** The header already had three gestures — the tap folds, a long press
+selects the topic's rows, the kebab opens its actions — so the mark joins the kebab rather than buying a fourth gesture
+on a row that has spent its width, and a checkbox drawn on the header would compete with the fold chevron standing in
+the same place. `GroupHeaderMenu` builds that popup, names the state row for the state the topic does *not* have
+(«Отметить тему выполненной» / «Снять отметку о выполнении» — two sentences, because the verbs govern different cases
+and share no usable stem), and hands the fragment the state its own sentence promised. That is the part worth naming:
+a menu whose label and write live in two files is how «Mark topic completed» ends up setting the flag to `false`. The
+fragment keeps what the screen owns — the rename prompt, the delete confirmation, the commands — and a test drives the
+popup the app builds through `performIdentifierAction`, so the promise is checked rather than asserted.
+
+**The write is one UPDATE and it cannot reach anything else.** `GroupDao.setCompleted` sets `is_completed`,
+`updated_at` and `sync_state = 'PENDING'` for one uuid. `collapsed` is not in the clause, so §7's fold survives the
+press; the name, the order and the creation time are not in it either; and the `tasks` table is not mentioned at all,
+which is what makes "completing a topic completes its tasks" impossible rather than discouraged. A test reads every
+child row back from storage after the write and compares status, time and sync state, and another reads the sibling
+columns of the topic itself.
+
+**Four refusals, each with a test.** The mark is never computed from the children: a topic whose every task is done
+stays open, and a topic marked done while its tasks are open stays marked. Clearing a topic does not reopen a child the
+reader finished. Nothing writes a completion *time* for a topic — `PRAGMA table_info(task_groups)` is what that test
+reads rather than the model, because a field added later is exactly what the rest of the file would miss, and a Keep
+export carries no timestamp for a root line's checkbox. And the mark is not a permission: the topic's rows stay in the
+list, in the same order, under the same fold.
+
+**One hazard removed on the way.** `GroupDao` used to carry `@Update updateGroup(group)` with no caller anywhere in
+`app/src` — main, test or instrumented. A whole-row update writes back whatever `is_completed` the caller happened to
+be holding, which is the one path that could revert a topic's mark without the reader asking. The two whole-row writers
+that are real — `upsertGroup` for sync and restore, `insertImportedGroups` for an import — each carry the column
+deliberately, so the dead one is gone rather than documented.
+
 ## What that makes possible today
 
 * **An import keeps the depth a paste had.** A Google Keep export decides structure by indentation and nothing
@@ -363,6 +418,16 @@ Everything that **changes the shape** of the tree by hand, and it is deliberatel
   the head of a title and the Russian sentence in line B's give-way slot are box arithmetic here and glyph widths on a
   device, so their fit at 320dp and at font scale 1.3 belongs to §19's frame matrix. Nothing about the *behaviour* is
   waiting on that frame; the frame can only embarrass the drawing.
+* **The topic's own mark owes a photograph, and a device test.** §8's mark is implemented and asserted in a JVM
+  (`TopicCompletionTest`, see "A topic's own completed mark" above), but the same line applies to it as to the context
+  row: «тема выполнена» beside a 16dp check, under a struck-through bold name, at 320dp and font scale 1.3, is a glyph
+  question this repository's graphics layer cannot answer. Nothing has ever bound a group header under instrumented
+  code — `TaskCardWidthBudgetInstrumentedTest` measures the card, not the header — so §19's matrix is where that row
+  first gets a camera, and §17.8's `HierarchyInstrumentedTest` is where its fold and its mark get driven by a touch.
+* **The topic menu's button is 32dp, and the app's own floor is 48.** `item_group_header.xml` sizes `groupMenu` at
+  32dp with 4dp of padding inside it, while `@dimen/touch_target_min` says 48dp and the card's own controls are built
+  to it. It is left alone in §8 because the block is about the mark, and widening it is a geometry change to a row this
+  stage does not otherwise measure; §16's accessibility pass owns it, with the width cost named there rather than here.
 * Deleting a parent now asks which of the two deletes the reader meant (§9 below), but the question is asked *after*
   the first confirm, not instead of it: the list's dialog still opens with "Delete Task?", and the branch question
   follows only when the domain finds rows under the row. Reshaping that into one dialog is the §6 UI pass's.
@@ -380,10 +445,10 @@ Everything that **changes the shape** of the tree by hand, and it is deliberatel
 ## What a reader sees
 
 A task imported under a topic appears under that topic's header, indented by its level, with the completion box
-the source drew. A topic whose own line was `[X]` in Keep has that state **stored and synced** —
-`TaskGroup.is_completed`, read out of the database by `KeepImportTransactionTest` and carried on the sync document
-— and the task list does not yet *draw* it: nothing in `TasksAdapter` reads the column. Saying so is the point: the
-two states are independent facts from the file, nothing aggregates one into the other, and the visible mark on a
-topic header is Stage 16's to add. No control changes the *shape* of a tree by hand yet — there is no indent, outdent
-or move-to anywhere in the app — but deleting a row that has rows under it now asks which of the two deletes the reader
+the source drew. A topic whose own line was `[X]` in Keep has that state **stored, synced and now drawn** —
+`TaskGroup.is_completed`, read out of the database by `KeepImportTransactionTest`, carried on the sync document, and
+painted on its header by `TasksAdapter.bindTopicCompletion` and switchable from the topic's own menu (see "A topic's own
+completed mark" above). The two states remain independent facts: nothing aggregates one into the other and no press on a
+topic's mark writes a task. No control changes the *shape* of a tree by hand yet — there is no indent, outdent or
+move-to anywhere in the app — but deleting a row that has rows under it now asks which of the two deletes the reader
 meant, and that dialog is in the list above rather than below it.

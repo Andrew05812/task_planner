@@ -26,17 +26,48 @@
             android:src="@drawable/ic_chevron_right"
             app:tint="?android:attr/textColorSecondary" />
 
-        <TextView
-            android:id="@+id/groupName"
+        <!-- The name and its state are one weighted column, and the state is *under* the name rather than beside
+             it, for the reason Stage 15 learned the hard way: in a horizontal row the child with `weight=1` gets
+             whatever the others leave, so a sibling added to this row constrains the topic's own name — and the
+             header has no title floor like the card's 152dp to make that loud. `TopicCompletionTest`'s width case is
+             what fails first if it ever is put beside the name: measured that way, the state line comes out 0px wide
+             in the row and the name keeps its room, which is the weighted-sibling failure in the other direction.
+             Sitting under the name, the state costs the header nothing it cannot take back, and a topic that is open
+             does not draw the line at all (`visibility=gone`, no text, no glyph). -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceSubtitle2"
-            android:textStyle="bold"
-            tools:text="РАБОТА" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/groupName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAppearance="?attr/textAppearanceSubtitle2"
+                android:textStyle="bold"
+                tools:text="РАБОТА" />
+
+            <!-- §8's completed mark: the sentence and the glyph are one element, so a screen reader and a magnified
+                 reader get the same fact the sighted reader sees struck through. The glyph is put on here by nobody —
+                 `TasksAdapter.bindTopicCompletion` sets it per branch, the way the context row's arrow is set, so an
+                 open header carries no mark at all rather than an invisible one. The 16dp box is on purpose: the
+                 caption line is not 24dp tall, and a mark that grows its own line is a defect the frame matrix
+                 photographs rather than this comment excuses. -->
+            <TextView
+                android:id="@+id/groupState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:drawablePadding="@dimen/spacing_xs"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:visibility="gone"
+                tools:drawableStart="@drawable/ic_topic_completed"
+                tools:text="тема выполнена"
+                tools:visibility="visible" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/groupCount"
@@ -51,7 +82,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/action_edit"
+            android:contentDescription="@string/topic_actions"
             android:padding="4dp"
             android:src="@drawable/ic_more_vert"
             app:tint="?android:attr/textColorSecondary" />

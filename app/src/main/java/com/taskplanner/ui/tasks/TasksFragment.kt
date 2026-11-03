@@ -487,36 +487,40 @@ class TasksFragment : Fragment() {
     }
 
     private fun showGroupMenu(anchor: View, group: TaskGroup) {
-        val popup = PopupMenu(requireContext(), anchor)
-        popup.menu.add(0, 1, 0, R.string.rename_group)
-        popup.menu.add(0, 2, 1, R.string.delete_group)
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                1 -> {
-                    EditTextDialog.prompt(
-                        requireContext(),
-                        title = getString(R.string.rename_group),
-                        hint = getString(R.string.hint_group_name),
-                        prefill = group.name,
-                        positive = getString(R.string.action_save)
-                    ) { name ->
-                        if (name.isNotBlank()) viewModel.renameGroup(group.uuid, name)
+        // `GroupHeaderMenu` builds the popup, names the state row and decides which state a press on it asks for —
+        // see the object's comment for why that pairing is not left split across two files. What stays here is the
+        // screen's own business: the prompt, the confirmation, and the commands.
+        GroupHeaderMenu.build(
+            context = requireContext(),
+            anchor = anchor,
+            group = group,
+            onRename = { topic ->
+                EditTextDialog.prompt(
+                    requireContext(),
+                    title = getString(R.string.rename_group),
+                    hint = getString(R.string.hint_group_name),
+                    prefill = topic.name,
+                    positive = getString(R.string.action_save)
+                ) { name ->
+                    if (name.isNotBlank()) viewModel.renameGroup(topic.uuid, name)
+                }
+            },
+            onCompletion = { completed ->
+                // §8. The mark is the topic's own: the tasks under it keep the statuses the reader gave them, and
+                // nothing here recomputes the mark from those statuses either.
+                viewModel.setGroupCompleted(group.uuid, completed)
+            },
+            onDelete = { topic ->
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle(R.string.confirm_delete_group_title)
+                    .setMessage(R.string.confirm_delete_group_message)
+                    .setPositiveButton(R.string.delete) { _, _ ->
+                        viewModel.deleteGroup(topic.uuid)
                     }
-                }
-                2 -> {
-                    MaterialAlertDialogBuilder(requireContext())
-                        .setTitle(R.string.confirm_delete_group_title)
-                        .setMessage(R.string.confirm_delete_group_message)
-                        .setPositiveButton(R.string.delete) { _, _ ->
-                            viewModel.deleteGroup(group.uuid)
-                        }
-                        .setNegativeButton(R.string.cancel, null)
-                        .show()
-                }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
             }
-            true
-        }
-        popup.show()
+        ).show()
     }
 
     override fun onDestroyView() {

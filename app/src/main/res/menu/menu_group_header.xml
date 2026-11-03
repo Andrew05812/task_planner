@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The three things a reader may do to a topic from its own header row.
+
+  This used to be built in Kotlin with `menu.add(0, 1, 0, …)` — magic group ids, magic item ids, and an order that
+  lived in whichever line happened to be written first. As a resource the order is a statement, the ids are names,
+  and the menu the header opens is the same object a test can read (`GroupHeaderMenu`), which is how the tasks
+  header's own popups have always been checked.
+
+  The middle item's title is replaced when the menu is built, with the sentence that names the state the topic does
+  *not* currently have — «Mark topic completed» on an open topic, «Clear the topic's completion» on a finished one.
+  What is written here is the open topic's sentence, so a menu that failed to swap says something true about the
+  common case rather than nothing at all.
+
+  Delete stays last, as it does in every other popup on this screen: the one action that cannot be undone should not
+  be the one a thumb reaches for between two harmless ones.
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/action_rename_group"
+        android:title="@string/rename_group" />
+
+    <item
+        android:id="@+id/action_toggle_group_completion"
+        android:title="@string/mark_topic_completed" />
+
+    <item
+        android:id="@+id/action_delete_group"
+        android:title="@string/delete_group" />
+</menu>

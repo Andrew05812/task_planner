@@ -6674,3 +6674,168 @@ the same words. Nothing else in §7 is open after this block: the storage, the l
 the filter clause are all implemented and asserted.
 
 **Gates after the block, measured on the tree this commit holds**: 148 classes / **1906** JVM tests / 0 failures / 0 errors / 0 skipped (1888 before it; the +18 are `TasksFilterContextTest`'s eighteen, six of which are the review round's); `lintDebug` 0 errors / **150** warnings, unchanged since §9; `assembleDebug` produced `app-debug.apk` of 15 435 828 bytes, sha256 `d9c535c4583ec7b9cb0caee2ea005084fb9ead9285dd2756f79e7877a8c013ae`; `scripts/check-localization.py`: **pass**, 994 EN strings / 989 RU / 57 plurals, 0 missing, 0 quantity gaps, 0 placeholder mismatches. One gate caught a mistake of mine rather than a lie: `EnglishLiteralAssertionTest` refused the fixture title `"plan"`, which is a real label in this app (`plan_section_title`), so the seed data became "planning". The gate's rule is that a UI test may compare a rendered string to `getString(...)` or to a number and never to an English word; a seeded title that happens to *be* a resource value cannot be told apart from an assertion about that label, so the fixture moves and the rule does not.
+
+
+## 20τ — Stage 16's CI picture: the race run 81 caught, and the frame it exposed
+
+Run 81 (`41615625582`) on `f2561f8` failed three JVM tests that pass on this machine; a dispatch of the identical
+SHA (run 82, `41618600932`) came back success 16/16. That pair is the whole finding: the tree is not wrong and the
+tests are not weak — three assertions depended on how long something else took, and CI's runner chose a different
+moment than Windows did. The known `WorkAdjustmentUiTest` intermittent was not among them and neither run touched it.
+
+**Failure one and two — `TasksOrderingTest`'s two drag tests**, both dying in `tearDown` with
+`Dispatchers.Main is used concurrently with setting it`. The stack names the mechanism rather than hinting at it.
+This project's UI tests install Main as `Executor { it.run() }`, which runs a resumed coroutine *on whichever thread
+resumed it*; Room resumes its Flow collectors from a query thread, so the collector was reading the Main dispatcher
+from a database thread at the same moment the test thread was resetting it, and kotlinx-coroutines-test's
+`NonConcurrentlyModifiable` guard refuses that outright. The fix is an order, not a weaker test: `AppFixture.close()`
+is what stops those threads (it shuts both executors down, awaits termination, then closes the database), so the
+teardown now closes the fixture *before* it resets the dispatcher. The rule is written on `AppFixture.close()` itself
+because **22 test classes install the same dispatcher** and any of them can be the next one caught. Changing all 22
+blind, to fix one that measured, is the bigger risk — so 21 keep the old order, and that is named rather than hidden.
+
+**Failure three — `ReportViewModelTest > nothing can be exported while a new question is on its way`**, which asserted
+the frame `state.value` holds on the line after a press (`assertNull(report)`). That frame exists only while the read
+happens to be slow. Rewritten to assert over *every* frame the transition passes through — using the file's own
+`record()` collector, the way the profile-switch test already does — it then failed **on Windows**, and what it caught
+is a defect rather than a flake:
+
+`ReportViewModel.ask` wrote the new question's label and the removal of the old answer in two separate state updates.
+A published frame therefore carried a Day chip over the Month document with `canExport` still true — a month's report
+savable under a sentence that says day. A collector on the main thread cannot see the frame in between, because the
+main thread is the one making both writes, which is why no device run has ever shown it and why this is not a
+Stage 15/16 regression in behaviour: it is a state machine that publishes an intermediate it never meant to. `ask`
+now writes label and clearing in one update; the clearing moved onto a `ReportState.undrawn()` transform so there is
+one statement of what "asked and not yet answered" means, and `begin()` (still used by the profile-switch path, which
+has no label to move) is that transform plus one write. The refresh branch is untouched: `sameQuestion` still keeps
+the answer where it is, because a step into the picker and back is not a new question.
+
+Nothing was relaxed to get here. The rewritten test asserts more than the two assertions it replaces — no frame of the
+new question may hold the old answer object (by identity, not equality), and no frame that offers an export may hold
+an answer to a question nobody is asking — and it is the one that found the defect.
+
+**Gate numbers, measured on the tree this commit holds**: 148 classes / **1906** JVM tests / 0 failures / 0 errors /
+0 skipped — the same totals as `f2561f8`, because one test was rewritten and one production function restructured,
+with none added or removed; `lintDebug` 0 errors / **150** warnings, unchanged since §9; `check-localization.py` not
+re-run (no string changed). Reproduced first: the two classes ran clean three times in a row locally before being
+declared timing races, and the report package plus `TasksOrderingTest` ran green after the fixes, then again inside the
+full suite. CI run 83 (`41624655364`) on this SHA came back **completed success, 16 of 16 steps** — the race is closed on the
+runner as well as on this machine, and that run is the evidence this section was written against.
+
+**Still open after this block, and named**: `WorkAdjustmentUiTest` remains the recorded intermittent; 21 test classes
+keep the old teardown order until something measures them; `ReportViewModel`'s initial `_state` is built from
+`question.value.period` while the first read is still a Month question — a place where a similar label/answer mismatch
+could live, not investigated because no test reached it.
+
+## 20υ — Stage 16 §8: a topic's own completed mark, drawn, named and switchable
+
+«Цель» of §8 is small and its prohibitions are the hard part. Stage 15 saved `task_groups.is_completed` — the `[X]` a
+Keep export puts on a root line, 34 of the 56 topics in the reader's own file — and carried it to the cloud, and the
+tasks screen never drew it: a reader who imported a notebook of checked and unchecked topics saw one vocabulary. The
+brief asks for the mark on the `GroupHeader`, distinguished visually without relying on colour, with a TalkBack
+description, and changeable by the user; and it forbids four things — completing a topic must not complete its tasks,
+clearing it must not reopen the children, `is_completed` must not be an AND/OR over them, and no `completed_at` may be
+invented for a topic because the column does not exist and the time does not exist in Keep either.
+
+**The menu is the door.** The header already had three gestures — the tap folds, a long press selects the topic's rows,
+the kebab opens its actions — so the mark joined the kebab. A fourth gesture on a 320dp row that has spent its width
+would have had to come out of the fold chevron's own place, and a checkbox drawn on the header competes with that
+chevron for the reader's eye and for the same pixels.
+
+**`GroupHeaderMenu` owns the pairing, and the test drives the click.** The object names the state row for the state the
+topic does *not* have and hands the fragment the state its own sentence promised, so a label and a write cannot drift
+into opposite directions — the failure mode a two-label menu invites. The first version kept the click handling in the
+fragment, and a reviewer pointed out that this made the object's stated reason unenforceable: breaking
+`TasksFragment` to write the flag the wrong way left every test green. The popup now installs its own listener over
+three injected handlers, and `TopicCompletionTest` drives it with
+`menu.performIdentifierAction(R.id.action_toggle_group_completion, 0)` — `MenuItem` has no `performAction`, so this is
+the menu's own click path, not a call a test invented. Rename and delete are proven to reach the screen, and the state
+row is proven not to reach them.
+
+**Three channels, and the row's button got a true name.** A finished topic shows a caption line under its name — a 16dp
+check in `status_done` beside «тема выполнена» / "topic completed" — and its name is struck through, which is this app's
+own shape for finished (`ArchiveAdapter` strikes an archived title the same way, so the two screens share a vocabulary).
+The glyph rides inside the same text element as its compound drawable, so the fact is spoken once; the drawable carries
+no accessible name deliberately. §8's TalkBack clause also caught something pre-existing and wrong: the header's kebab
+declared `@string/action_edit` — "Edit"/«Изменить», the card's word for opening one task — while opening three topic
+actions. It is now `topic_actions` ("Topic actions" / «Действия с темой»), and a test compares it to the resource.
+
+**The state lives under the name, and the break proves why.** A horizontal row gives its weighted child the leftover, so
+a sibling added beside the name constrains the name — and unlike the card, this header has no 152dp title floor to make
+that measurable. The width test was run against the wrong layout on purpose: put `groupState` beside the name and it
+measures **0px** in the row — Stage 15's «a weighted view is the one that disappears», in the other direction. Under the
+name, an open topic pays nothing (GONE, no text, no glyph) and a finished one spends height it can take back.
+
+**The write is one UPDATE.** `GroupDao.setCompleted` sets `is_completed`, `updated_at` and `sync_state = 'PENDING'` for
+one uuid. `collapsed`, `name`, `sort_order` and `created_at` are absent from the clause, so §7's fold survives the press
+and §8's mark cannot rename or reposition anything; the `tasks` table is not mentioned at all, which is what makes the
+forbidden child-write impossible rather than discouraged — and the test reads every child row back from storage and
+compares status, time and sync state rather than trusting the SQL's shape. No completion timestamp: the test reads
+`PRAGMA table_info(task_groups)` rather than the model, because a field added later is exactly what the rest of the
+file would miss.
+
+**One hazard deleted.** `GroupDao` carried `@Update updateGroup(group)` with no caller anywhere in `app/src` (main,
+test or instrumented — checked). A whole-row update writes back whatever `is_completed` the caller holds, which is the
+one path that could revert a topic's mark without the reader asking; the two whole-row writers that are real
+(`upsertGroup` for sync and restore, `insertImportedGroups` for an import) each carry the column deliberately, so the
+dead one is gone rather than warned about.
+
+**RED, and the split that made it a real RED.** The tests were written first and failed to compile as a block —
+`unresolved reference: GroupHeaderMenu / groupState / topic_completed / setGroupCompleted / mark_topic_completed /
+mark_topic_open / action_toggle_group_completion`. Implementation then went in two stages so the failure stayed
+meaningful: storage, command, menu, strings and layout first, which left **19 tests / 7 failed**, every one of them a
+drawing claim (sentence, glyph, strike, recycling, width, redraw-from-storage) while the 12 write, independence and
+menu tests went green; the adapter's paint second, which closed the remaining seven.
+
+**Two vacuity rounds, both measured.** Seven breaks (no sentence, state never taken down, strike never cleared, the
+fold cleared by the mark's UPDATE, a constant label, an inverted target, the destructive row moved last) failed
+**11 of 19**. Two more (an AND over the children in the renderer, and the state line as a horizontal sibling) failed
+**7 of 19**, and the sibling break is the one that produced the 0px reading above. One break each of the writing tests
+was checked individually: the fold case, the menu pair, the ordering case all named themselves in the failure list.
+
+**A review pass took the block apart, and eleven of its findings were accepted.** Fixed: the glyph moved out of the
+layout into the bind, so "an open header carries no mark" is now a claim a test can break instead of an XML attribute;
+the accessibility assertion went from one `!= NO` (which no production change could break, and which missed
+`NO_HIDE_DESCENDANTS`) to two named channels plus the kebab's real name; the menu's click path became testable and was
+tested; `isVisible` became `visibility == GONE` where the claim is about space, not pixels; every `first{}`-based wait
+went through a non-throwing `awaitHeader`, because a Flow that has not re-emitted yet turns a wait into
+`NoSuchElementException`; the count test now settles on the redrawn header before reading the number, instead of
+sampling a render that has not happened; the layout, drawable and view-model comments that overstated their own
+protection were corrected; `docs/HIERARCHY.md` said, in the present tense, that nothing in `TasksAdapter` reads the
+column — which became false the moment this block shipped, and is now the §8 section instead.
+
+Four findings were refused, each with the reason in the record rather than in silence. **The width test's `> 0`
+assertion was called a glyph-fit claim to be dropped**: refused, because the sibling break measured 0px, which is a
+placement fact and the one the test is for; the message was rewritten to say what it establishes and to name §19 as the
+owner of the fit question. **A re-render when the write lands on a vanished topic**: refused as unreachable — a topic
+deleted by a pull re-emits the groups Flow and redraws the screen by itself, so the guard would cost a storage read on
+every press to protect a case that cannot be reached. **A comment cited `ic_check_circle` as drawn on the card's
+selection row and was told it does not exist there**: checked and kept — `TasksAdapter` sets `ic_check_circle` on
+`selectionCheck` when a row is selected, and `item_task.xml` carries `ic_radio_unchecked` only as the default src; the
+reviewer had read the XML alone. **A `contentDescription` on the header's clickable root**: refused because a
+description on a clickable container replaces what TalkBack reads from it, which would have hidden the topic's own name
+and its count to make the mark speak — the sentence already speaks as text, and the real gap on that row was the
+mislabelled button, which is now named.
+
+**Owned elsewhere, and recorded where they will be read**: `SyncRepository` flips a pushed group to `SYNCED` *before*
+the store call, so a failed push leaves the mark un-retried until the next edit — that is §11's durability work, not
+§8's; the kebab's 32dp box against the app's own 48dp `touch_target_min` is §16's; and no instrumented code has ever
+bound a group header, so §19's matrix owes this row its first camera (fold, mark, the Russian sentence at 320dp and
+font scale 1.3, light and dark). One decision stays arguable and is named as one: the strike borrows the shape that
+means "this task is finished", so a reader who uses both screens could read a struck topic heading as "everything in
+here is done" — which is exactly the inference §8 forbids the *code* from making. The mark's own words say "topic
+completed" rather than "3 tasks done", the children's boxes stay as they are, and the alternative — a vocabulary of
+its own for a finished topic — would have cost a second shape no other screen uses.
+
+**Gates after the block, measured on the tree this commit holds**: 149 classes / **1926** JVM tests / 0 failures /
+0 errors / 0 skipped (1906 before it; the +20 are `TopicCompletionTest`'s twenty, and no existing test was deleted,
+renamed away or relaxed); `lintDebug` 0 errors / **150** warnings, unchanged since §9; `assembleDebug` produced
+`app-debug.apk` of 15 620 029 bytes, sha256
+`e7361dd455f68c400f68a1368ff1c955b6e48f839c9ae6ea5dd2436308e64973`; `scripts/check-localization.py`: **pass**, 998 EN
+strings / 993 RU / 57 plurals, 0 missing, 0 quantity gaps, 0 placeholder mismatches — four new strings, each with its
+Russian, and no plural added because the mark carries no count.
+
+Two things the gate did *not* hide: the tasks package was run on its own (261 tests, green) between the two
+implementation stages, which is how the drawing RED stayed visible; and the whole suite was re-run after the review
+round's fixes rather than trusting the package run, because the review changed a production `object`'s signature, the
+fragment's menu path and the header layout, all of which other classes touch.

@@ -1169,9 +1169,9 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    the parser and the renderer each holding a constant called 3 and meaning different things by it, which let the card
    draw a level no import could write. `TaskTree` no longer owns a depth constant, and the drift is pinned by a test.
 4. **Rendering**: a chevron per level and a collapse that works below the topic, and the first visible mark
-   for a topic's own completed state. The depth-driven indent exists; a bounded depth exists; what is
-   missing is the control at every level, and `TaskGroup.is_completed` — stored since 16 → 17 and carried
-   by sync — is read by no screen yet.
+   for a topic's own completed state. The depth-driven indent exists; a bounded depth exists; what was
+   missing when this phase was written was the control at every level, and `TaskGroup.is_completed` — stored
+   since 16 → 17 and carried by sync — was read by no screen. Both halves are delivered below.
 
    **The fold half of it is in** (2026-11-03, in two commits). `652e2e4` added migration **17 → 18**
    (`tasks.children_collapsed`, default `0`, additive), `TaskHierarchyPolicy.collapsedAwayIds` /
@@ -1189,8 +1189,13 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    screen-relative (a fold inside a fold promised rows no press would move). A third commit closed the last clause of §7,
    «Обработка фильтров»: `missingAncestorsBy` + `TaskRow.shownForContext` draw a filter-dropped parent above the child
    that needs it, marked in three channels and refused by every batch path, which is the brief's preferred answer and
-   the end of §7's behaviour (§19 owes it two frames). **What phase 4 still owes**: the topic's own completed mark,
-   which is §8.
+   the end of §7's behaviour (§19 owes it two frames). **§8 is now in as well** — the topic's own mark is drawn on its
+   header (a caption line with a 16dp check, the words «тема выполнена», the name struck through, all three written on
+   both branches so a recycled header gives them up) and switched from the header's menu, whose label and write are
+   decided together in `GroupHeaderMenu`; the write is one UPDATE over `is_completed`, `updated_at` and `sync_state`,
+   and a review-driven test file, `TopicCompletionTest`, proves the four refusals: no aggregation from the children in
+   either direction, no completion time invented for a topic, and no task row touched. Phase 4's rendering work is
+   therefore complete in code and in JVM assertions; what it still owes is the camera (§19).
 5. **Controls**: indent/outdent in the editor and on the row; a long-press move for whole subtrees.
 6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping.
 7. **Device proof** at 320dp and at font scale 1.3, light and dark.

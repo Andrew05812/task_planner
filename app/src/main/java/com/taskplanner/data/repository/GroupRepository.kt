@@ -41,6 +41,14 @@ class GroupRepository @Inject constructor(
 
     suspend fun setCollapsed(uuid: String, collapsed: Boolean) = groupDao.setCollapsed(uuid, collapsed)
 
+    /**
+     * Marks a topic finished or open, and touches nothing else — not the fold, not the name, and no task under it.
+     *
+     * The state is the reader's own: it is never computed from the children's statuses, in either direction. See
+     * [GroupDao.setCompleted] for the write and `TopicCompletionTest` for the four rules that keep it honest.
+     */
+    suspend fun setCompleted(uuid: String, completed: Boolean) = groupDao.setCompleted(uuid, completed)
+
     /** Removing a topic keeps its tasks: they simply become ungrouped. */
     suspend fun deleteGroup(uuid: String) = groupDao.softDelete(uuid)
 

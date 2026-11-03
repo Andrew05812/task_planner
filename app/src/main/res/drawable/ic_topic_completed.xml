@@ -1,0 +1,23 @@
+<!--
+  The mark on a topic header whose own checkbox is ticked (schema v17's `task_groups.is_completed`).
+
+  A 16dp box on the 24dp viewport, so it is the size of the caption line it stands beside rather than the 24dp of
+  `ic_check_circle`, whose two existing users are both bigger marks: `TasksAdapter` puts it on a task row's selection
+  box when the row is checked, and `item_goal_task.xml` tints it 24dp under `@color/status_done`. A mark that grows a
+  text line to its own height is the failure Stage 15 found in the import preview, and the header has no vertical room
+  to spare.
+
+  The colour is the app's "finished" role (`status_done`, which resolves to `ink_success` and has its own night value),
+  and it is the *third* channel, not the first: the sentence beside it and the strike through the topic's name both say
+  the same thing without asking the reader to see a hue — which is why this drawable carries no accessible name of its
+  own (§15).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/status_done"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM10,17l-5,-5 1.41,-1.41L10,14.17l7.59,-7.59L19,8l-9,9z" />
+</vector>
