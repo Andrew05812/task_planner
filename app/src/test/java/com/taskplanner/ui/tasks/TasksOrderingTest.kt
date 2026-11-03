@@ -87,8 +87,15 @@ class TasksOrderingTest {
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        // The fixture first, the dispatcher second — the opposite of the order this file was written in, and for
+        // a reason CI found. `AppFixture.close` shuts both database threads down and waits for the work they hold;
+        // this class's Main dispatcher runs a resumed coroutine on whichever thread resumed it, so a `resetMain()`
+        // that lands while a Room thread is still emitting reads the dispatcher from two threads at once, which
+        // kotlinx-coroutines-test refuses outright (`Dispatchers.Main is used concurrently with setting it`). The
+        // two drag tests hit it because a drag queues more re-renders than anything else here. No assertion moved:
+        // the teardown now waits for the work instead of racing it.
         fixture.close()
+        Dispatchers.resetMain()
     }
 
     /**

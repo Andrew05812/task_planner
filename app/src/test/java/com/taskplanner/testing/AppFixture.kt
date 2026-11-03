@@ -429,6 +429,18 @@ class AppFixture(val context: Context) : AutoCloseable {
         }
     }
 
+    /**
+     * Stops the storage, and the two threads that answer from it, and waits for both.
+     *
+     * **A test that sets `Dispatchers.Main` closes the fixture before it resets that dispatcher, not after.** The
+     * reason is the shape of the inline executor most UI classes install (`Executor { it.run() }`): a coroutine
+     * resumed on Main runs on whichever thread resumed it, and Room resumes its collectors from a query thread. A
+     * `resetMain()` that lands during such an emission reads the dispatcher from two threads at once, and
+     * kotlinx-coroutines-test refuses it outright — `Dispatchers.Main is used concurrently with setting it`. That
+     * is not a product failure and no assertion is relaxed by it: it is a teardown that raced the work it was
+     * supposed to wait for. `TasksOrderingTest`'s two drag tests are where CI's runner caught it, because a drag
+     * queues more re-renders than any other command on that screen.
+     */
     override fun close() {
         // Robolectric keeps a SQLite connection handle per thread. Let both database threads finish the
         // work they already hold before the storage goes away, otherwise a late query is reported

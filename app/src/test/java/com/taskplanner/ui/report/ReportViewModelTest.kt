@@ -1053,9 +1053,34 @@ class ReportViewModelTest {
         awaitReport()
         assertTrue(viewModel.state.value.canExport)
 
+        // The answer to the question the screen is about to stop asking, held by identity rather than by value:
+        // two reads of an unchanged notebook are equal, and equality would not tell a kept answer from a new one.
+        val month = viewModel.state.value.report!!
+        val asked = viewModel.state.value.period
+        val seen = mutableListOf<ReportState>()
+        val recording = record(seen)
+
         viewModel.chooseKind(ReportKind.DAY)
-        assertFalse("a new question puts the old answer away", viewModel.state.value.canExport)
-        assertNull(viewModel.state.value.report)
+        awaitReport()
+        recording.cancel()
+
+        // Asserted over every frame the transition passes through rather than over the frame `state.value` holds
+        // on the next line. The press writes the new question and puts the old answer away in two state updates,
+        // and the read runs on a database thread: a screen cannot see the frame in between, because the thread
+        // doing both writes is the one drawing them, while a test reading `state.value` can land on either side of
+        // it — and on CI's runner the day's answer had already arrived while the test was still looking for the
+        // month's to be gone. What the design promises is stated here for every frame instead: once the reader has
+        // asked a different question, the answer to the old one never comes back and nothing is offered for export
+        // while the screen holds it.
+        val afterThePress = seen.dropWhile { it.period == asked }
+        assertTrue("the screen did pass through the new question: ${seen.map { it.period }}",
+            afterThePress.isNotEmpty())
+        assertTrue("no frame of the new question still holds the old answer",
+            afterThePress.none { it.report === month })
+        assertTrue("and no frame that offers an export holds an answer to a question nobody is asking",
+            afterThePress.none { it.canExport && it.period !is ReportPeriod.Day })
+        assertNotSame("the answer on screen now is the day's own", month, viewModel.state.value.report)
+        assertTrue("and once it has landed the screen may hand it over", viewModel.state.value.canExport)
     }
 
     @Test

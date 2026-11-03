@@ -594,17 +594,6 @@ class ReportViewModel @Inject constructor(
         // state carries the answer's label, and by the time the label has moved every question looks like the
         // one already on file.
         val sameQuestion = question.value.period == period && question.value.zone == zone
-        _state.update {
-            it.copy(
-                kind = kind,
-                period = period,
-                anchor = anchor,
-                zone = zone,
-                zoneLabel = zoneLabel(zone.id),
-                followsDeviceZone = followsDeviceZone,
-                feedback = null
-            )
-        }
         if (sameQuestion) {
             // The reader asked the question that is already on screen: the day they picked falls inside the
             // month being shown, the zone they chose is the one already chosen, the range they applied is the
@@ -612,12 +601,54 @@ class ReportViewModel @Inject constructor(
             // answer it has — and it is also the only way this press gets an answer at all, because a question
             // identical to the one on file moves nothing, a flow that does not move wakes nobody, and the
             // document that had been put away would never come back.
+            _state.update { it.withQuestion(kind, period, anchor, zone, followsDeviceZone) }
             askAgain()
             return
         }
-        begin()
+        // The label and the absence of an answer move in one write. Written as two, the screen passed through a
+        // frame that carried the new question's label over the old answer's figures with both export buttons
+        // live — a month offered for saving under a chip that says day. A collector on the main thread cannot see
+        // the frame in between, because the main thread is the one making both writes, which is why no device run
+        // has ever shown it; a collector on any other thread can, and `ReportViewModelTest`'s transition recorder
+        // did.
+        _state.update { it.withQuestion(kind, period, anchor, zone, followsDeviceZone).undrawn() }
         question.update { it.copy(period = period, zone = zone, attempt = it.attempt + 1) }
     }
+
+    /** The state as it reads once [kind] / [period] / [zone] are the question the reader asked. */
+    private fun ReportState.withQuestion(
+        kind: ReportKind,
+        period: ReportPeriod,
+        anchor: LocalDate,
+        zone: ZoneId,
+        followsDeviceZone: Boolean
+    ) = copy(
+        kind = kind,
+        period = period,
+        anchor = anchor,
+        zone = zone,
+        zoneLabel = zoneLabel(zone.id),
+        followsDeviceZone = followsDeviceZone,
+        feedback = null
+    )
+
+    /**
+     * The state of a question that has been asked and not yet answered: no document, no rows, a spinner.
+     *
+     * Both complaints go too. They are about an answer this question has not given yet, and a layout that refused
+     * the *previous* period has nothing to say about this one; leaving either up would put a sentence about a
+     * drawn report over a spinner for an undrawn one.
+     */
+    private fun ReportState.undrawn() = copy(
+        report = null,
+        pages = null,
+        csvLines = emptyList(),
+        reading = true,
+        previewing = false,
+        emptyMessage = null,
+        readError = null,
+        previewError = null
+    )
 
     private fun askAgain() {
         // A refresh is not a new question. The period, the zone and the profile have not moved, so the figures
@@ -644,23 +675,7 @@ class ReportViewModel @Inject constructor(
      * a progress bar whose whole meaning is "this is on its way" — the same deliberate flicker the dashboard
      * accepts for the same reason.
      */
-    private fun begin() {
-        _state.update {
-            it.copy(
-                report = null,
-                pages = null,
-                csvLines = emptyList(),
-                reading = true,
-                previewing = false,
-                emptyMessage = null,
-                readError = null,
-                // Both complaints are about an answer this question has not given yet, so both go: a layout
-                // that refused the *previous* period has nothing to say about this one, and leaving it up
-                // would put a sentence about a drawn report over a spinner for an undrawn one.
-                previewError = null
-            )
-        }
-    }
+    private fun begin() = _state.update { it.undrawn() }
 
     private suspend fun read(asked: Question, user: User?) {
         // Another account is another question whatever the chips say, so the answer that belonged to the
