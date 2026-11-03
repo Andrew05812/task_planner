@@ -619,6 +619,28 @@ class TasksOrderingTest {
         assertEquals("and the sequence stays one dense run", (0 until orders.size).toList(), orders.sorted())
     }
 
+    @Test
+    fun a_task_moved_while_the_editor_holds_it_is_not_put_back_by_the_save() {
+        // §6.2 lets the reader move a task from the screen that is also holding the loaded row, and `saveTask` used
+        // to copy that loaded row whole: `updateTask` writes every column, so a save after an indent restored the
+        // parent link the indent had just changed. The reader indents a task, presses Save, and the tree quietly
+        // puts it back where it was — the one thing a move from this screen must never do.
+        val above = row("planning", position = 0)
+        val below = row("draft", position = 1)
+        runBlocking { viewModel.loadTask(below.id) }
+        settle("the editor to hold the row") { viewModel.currentTask.value?.id == below.id }
+
+        viewModel.indentTask(below.id, above.id)
+        settle("the indent to land") { stored().first { it.title == "draft" }.parentUuid == "planning" }
+
+        runBlocking { viewModel.saveTask(taskId = below.id, title = "draft", description = "typed while moving") }
+        settle("the save to land") { stored().first { it.title == "draft" }.description == "typed while moving" }
+
+        val after = stored().first { it.title == "draft" }
+        assertEquals("the save leaves the tree where the move put it", "planning", after.parentUuid)
+        assertEquals("and writes the field the editor does own", "typed while moving", after.description)
+    }
+
     private companion object {
         /** The instant every seeded row carries, so a later move's timestamp is distinguishable from it. */
         const val FIXTURE_MILLIS = 1_700_000_000_000L

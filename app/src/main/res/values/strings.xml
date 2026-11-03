@@ -162,6 +162,20 @@
     <string name="indent_own_child">That row is inside its own branch</string>
     <string name="outdent_at_topic_root">It already belongs to the topic itself</string>
     <string name="outdent_parent_missing">Its parent is not in this notebook</string>
+    <!-- §6.2: the same three facts the list draws with indentation and a header, written out for the one task the
+         reader has opened. Each line is a label and the value the tree already holds — the topic the row is filed
+         under, the task `parent_uuid` points at, the level the policy measures — and each of the three has a state
+         of its own for the case with nothing behind it: «No topic» rather than a blank, «Root task of the topic»
+         and «Standalone task» rather than an empty parent. The two verbs reuse §6.1's strings: the same sentence
+         for the same move, and the same sentence for the same refusal, so the card's menu and the editor cannot
+         grow two vocabularies for one tree. -->
+    <string name="section_hierarchy">Hierarchy</string>
+    <string name="hierarchy_topic_value">Topic: %1$s</string>
+    <string name="hierarchy_parent_value">Parent: %1$s</string>
+    <string name="hierarchy_level_value">Level: %1$d</string>
+    <string name="hierarchy_no_topic">No topic</string>
+    <string name="hierarchy_topic_root">Root task of the topic</string>
+    <string name="hierarchy_standalone">Standalone task</string>
     <string name="mark_topic_completed">Mark topic completed</string>
     <string name="mark_topic_open">Clear the topic’s completion</string>
     <plurals name="branch_collapse">

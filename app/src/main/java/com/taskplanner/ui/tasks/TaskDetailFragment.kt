@@ -110,6 +110,14 @@ class TaskDetailFragment : Fragment() {
     private var detailTask: Task? = null
 
     /**
+     * The hierarchy block of this task, and the only part of the form that reads the tree.
+     *
+     * It holds the same six views it writes and no others, which is what lets a hierarchy press redraw the section
+     * without going anywhere near the title or the plan the reader is typing into (§6.2's sixth rule).
+     */
+    private var hierarchy: HierarchyEditor? = null
+
+    /**
      * Whether the category the task on screen is filed under has reached the field yet.
      * See [showStoredCategory] — the task and the categories arrive on two flows, and the field needs both.
      */
@@ -138,6 +146,7 @@ class TaskDetailFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         setupUI()
         setupButtons()
+        setupHierarchy()
         observeTaskSaveState()
         observeCurrentTask()
         observeSeries()
@@ -148,6 +157,21 @@ class TaskDetailFragment : Fragment() {
                 viewModel.loadTask(taskId)
             }
         }
+    }
+
+    /**
+     * The editor's hierarchy block (§6.2): the three facts about where this task sits and the two moves it can make.
+     *
+     * All of the deciding lives in [HierarchyEditor] — the values come out of the snapshot the render publishes and
+     * the availability out of the same policy the list's menu reads — so what is left here is the screen's own
+     * business: which task is on screen, and how long the block is allowed to watch for. The collector runs on the
+     * view's lifecycle, so a recreation leaves nothing behind that a new screen could mistake for the tree.
+     */
+    private fun setupHierarchy() {
+        val editor = HierarchyEditor(requireContext(), viewModel, binding)
+        hierarchy = editor
+        editor.follow(viewLifecycleOwner.lifecycleScope)
+        editor.bind(detailTask)
     }
 
     /**
@@ -1123,6 +1147,9 @@ class TaskDetailFragment : Fragment() {
             viewModel.currentTask.distinctUntilChangedBy { it?.id }.collect { task ->
                 detailTask = task
                 renderWork()
+                // The block loads with the task rather than before it, and takes the stored row: an unsaved task has
+                // no place in a tree yet, and both of its actions would have to name an id that does not exist.
+                hierarchy?.bind(task)
                 task?.let {
                     storedCategoryShown = false
                     binding.apply {
@@ -1244,6 +1271,9 @@ class TaskDetailFragment : Fragment() {
         super.onDestroyView()
         viewModel.resetTaskSaveState()
         viewModel.clearCurrentTask()
+        // The block watches the view model for as long as this view does. Dropping it here is what keeps a
+        // destroyed screen's collector from holding the binding it was built over.
+        hierarchy = null
         _binding = null
     }
 }

@@ -35,21 +35,23 @@ import org.xmlpull.v1.XmlPullParser
  * Two things about the editor are load-bearing and both are easy to lose in a regrouping, so both are
  * pinned:
  *
- *  * the form is six blocks in an order a reader answers as one question after another — what the task is,
- *    when it happens, how it is classified, how often it comes back, when to warn, what it actually cost;
+ *  * the form is seven blocks in an order a reader answers as one question after another — what the task is,
+ *    when it happens, how it is classified, where it sits in the notebook, how often it comes back, when to
+ *    warn, what it actually cost;
  *  * the screen is that scrolling form *above* a footer that does not scroll, so Save and Cancel are on the
  *    window whether or not the reader has reached the bottom of the fields.
  *
  * What stays out of this file on purpose: any claim about what a field *saves*. The editor writes the same
  * task it wrote before the regrouping — that is the stage's rule, and [TaskEditorInstrumentedTest] and
- * `TasksRecurrenceTest` are where the saving is proved.
+ * `TasksRecurrenceTest` are where the saving is proved. What the hierarchy block *says* is not a layout
+ * question either, and belongs to [HierarchyEditorTest].
  */
 @RunWith(RobolectricTestRunner::class)
 class TaskDetailLayoutTest {
 
-    /** The six blocks the design names (spec 4.3), in the order it names them. */
+    /** The seven blocks the design names (spec 4.3 plus §6.2), in the order it names them. */
     private val sections = listOf(
-        R.id.task_section, R.id.when_section, R.id.how_section,
+        R.id.task_section, R.id.when_section, R.id.how_section, R.id.hierarchy_section,
         R.id.repeat_section, R.id.reminder_section, R.id.work_section
     )
 
@@ -65,6 +67,11 @@ class TaskDetailLayoutTest {
         R.id.task_priority to R.id.how_section,
         R.id.task_status to R.id.how_section,
         R.id.task_category to R.id.how_section,
+        R.id.hierarchyTopic to R.id.hierarchy_section,
+        R.id.hierarchyParent to R.id.hierarchy_section,
+        R.id.hierarchyLevel to R.id.hierarchy_section,
+        R.id.hierarchyIndentButton to R.id.hierarchy_section,
+        R.id.hierarchyOutdentButton to R.id.hierarchy_section,
         R.id.repeat_preset to R.id.repeat_section,
         R.id.repeat_interval to R.id.repeat_section,
         R.id.day_tue to R.id.repeat_section,
@@ -156,12 +163,12 @@ class TaskDetailLayoutTest {
     }
 
     @Test
-    fun `the form is the six sections the design names, in that order`() {
+    fun `the form is the seven sections the design names, in that order`() {
         val binding = inflated()
         val content = binding.content()
 
         assertEquals(
-            "the editor is six blocks and nothing else: a seventh child would be a field nobody grouped, " +
+            "the editor is seven blocks and nothing else: an eighth child would be a field nobody grouped, " +
                 "and a missing one a block the design asks for that the screen does not have",
             sections,
             (0 until content.childCount).map { content.getChildAt(it).id }
@@ -183,7 +190,7 @@ class TaskDetailLayoutTest {
     }
 
     @Test
-    fun `the blocks answer what then when then how then how often then when to warn`() {
+    fun `the blocks answer what then when then how then where then how often then when to warn`() {
         val binding = inflated()
         val content = binding.content()
         val index = { id: Int -> sectionOf(content, id) }
@@ -197,6 +204,18 @@ class TaskDetailLayoutTest {
             "when it happens comes before how it is classified: the deadline is the task's own fact, " +
                 "priority and category are how it sits among the others",
             index(R.id.when_section) < index(R.id.how_section)
+        )
+        assertTrue(
+            "classification comes before where the task stands in the notebook — §6.2 puts the hierarchy block " +
+                "immediately after the three choices that classify it, because a reader who has just said what kind " +
+                "of task this is next asks whose task it is",
+            index(R.id.how_section) < index(R.id.hierarchy_section)
+        )
+        assertTrue(
+            "and the tree comes before repetition: the block the brief names goes between `how_section` and " +
+                "`repeat_section`, and a move that changes a task's level has nothing to do with the rule that " +
+                "brings it back",
+            index(R.id.hierarchy_section) < index(R.id.repeat_section)
         )
         assertTrue(
             "classification comes before repetition — this is the first of three boundaries that moved. " +
@@ -457,7 +476,9 @@ class TaskDetailLayoutTest {
         val context = binding.root.context
         val changing = listOf(
             R.id.plan_hint, R.id.repeat_scope_hint, R.id.series_status,
-            R.id.reminder_hint, R.id.reminder_status, R.id.work_state_hint
+            R.id.reminder_hint, R.id.reminder_status, R.id.work_state_hint,
+            // §6.2: a press moves all three of these while the reader is standing on the button that moved them.
+            R.id.hierarchyTopic, R.id.hierarchyParent, R.id.hierarchyLevel
         )
         changing.forEach { id ->
             val view = binding.root.findViewById<View>(id)
@@ -478,6 +499,7 @@ class TaskDetailLayoutTest {
             R.id.task_section to R.string.section_task,
             R.id.when_section to R.string.section_when,
             R.id.how_section to R.string.section_how,
+            R.id.hierarchy_section to R.string.section_hierarchy,
             R.id.repeat_section to R.string.section_repeat,
             R.id.reminder_section to R.string.reminder_section_title,
             R.id.work_section to R.string.work_section_title
@@ -537,6 +559,8 @@ class TaskDetailLayoutTest {
             R.id.reminder_at_time, R.id.reminder_one_day, R.id.repeat_preset, R.id.saveTask
         )
         val hiddenNow = listOf(
+            R.id.hierarchy_section, R.id.hierarchyTopic, R.id.hierarchyParent, R.id.hierarchyLevel,
+            R.id.hierarchyIndentButton, R.id.hierarchyOutdentButton,
             R.id.reminder_custom_minutes, R.id.reminder_status, R.id.repeat_interval,
             R.id.repeat_day_of_month, R.id.repeat_scope_this, R.id.repeat_scope_future,
             R.id.pauseSeriesButton, R.id.deleteSeriesButton

@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-    The task editor: a scrolling form of six labelled sections, above a footer that does not scroll.
+    The task editor: a scrolling form of seven labelled sections, above a footer that does not scroll.
 
     Two decisions, both argued in the plan and both pinned by `TaskDetailLayoutTest`:
 
     The order. The fields used to run title, description, deadline, plan, *measured time*, priority, status,
     category, *reminders*, *repeat*, buttons — so the record of what a task had already cost sat in the
     middle of filling it in, and the warnings came before the rule that decides which deadlines there are to
-    warn about. The six blocks now answer one question after another: what the task is, when it happens, how
-    it is classified, how often it comes back, when to warn about it, what it actually cost.
+    warn about. The blocks now answer one question after another: what the task is, when it happens, how
+    it is classified, where it sits in the notebook, how often it comes back, when to warn about it, what it
+    actually cost.
 
     The footer. Save and Cancel used to be the last views inside the scroll, which measured 1619px down a
     500px window in the layout test — a reader on a small phone had to scroll a form they had just finished
@@ -386,6 +387,84 @@
                         android:ellipsize="end" />
 
                 </com.google.android.material.textfield.TextInputLayout>
+
+            </LinearLayout>
+
+            <!-- Hierarchy: where this task sits in the reader's own notebook, and the two moves that change it. The
+                 three lines state facts the tree already holds — the topic the row is filed under, the task its
+                 `parent_uuid` names, the level the policy measures — and none of them is read out of the title or
+                 out of where the row happens to sit in a list. The two verbs carry §6.1's sentences, so the card's
+                 menu and this screen cannot grow two vocabularies for one move, and a refusal the app has no
+                 sentence for hides its action rather than naming it badly. The block stands down completely for a
+                 task with no row yet: an unsaved task is in no tree, and both commands name an identity it does not
+                 have. The three lines are live regions because a press changes them while the reader is standing on
+                 a button — the same reason `plan_hint` and `reminder_status` announce themselves. -->
+            <LinearLayout
+                android:id="@+id/hierarchy_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_section"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/hierarchy_title"
+                    style="@style/Widget.TaskPlanner.SectionHeader"
+                    android:accessibilityHeading="true"
+                    tools:targetApi="28"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_hierarchy" />
+
+                <TextView
+                    android:id="@+id/hierarchyTopic"
+                    android:accessibilityLiveRegion="polite"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+                    tools:text="Topic: office-block" />
+
+                <TextView
+                    android:id="@+id/hierarchyParent"
+                    android:accessibilityLiveRegion="polite"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+                    tools:text="Parent: planning" />
+
+                <TextView
+                    android:id="@+id/hierarchyLevel"
+                    android:accessibilityLiveRegion="polite"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+                    tools:text="Level: 2" />
+
+                <!-- Two bands, in the order the reader weighs them: hang it on the row above, then lift it out of
+                     the one it hangs on. Full width because both labels are sentences rather than verbs, and a
+                     `wrap_content` text button at 320dp would put the reason for a refusal off the screen. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/hierarchyIndentButton"
+                    style="@style/Widget.TaskPlanner.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:minHeight="@dimen/touch_target_min"
+                    android:minWidth="@dimen/touch_target_min"
+                    android:text="@string/row_indent" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/hierarchyOutdentButton"
+                    style="@style/Widget.TaskPlanner.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:minHeight="@dimen/touch_target_min"
+                    android:minWidth="@dimen/touch_target_min"
+                    android:text="@string/row_outdent" />
 
             </LinearLayout>
 

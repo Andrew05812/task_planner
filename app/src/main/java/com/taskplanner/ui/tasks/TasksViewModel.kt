@@ -268,13 +268,16 @@ class TasksViewModel @Inject constructor(
     private var lastRender: RenderInput? = null
 
     /**
-     * The blocks the last render drew, in the order it drew them, and the profile's rows it measured those against.
+     * The blocks the last render drew, in the order it drew them, the profile's rows it measured those against, and
+     * the topics whose headers it drew.
      *
-     * §6's hierarchy menu needs both and cannot rebuild either: a block is what an indent hangs a row on — the rows
-     * the reader sees under one header, in the order the list put them — while [HierarchyScreen.stored] holds the
-     * parents a filter or a fold took off screen, which is what the depth and the parent-link questions are answered
-     * against, because that is what the write will be validated against. Read-only from outside, and `null` before
-     * the first render, which is the only state in which no card can have been pressed.
+     * §6's hierarchy menu needs the first two and cannot rebuild either: a block is what an indent hangs a row on —
+     * the rows the reader sees under one header, in the order the list put them — while [HierarchyScreen.stored] holds
+     * the parents a filter or a fold took off screen, which is what the depth and the parent-link questions are answered
+     * against, because that is what the write will be validated against. §6.2's editor reads the same snapshot: it is
+     * the only place a task's topic has a name without a second read of storage, so [HierarchyScreen.topics] travels
+     * with it. Read-only from outside, and `null` before the first render, which is the only state in which no card
+     * can have been pressed.
      */
     var hierarchyContext: HierarchyScreen? = null
         private set
@@ -283,12 +286,17 @@ class TasksViewModel @Inject constructor(
      * What the screen drew: [blocks] is one entry per topic header — the rows under it, in the order the list drew
      * them, and an empty one for a collapsed topic — followed by the rows drawn under no header at all.
      *
+     * [stored] holds the profile's own rows, which is what the depth and the parent-link questions are answered
+     * against, and [topics] holds the groups the headers were drawn from in the same pass — so a screen that is not
+     * the list can name a task's topic without reading storage a second time.
+     *
      * [blockFor] answers the one question a pressed card asks: which sequence was *this* row drawn inside, because
      * that is the only sequence in which "the row above it" means what the reader sees.
      */
     class HierarchyScreen internal constructor(
         val blocks: List<List<Task>>,
-        val stored: List<Task>
+        val stored: List<Task>,
+        val topics: List<TaskGroup>
     ) {
         fun blockFor(taskId: Long): List<Task>? = blocks.firstOrNull { block -> block.any { it.id == taskId } }
     }
@@ -497,7 +505,7 @@ class TasksViewModel @Inject constructor(
         _categories.value = input.categories
         // Whatever a card is about to be asked about, it is asked about the screen that was just drawn: the blocks and
         // the storage are published with the items, so a press and a render can never be reading different trees.
-        hierarchyContext = HierarchyScreen(blockTasks, input.tasks)
+        hierarchyContext = HierarchyScreen(blockTasks, input.tasks, input.groups)
         _state.update {
             it.copy(
                 items = items,
@@ -1043,7 +1051,14 @@ class TasksViewModel @Inject constructor(
             _taskSaveState.value = TaskSaveState.Loading
             try {
                 val existing = _currentTask.value
-                val task = (existing ?: Task(title = title, description = description, userId = 0)).copy(
+                // The row as storage holds it now, not as this screen loaded it. `updateTask` writes every column,
+                // and §6.2 lets the reader move the task from this very screen, so copying the loaded snapshot would
+                // hand back the `parent_uuid` the move had just changed — indent a task, press Save, watch the tree
+                // put it back. Every field the editor owns still comes from the fields below; only the columns this
+                // screen does not own are taken from storage. If the row is gone, the loaded copy stands, which is
+                // the same write the old code made and the same one that updates nothing.
+                val stored = existing?.let { taskRepository.getTaskById(it.id) }
+                val task = (stored ?: existing ?: Task(title = title, description = description, userId = 0)).copy(
                     title = title.trim(),
                     description = description.trim(),
                     status = status,

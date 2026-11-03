@@ -242,6 +242,27 @@ object TaskHierarchyPolicy {
     }
 
     /**
+     * The row an editor Indent would hang [row] on: its nearest stored sibling, or null when it has none.
+     *
+     * [hierarchyOffers] answers the same question for the list, where "the row above" means the one the reader can
+     * see. The editor has no block on screen — it holds one task — so the only neighbour that means anything there
+     * is the nearest row the profile stores *in the same sibling set*: same profile, same topic, same parent. A row
+     * that is first in its set has no candidate, which [indentRefusal] answers as
+     * [HierarchyMoveRefusal.NO_ROW_ABOVE] rather than as a move the domain would refuse in silence, and a row that is
+     * not in [TreeFacts.rows] at all has none either: the screen cannot hang a task on a sequence it was never given.
+     *
+     * Walked backwards over the stored sequence and nothing else, so the answer is the tree's own order — not the
+     * order a filter or a fold left on the list, and not the row's title.
+     */
+    fun previousSibling(row: Task, facts: TreeFacts): Task? {
+        val rows = facts.rows
+        val at = rows.indexOfFirst { it.id == row.id }
+        if (at <= 0) return null
+        val key = siblingKeyOf(row)
+        return rows.subList(0, at).lastOrNull { siblingKeyOf(it) == key }
+    }
+
+    /**
      * Which rows could be re-parented by a press right now — the answer §6's card control is drawn from.
      *
      * **The candidate is read inside a block, and a block is what the screen draws between two headers.** The profile
