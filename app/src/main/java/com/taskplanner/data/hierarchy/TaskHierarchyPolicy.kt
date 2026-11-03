@@ -211,6 +211,33 @@ object TaskHierarchyPolicy {
     data class FoldDelta(val hides: Int = 0, val reveals: Int = 0)
 
     /**
+     * For every row in [drawnIds], the ancestors the screen would otherwise lose — in the order a reader has to meet
+     * them: topmost first, so a caller can emit them above the row that needed the path.
+     *
+     * One map for the whole screen, built in one pass. Asking it per row would rebuild the uuid index per row, which
+     * is quadratic in the size of the account on the path that re-renders every second a timer runs — the same
+     * arithmetic §14's 10k benchmark exists to catch, and the reason [foldDeltas] is a map for the same reason.
+     *
+     * This is §7's filter clause as a function. A category or status filter that drops a parent while keeping its
+     * child must not present that child as somebody's topic's first task, and the brief's preferred answer is to keep
+     * the ancestor rows as context rather than to invent a marker for a missing one. Walking the chain over
+     * [rows] — the profile, not the screen — is what makes the path *complete*: an ancestor two levels up can be
+     * dropped by the same filter as its descendant, and a partial path would leave the same false root one step down.
+     *
+     * The two blank rules and the cycle bound are [ancestorsOf]'s, for the same reasons it states.
+     */
+    fun missingAncestorsBy(rows: List<Task>, drawnIds: Set<Long>): Map<Long, List<Task>> {
+        val byUuid = rows.filter { it.uuid.isNotBlank() }.associateBy { it.uuid }
+        val paths = HashMap<Long, List<Task>>()
+        rows.forEach { row ->
+            if (row.id !in drawnIds) return@forEach
+            val path = ancestorsOf(row, byUuid).filter { it.id !in drawnIds }.reversed()
+            if (path.isNotEmpty()) paths[row.id] = path
+        }
+        return paths
+    }
+
+    /**
      * The chain of rows above [row], nearest first, as far as the given set reaches.
      *
      * Bounded by a visited set and by the two blank rules: `tasks.uuid` defaults to `''` and a pull can write an

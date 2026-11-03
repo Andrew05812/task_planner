@@ -99,6 +99,7 @@
     <string name="delete_blocked_running">Сначала остановите отсчёт времени</string>
     <string name="delete_row_missing">Этой задачи больше нет в списке</string>
     <string name="branch_toggle">Показать или скрыть эту ветку</string>
+    <string name="row_shown_for_context">показано для контекста</string>
     <!-- Both labels name the state and the press: свернуть and развернуть differ by one unstressed prefix, and
          TalkBack does not re-announce after a press, so a name that carries only the verb asks the reader to
          remember which way they last went. The verb governs the numeral's case (скрыть/показать + винительный). -->

@@ -66,7 +66,10 @@ sealed interface TasksListItem {
          *
          * Zero for a topic's own child and for anything with no parent at all. It is a fact about the rows on
          * screen rather than a column the reader has to trust: [TaskTree] measures it over the list the filters
-         * left, so a hidden parent moves its child to the margin instead of inventing a level for it.
+         * left, so a row whose parent is genuinely not drawn sits at the margin instead of inventing a level for
+         * it. §7's filter clause is what keeps "genuinely not drawn" rare — a parent a filter dropped is drawn
+         * above the child as context — so the margin case is left to the arrangements no rule can complete, like
+         * a parent another device deleted while its child was being pulled.
          */
         val depth: Int = 0,
         /**
@@ -89,7 +92,19 @@ sealed interface TasksListItem {
          * rows the reader has already committed to deleting, so the control stands down for the whole list, and the
          * only way a diff can do that is if the mode is part of what the rows say about themselves.
          */
-        val selectionMode: Boolean = false
+        val selectionMode: Boolean = false,
+        /**
+         * Whether this row is on the screen because something *else* needs the path above it, rather than because
+         * the reader asked for it.
+         *
+         * §7 forbids presenting somebody's subtask as a root: a category or status filter that drops a parent must
+         * not move its child to the card's margin and draw it as a topic's own first task. The chosen answer is the
+         * one the brief prefers — the missing ancestors are drawn above the row that needs them — and a row inserted
+         * that way is not a match. It is marked, it is not counted as an answer, and it offers none of the controls
+         * a row the reader selected would offer: a fold, a handle and a tick that act on a task nobody asked about
+         * are three ways to lose data the filter was hiding.
+         */
+        val shownForContext: Boolean = false
     ) : TasksListItem
 }
 
@@ -100,6 +115,20 @@ sealed interface TasksListItem {
  * that is not a stored fact: it is the open stretch re-measured each second from the start in the
  * database. A card with nothing measured and nothing running shows no line at all rather than a zero.
  */
+/**
+ * One row the screen will draw, and whether the reader asked for it.
+ *
+ * `isContext` is the difference between a match and the path above a match: a category or status filter that dropped
+ * a parent §7 refuses to answer by drawing the child as a root, so the parent is drawn too — and everything that
+ * treats the list as *answers* (the topic's count, a batch, a drag, a fold) has to be able to tell the two apart.
+ */
+private data class DisplayedRow(
+    val task: Task,
+    val isContext: Boolean,
+    /** The topic whose header this row is drawn under — the answer's own, for a path row. */
+    val displayGroupId: String? = task.groupId
+)
+
 data class CardWork(
     val closedSeconds: Long = 0L,
     val liveSeconds: Long? = null,
@@ -225,6 +254,15 @@ class TasksViewModel @Inject constructor(
      */
     private var lastRender: RenderInput? = null
 
+    /**
+     * The ids this screen drew as the path above somebody's match, from the last render.
+     *
+     * The refusals that follow are decided here rather than in the view, because the view is a copy of the state and
+     * the state is a copy of this: a row the reader did not ask for must not be added to a batch by a long press, by
+     * a tick, or by "select all", and the renderer is the only place that knows which rows those were.
+     */
+    private var contextIds: Set<Long> = emptySet()
+
     // keeps `filters` and selection observable by a single combine without re-launching collectors
     private val selectionFlow = MutableStateFlow<Pair<Set<Long>, Boolean>>(emptySet<Long>() to false)
 
@@ -335,38 +373,70 @@ class TasksViewModel @Inject constructor(
 
         val (selected, mode) = selectionFlow.value
 
-        // Measured over the rows that survived the filters, in the order they will be drawn: the tree the reader
-        // imported is the tree they see, and a list that showed every imported task at the margin would have
-        // taken the structure in and thrown the structure away.
-        val depths = TaskTree.depthsByTaskId(visible)
+        // §7's filter clause, stated as a rule rather than left to the renderer: a filter may hide a parent, but the
+        // screen may not then present the parent's child as a root task. So the ancestors the filter dropped are
+        // emitted above the row that needs the path — topmost first, once each, and never a row that matched.
+        //
+        // The walk runs over the profile (`input.tasks`) rather than over the filter's survivors, because a partial
+        // path leaves the same false root one level down: two generations can be dropped by one filter.
+        val drawnMatches = visible
+        val matchedIds = drawnMatches.mapTo(HashSet()) { it.id }
+        val displayed = ArrayList<DisplayedRow>(drawnMatches.size)
+        val emittedIds = HashSet<Long>(drawnMatches.size)
+        val paths = TaskHierarchyPolicy.missingAncestorsBy(input.tasks, matchedIds)
+        drawnMatches.forEach { match ->
+            paths[match.id].orEmpty().forEach { ancestor ->
+                // The ancestor is drawn under *this* answer's header, not under the one its own `group_id` names:
+                // a subtree is supposed to keep one topic, and where a pull or a restore left it not doing so,
+                // filing the path row under its own header would put a parent below the child it exists to lead —
+                // which is the false root §7 forbids, redrawn in a new shape.
+                if (emittedIds.add(ancestor.id)) {
+                    displayed += DisplayedRow(ancestor, isContext = true, displayGroupId = match.groupId)
+                }
+            }
+            if (emittedIds.add(match.id)) displayed += DisplayedRow(match, isContext = false)
+        }
+        // The refusals that follow are decided from this: a row nobody asked for is not a row a long press can put
+        // into a batch, and the screen is the only place that knows which ones those are.
+        contextIds = displayed.filter { it.isContext }.mapTo(HashSet()) { it.task.id }
+
+        val ordered = displayed.map { it.task }
+        // Measured over the rows that will actually be drawn, context rows included: the tree the reader imported is
+        // the tree they see, and a nested row whose parent the filter dropped is now drawn under that parent rather
+        // than at the margin, which is the whole point of inserting the path.
+        val depths = TaskTree.depthsByTaskId(ordered)
         // What each card's fold would move on the screen the reader is looking at: the rows drawn under it, or the
         // rows its own fold is holding back. Measured over the filter's survivors rather than over the whole profile,
         // because a row a filter dropped is not something any press can bring back, and a card that counted it would
         // advertise a fold that changes nothing the reader can see.
-        val drawn = visible.mapTo(HashSet()) { it.id }
+        val drawn = ordered.mapTo(HashSet()) { it.id }
         val foldDeltas = TaskHierarchyPolicy.foldDeltas(afterFilters, drawn)
 
         val items = mutableListOf<TasksListItem>()
         val groupedTaskIds = mutableSetOf<Long>()
         val groupsWithTasks = input.groups.map { group ->
-            val groupTasks = visible.filter { it.groupId == group.uuid }
-            group to groupTasks
+            group to drawnMatches.filter { it.groupId == group.uuid }
         }
-        groupsWithTasks.forEach { (group, groupTasks) ->
-            if (groupTasks.isEmpty() && !input.groups.contains(group)) return@forEach
-            val allSelected = groupTasks.isNotEmpty() && groupTasks.all { it.id in selected }
-            items += TasksListItem.GroupHeader(group, groupTasks.size, allSelected)
+        groupsWithTasks.forEach { (group, groupMatches) ->
+            if (groupMatches.isEmpty() && !input.groups.contains(group)) return@forEach
+            val allSelected = groupMatches.isNotEmpty() && groupMatches.all { it.id in selected }
+            // The count answers "how many of this topic's rows matched", and scaffolding is not an answer to a
+            // question nobody asked it.
+            items += TasksListItem.GroupHeader(group, groupMatches.size, allSelected)
             if (!group.collapsed) {
-                groupTasks.forEach { task ->
-                    items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, foldDeltas, mode)
-                    groupedTaskIds += task.id
+                displayed.filter { it.displayGroupId == group.uuid }.forEach { row ->
+                    items += taskRow(row, input, categoryMap, selected, depths[row.task.id] ?: 0, foldDeltas, mode)
+                    groupedTaskIds += row.task.id
                 }
             } else {
-                groupedTaskIds += groupTasks.map { it.id }
+                // A collapsed topic draws none of its rows, and the path rows belong to it as much as the answers
+                // do — leaving them out would drop them into the tail, under no header at all, which is exactly the
+                // presentation this block exists to stop.
+                groupedTaskIds += displayed.filter { it.displayGroupId == group.uuid }.map { it.task.id }
             }
         }
-        visible.filter { it.id !in groupedTaskIds }.forEach { task ->
-            items += taskRow(task, input, categoryMap, selected, depths[task.id] ?: 0, foldDeltas, mode)
+        displayed.filter { it.task.id !in groupedTaskIds }.forEach { row ->
+            items += taskRow(row, input, categoryMap, selected, depths[row.task.id] ?: 0, foldDeltas, mode)
         }
 
         _categories.value = input.categories
@@ -386,7 +456,7 @@ class TasksViewModel @Inject constructor(
     }
 
     private fun taskRow(
-        task: Task,
+        row: DisplayedRow,
         input: RenderInput,
         categoryMap: Map<Long, Category>,
         selected: Set<Long>,
@@ -394,25 +464,29 @@ class TasksViewModel @Inject constructor(
         foldDeltas: Map<Long, TaskHierarchyPolicy.FoldDelta>,
         selectionMode: Boolean
     ) = TasksListItem.TaskRow(
-        task,
-        task.categoryId?.let { categoryMap[it] },
-        task.id in selected,
-        task.seriesUuid?.let { input.rules[it] },
-        input.pendingReminders[task.uuid] ?: 0,
+        row.task,
+        row.task.categoryId?.let { categoryMap[it] },
+        row.task.id in selected,
+        row.task.seriesUuid?.let { input.rules[it] },
+        input.pendingReminders[row.task.uuid] ?: 0,
         CardWork(
-            closedSeconds = input.work.closedSecondsOf(task.id),
-            liveSeconds = input.work.liveSecondsOf(task.id),
-            phase = input.work.phaseOf(task.id)
+            closedSeconds = input.work.closedSecondsOf(row.task.id),
+            liveSeconds = input.work.liveSecondsOf(row.task.id),
+            phase = input.work.phaseOf(row.task.id)
         ),
         depth = depth,
         // Which of the two numbers the card prints is the stored state's decision, not the screen's: a row drawn
-        // closed advertises what opening it returns, and a row drawn open what folding it takes away.
-        foldRows = if (task.childrenCollapsed) {
-            foldDeltas[task.id]?.reveals ?: 0
+        // closed advertises what opening it returns, and a row drawn open what folding it takes away. A context row
+        // gets no number from [foldDeltas] at all — its universe is the filter's survivors, and a row a filter
+        // dropped is not in it — so the flag below is the belt on that brace, and `TasksFilterContextTest` binds a
+        // row that carries both, so a future change to that universe cannot quietly grow a control on scaffolding.
+        foldRows = if (row.task.childrenCollapsed) {
+            foldDeltas[row.task.id]?.reveals ?: 0
         } else {
-            foldDeltas[task.id]?.hides ?: 0
+            foldDeltas[row.task.id]?.hides ?: 0
         },
-        selectionMode = selectionMode
+        selectionMode = selectionMode,
+        shownForContext = row.isContext
     )
 
     private fun Priority.rank(): Int = when (this) {
@@ -440,6 +514,11 @@ class TasksViewModel @Inject constructor(
     // ---------------------------------------------------------------- selection
 
     fun toggleSelection(taskId: Long) {
+        // A scaffolding row cannot *join* a batch — it is here because something else needed the path, not because
+        // the reader asked. It can still leave one: a row selected while it was an answer may be drawn as context
+        // after the next filter change, and hiding its tick then would leave the reader counting a row they cannot
+        // un-count.
+        if (taskId in contextIds && taskId !in selectionFlow.value.first) return
         val (selected, mode) = selectionFlow.value
         val next = if (taskId in selected) selected - taskId else selected + taskId
         selectionFlow.value = next to true
@@ -447,6 +526,7 @@ class TasksViewModel @Inject constructor(
     }
 
     fun enterSelection(taskId: Long) {
+        if (taskId in contextIds) return
         selectionFlow.value = setOf(taskId) to true
         refreshSelectionViews()
     }
@@ -459,6 +539,9 @@ class TasksViewModel @Inject constructor(
     fun selectAllVisible() {
         val ids = _state.value.items
             .filterIsInstance<TasksListItem.TaskRow>()
+            // "All" means all of the answers, not all of the rows on the screen: the path above a match is drawn
+            // because the match needed it, and a filter that hid it hid it for a reason.
+            .filterNot { it.shownForContext }
             .map { it.task.id }
             .toSet()
         selectionFlow.value = ids to true
@@ -469,6 +552,9 @@ class TasksViewModel @Inject constructor(
         val groupIds = _state.value.items
             .filterIsInstance<TasksListItem.TaskRow>()
             .filter { it.task.groupId == group.uuid }
+            // The same rule as "select all", reached from the other direction: a header's long press sweeps the
+            // topic's answers, and a path row above an answer is not one.
+            .filterNot { it.shownForContext }
             .map { it.task.id }
             .toSet()
         val (selected, _) = selectionFlow.value
@@ -777,6 +863,14 @@ class TasksViewModel @Inject constructor(
      * draws the stored order again rather than showing an order that was never written.
      */
     fun moveTaskBeside(taskId: Long, anchorTaskId: Long, placeAfter: Boolean) {
+        // A row drawn as context cannot be a drop anchor. Its place in the list is derived from whichever answer
+        // needs it, so ordering against it would be a gesture whose result moves when the next filter redraws the
+        // path — the card would land somewhere other than where the finger left it. The same answer as any other
+        // refusal: draw the stored order again.
+        if (anchorTaskId in contextIds) {
+            lastRender?.let(::render)
+            return
+        }
         viewModelScope.launch {
             try {
                 val outcome = hierarchyRepository.moveWithinSiblings(taskId, anchorTaskId, placeAfter)

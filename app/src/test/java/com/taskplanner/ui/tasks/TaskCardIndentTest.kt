@@ -165,8 +165,11 @@ class TaskCardIndentTest {
 
     @Test
     fun depthComesFromTheRowsOnScreenNotFromAStoredNumber() {
-        // The card is drawn from `Task.parent_uuid` measured over the list, so a task whose parent is filtered
-        // out is drawn at the margin — which is the truth about what the reader is looking at.
+        // The card is drawn from `Task.parent_uuid` measured over the list, so a task whose parent is not on that
+        // list is drawn at the margin — which is the truth about what the reader is looking at. §7's filter clause
+        // is what keeps the case rare: a parent a filter dropped is now drawn above the child as context
+        // (`TasksFilterContextTest`), and this test measures `TaskTree` directly, so the margin is still the answer
+        // for the paths no rule can complete — a parent another device deleted, a link across a topic boundary.
         val visible = listOf(task("child", "hidden-parent", 0))
 
         val depths = TaskTree.depthsByTaskId(visible)

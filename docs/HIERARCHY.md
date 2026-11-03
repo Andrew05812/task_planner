@@ -92,13 +92,62 @@ does — "Свернуть" and "Развернуть" differ by one unstressed 
 a label that carries only the verb asks the reader to remember which way they last went. The count rides inside the name
 as a plural, so the digit is not also spoken.
 
-**What §7 still owes.** «Если фильтр скрывает родителя» — a category or status filter that drops a parent while keeping
-its child currently draws that child at the card's own margin, because `TaskTree.depthsByTaskId` measures over the rows
-that survived the filter. That is honest about what is on screen, and it is not what §7 asks for: the brief forbids
-showing a descendant as though it had become a root, and prefers keeping the ancestor rows as context. The fix is the
-next block, not this section, and a reader who filters by status today can therefore see a nested row at the margin
-without the row above it. `a_search_ignores_the_fold…` and `TaskCardIndentTest.depthComesFromTheRowsOnScreen…` pin the
-behaviour as it is, so the block that changes it has to say so in a failing test first.
+**A filter that hides a parent draws the parent anyway, and says so.** §7 is explicit that a filter may not present
+somebody's subtask as a root task («нельзя показывать его потомка так, будто он стал корневой задачей»), and offers two
+answers to test: keep the ancestor rows as context, or mark the missing parent while holding the real depth. The app
+takes the first, because it is the one the brief calls preferred and the one the reader can act on — a row you can see
+is a row you can open, and a marker for a parent you cannot reach teaches the reader that something is missing without
+letting them get to it. `TaskHierarchyPolicy.missingAncestorsBy(rows, drawnIds)` walks the *profile*, not the screen,
+because a partial path leaves the same false root one level down: two generations can be dropped by one filter. It
+answers for every drawn row in one pass, because the same walk done per row rebuilds the uuid index per row, and the
+tasks screen re-renders every second a timer runs. The renderer emits each dropped ancestor once, topmost first,
+immediately above the first answer that needs it, and marks it with `TaskRow.shownForContext` — and an ancestor that
+matched is never drawn twice, which a `ListAdapter` keyed on task id would reject as loudly as a reader would.
+
+What a context row is *not* is the part that keeps this safe:
+
+* it is not an answer. The topic header counts `drawnMatches`, not the rows on screen, so "3" still means three rows
+  the filter found;
+* it cannot join a batch — not by a long press, not by a tick, not by "select all", and not by a topic header's long
+  press, which sweeps a topic's answers. The refusals live in the view model, which is the only place that knows which
+  rows those were (`contextIds`, written by the last render). One direction stays open on purpose: a row the reader
+  selected *while it was an answer*, and which a later filter demoted to scaffolding, keeps its tick and can be
+  unticked. A batch the reader cannot see the edge of is worse than a control that adds nothing;
+* it offers no fold and no drag handle, and the card's long-press path does not fire on it, and a move cannot be
+  anchored on one: `moveTaskBeside` answers a scaffolding anchor the way it answers any other refusal, by drawing the
+  stored order again. A fold control that hides rows the reader cannot see is a control that lies about the screen, and
+  a row whose place in the list is derived from whichever answer needs it is not a place to drop anything. What stays
+  live is deliberate: the row is a real task, so opening it, editing it and the actions on it work as they always did
+  — §7's clause is about not presenting a child as a root, not about making an unreachable-by-filter parent untouchable,
+  and a delete from that card goes through §9's branch question like any other;
+* it is marked in three channels, because alpha alone is a colour claim: a shape at the head of its title
+  (`ic_context_branch`, a corner arrow in `ink_text_secondary` — the same glyph as the fold chevron would have meant two
+  opposite facts with one picture, and the decorative ink would have been a third of the claim lost under the card's own
+  0.78), the category slot on line B reading «показано для контекста» rather than a category name, and the card sitting
+  back. The text channel is the one a screen reader and a magnified reader both get. The category *dot* still carries
+  the row's own colour, and that is not a fourth channel but a fact: the dot says which category the row belongs to,
+  which is true of a scaffolding row exactly as it is true of an answer.
+
+A fold above the path still holds. The chain is inserted *after* the fold has been applied and the fold's hidden set is
+still measured over the profile, so a filter cannot uncover a branch the reader closed — which is the same rule §7's
+first half pinned, now pinned against the renderer that could break it
+(`a_fold_above_the_path_still_holds_the_branch_from_a_filter`). A search gets the path too: the brief asks a hit to make
+clear which topic and which parent task it lives under, and drawing the parent above the hit answers that without
+inventing a breadcrumb the 320dp card has no room for.
+
+**Three things are still owed a frame.** The mark is 16dp at the head of a title whose padding is the depth indent, so
+a *nested* context row spends about 20dp of its own text measure — a compound drawable does not narrow the box, it
+narrows the room inside it, which is exactly the arithmetic Robolectric's LEGACY graphics cannot see
+(`TaskCardWidthBudgetTest`'s standing note). Russian «показано для контекста» is longer than the English in the slot
+that already gives way by §4.1's 48dp rule. And the corner arrow's shape at 16dp, inside a card drawn at 0.78, is a
+legibility question the box arithmetic cannot answer. All three are §19's frames; what they can embarrass is the
+drawing, never the behaviour.
+
+One more decision lives here rather than in a test name: a context row is filed under the header of the *answer it
+leads*, not under the header its own `group_id` names. A subtree is supposed to keep one topic, and where a pull or a
+restore left a row whose ancestor names another, filing the ancestor under its own topic would draw a parent below the
+child it exists to lead — the false root again, in a shape §7's clause does not cover. `TaskHierarchyRenderTest`'s
+sibling, `TasksFilterContextTest`, holds that case.
 
 ## What that makes possible today
 
@@ -309,10 +358,11 @@ Everything that **changes the shape** of the tree by hand, and it is deliberatel
 * No indent / outdent control in the editor or on the row, and no "move to" sheet. The operations exist and are
   tested at the repository; nothing offers them yet, so a tree still arrives through an import and is edited by
   dragging within one sibling set.
-* **A filter that hides a parent still draws its child at the margin.** §7 asks for the ancestor rows to be kept as
-  context, or for the missing parent to be marked while the real depth is kept; neither exists yet, and the card's
-  indent is measured over the rows that survived the filter. It is named in the fold section above, and it is the
-  part of §7 this build does not deliver.
+* **Two channels of the context mark have no photograph yet.** §7's filter clause is implemented and asserted in a JVM
+  (`TasksFilterContextTest`, see "A filter that hides a parent draws the parent anyway" above), but the 16dp shape at
+  the head of a title and the Russian sentence in line B's give-way slot are box arithmetic here and glyph widths on a
+  device, so their fit at 320dp and at font scale 1.3 belongs to §19's frame matrix. Nothing about the *behaviour* is
+  waiting on that frame; the frame can only embarrass the drawing.
 * Deleting a parent now asks which of the two deletes the reader meant (§9 below), but the question is asked *after*
   the first confirm, not instead of it: the list's dialog still opens with "Delete Task?", and the branch question
   follows only when the domain finds rows under the row. Reshaping that into one dialog is the §6 UI pass's.

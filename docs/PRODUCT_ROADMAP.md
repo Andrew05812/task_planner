@@ -1026,13 +1026,15 @@ nowhere to put it.
   for it. `Task.parent_uuid` is the only nesting key that exists.
 - The hierarchy that is rendered is one level of grouping plus a depth-driven indent inside it:
   `TasksViewModel.render` emits a `GroupHeader`, then that group's tasks by `groupId`, each indented by
-  `TaskTree`. **A per-task fold is stored, obeyed by the list, and now has its control** (schema v18,
-  `tasks.children_collapsed`, hidden set from `TaskHierarchyPolicy.collapsedAwayIds`, and `branchFold` — digit plus
-  chevron — on line C of `item_task.xml`, painted by `TasksAdapter.bindBranch` and wired to
+  `TaskTree`. **A per-task fold is stored, obeyed by the list, drawn on the card, and its filter case is closed**
+  (schema v18, `tasks.children_collapsed`, hidden set from `TaskHierarchyPolicy.collapsedAwayIds`, and `branchFold` —
+  digit plus chevron — on line C of `item_task.xml`, painted by `TasksAdapter.bindBranch` and wired to
   `TasksViewModel.toggleBranchCollapse` by `TasksFragment`). §16.2's "a collapse control at every level" is therefore
-  built and asserted in `TaskCardBranchTest`, with one exception this stage still owns: **a filter that hides a parent
-  draws its child at the card's own margin**, where §7 asks for the ancestors to be kept as context or for the missing
-  parent to be marked while the real depth is held. `docs/HIERARCHY.md` names both the control and that gap.
+  built and asserted in `TaskCardBranchTest`, and §7's «Обработка фильтров» clause is built and asserted in
+  `TasksFilterContextTest`: a category or status filter that drops a parent now draws that parent above the child as
+  `shownForContext` — marked in three channels, not counted as a match, not selectable, and offering no fold and no
+  handle — which is the brief's preferred answer to «нельзя показывать его потомка так, будто он стал корневой
+  задачей». `docs/HIERARCHY.md` describes both, including the device frames the two channels still owe (§19).
 - Ordering primitives exist and are usable: `tasks.order` (`:141`), `TaskDao.assignTaskOrder` (`:216-228`),
   `TaskDao.getRowsInStoredOrder`, `TaskHierarchyRepository.moveWithinSiblings`, `GroupDao.nextSortOrder` (`:30-34`).
 - **The ordering defect this stage inherited is fixed** (2026-11-02, phase 1 below). `saveVisibleOrder` used to
@@ -1184,8 +1186,11 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    in the code: the click had to move from the chevron onto the whole wrapper (the digit was a dead zone that opened the
    task instead of folding it), the mode had to travel on the row (a `ListAdapter` rebinds only what changed, so an
    adapter flag left every unselected parent offering a fold during a batch), and the number had to become
-   screen-relative (a fold inside a fold promised rows no press would move). **What phase 4 still owes**: the filter
-   case (§7's ancestors-as-context, named above) and the topic's own completed mark, which is §8.
+   screen-relative (a fold inside a fold promised rows no press would move). A third commit closed the last clause of §7,
+   «Обработка фильтров»: `missingAncestorsBy` + `TaskRow.shownForContext` draw a filter-dropped parent above the child
+   that needs it, marked in three channels and refused by every batch path, which is the brief's preferred answer and
+   the end of §7's behaviour (§19 owes it two frames). **What phase 4 still owes**: the topic's own completed mark,
+   which is §8.
 5. **Controls**: indent/outdent in the editor and on the row; a long-press move for whole subtrees.
 6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping.
 7. **Device proof** at 320dp and at font scale 1.3, light and dark.

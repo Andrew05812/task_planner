@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- §7's filter clause: the shape that leads a row drawn only to hold the path above somebody's match. A corner
+     arrow, because the fact it carries is "something is above me" rather than "there is something under me" —
+     which is what the fold chevron already says on this very card, and a reader who saw the same glyph meaning both
+     would have two marks and no information. Drawn at 16dp in a 24 viewport, filled with the tertiary ink so it
+     reads in both themes without the row's own colour being the only signal. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp" android:height="16dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@color/ink_text_secondary"
+        android:pathData="M5,3H7V12H15V8L20,13L15,18V14H5Z" />
+</vector>

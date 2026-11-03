@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -193,12 +194,22 @@ class TasksHierarchyRenderTest {
 
         runBlocking { viewModel.setSearchQuery("child") }
 
+        // The hit is still returned, which is what this test was written for. What §7's filter clause then asks is
+        // that the hit not arrive *orphaned*: a row drawn alone cannot tell the reader it lives under `head`, so the
+        // path is drawn above it and marked as context. The expectation used to be `listOf("child")` — that was the
+        // behaviour before the clause, when a filtered child stood at the card's margin looking like a root, and the
+        // brief names that presentation as forbidden. The fold is still not undone: `head` is here because the child
+        // needs the path, not because the query matched it.
         assertEquals(
             "the reader typed a name they know exists; answering \"nothing found\" because a branch happens to be " +
-                "closed would be the list lying about their notebook",
-            listOf("child"),
+                "closed would be the list lying about their notebook — and answering with the row alone would make " +
+                "it look like somebody's root",
+            listOf("head", "child"),
             titles()
         )
+        assertTrue("the closed parent is here as the path, not as an answer",
+            rowOf("head").shownForContext)
+        assertFalse("and the hit is the answer", rowOf("child").shownForContext)
     }
 
     @Test

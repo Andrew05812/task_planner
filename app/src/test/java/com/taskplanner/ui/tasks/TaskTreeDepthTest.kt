@@ -19,9 +19,11 @@ import org.robolectric.RobolectricTestRunner
  * Four cases, each a way the screen could be wrong while the import stays right:
  *
  *  * **A chain.** A topic's own child sits at the margin; each level below it steps in once.
- *  * **A parent that is not on screen.** A filter that hides the line a task hangs off must not invent a level
- *    for it or lose its place: with nothing above it *here*, it is drawn at the margin, because that is the
- *    truth about the list the reader is looking at.
+ *  * **A parent that is not on screen.** A chain whose head is absent must not invent a level for a descendant or
+ *    lose its place: with nothing above it *here*, it is drawn at the margin, because that is the truth about the
+ *    list the reader is looking at. §7's filter clause is what makes that case rare rather than routine — a parent a
+ *    filter dropped is now drawn above the child as context (`TasksFilterContextTest`) — so what is left for this
+ *    measure is the chains no rule can complete: a parent another device deleted, a link that crosses a topic.
  *  * **A chain deeper than the contract.** The parser clamps at four levels and says so, but `parent_uuid` is a
  *    plain column that other paths — a sync pull, a future editor — can write. The card stops counting.
  *  * **A cycle.** Same reason: a loop in a column with no database foreign key must cost a bounded indent, not a

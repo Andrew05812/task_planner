@@ -6551,3 +6551,126 @@ warnings, unchanged from §9 and §7's first half; `assembleDebug` produced `app
 present — the debug APK's size moves between builds by more than this block's code weighs, so the number is reported
 without a trend claim. `scripts/check-localization.py`: **pass**, 993 EN strings / 988 RU / 57 plurals, 0 missing,
 0 quantity gaps, 0 placeholder mismatches.
+
+
+## 20σ — Stage 16 §7, third half: a filter may not answer with an orphan
+
+§7 has a clause about filters that the fold's first two halves left open, and it is the one place in the stage where the
+brief names both a prohibition and a preference. Prohibition: «Если фильтр скрывает родителя, нельзя показывать его
+потомка так, будто он стал корневой задачей». Preference: «Предпочтительно — показывать путь предков без превращения
+скрытой задачи в ложного root». The app did the forbidden thing on purpose — `TaskTree.depthsByTaskId` measures over
+the rows the filters left, which was honest about the screen and wrong about the tree: filter by status, and a
+subtask of a done parent arrived at the card's own margin, wearing the flat look of somebody's first topic row.
+
+**The chosen answer is the preferred one, and the reason is reachability.** Marking the missing parent while holding
+the real depth is the alternative the brief allows, and it is the cheaper one; it is also a card that tells the reader
+something is above them and gives them nothing to press. A row drawn *is* a row they can open, so the dropped ancestors
+are drawn — once each, topmost first, immediately above the first answer that needs the path. `TaskHierarchyPolicy
+.missingAncestorsBy(rows, drawnIds)` returns one `Map<Long, List<Task>>` for the whole screen — a per-row query would
+rebuild the uuid index per row, which is quadratic in the size of the account on the path that re-renders every second
+a timer runs — and walks the **profile** rather than the screen for one reason: two generations can
+disappear under one filter, and a half-path leaves the same false root one level down. An ancestor that matched is never
+inserted again — a `ListAdapter` keyed on task id rejects a duplicate as a crash, and a row that appears twice is its
+own lie before it is a test failure.
+
+**A context row is not an answer, in four ways.** The topic header counts `drawnMatches`, so "3" still means three rows
+the filter found. It cannot be selected: not by a long press, not by a tick and not by "select all" — the refusal sits in
+the view model (`contextIds`, written by the last render), because the view is a copy of the state and the state is a
+copy of the render, and a batch that swallowed a row nobody matched is a data-loss story about a filter the reader is
+still looking at. It shows no fold control even when two drawn rows hang under it, and no drag handle: a fold that hides
+rows the reader cannot see, and a reorder gesture aimed at scaffolding, are both actions on data nobody asked about. And
+it is marked in three channels — a 16dp corner arrow at the head of its title, line B's category slot reading
+«показано для контекста», and the card sitting back at 0.78 — because alpha alone is a colour claim, which is the same
+lesson Stage 4 learned from the pale category greens.
+
+**Why the word went into the category slot, and why the shape is not a chevron.** The card has no width left at 320dp:
+line A's 208dp column spends 16 on the dot and its gap and 40 on the repeat mark and the bell, leaving the title the
+152dp `TaskCardWidthBudgetTest` defends, and §7's fold control took what was left of line C. A new text element would
+have had to come out of one of those, and "this row is here for context" is not worth a reader's task name. Line B's
+third slot already gives way by the 48dp rule and already carries a two-word fact about the row, so the sentence lives
+there and nothing else moves. The glyph is a corner arrow rather than the fold chevron on purpose: the same picture
+would mean "there are rows under me" and "there are rows above me" on two neighbouring cards, and a mark with two
+opposite meanings in one list is a mark with no meaning.
+
+**Search gets the path too, because a hit without a place is a riddle.** §7 asks a search to let the reader understand
+which topic and which parent task a nested hit lives in. The topic is the group header the hit is drawn under; the
+parent is now the row drawn above it. A breadcrumb would have been the other way to say it and there is no room for one
+(above), and the fold is still not undone by the query — `a_fold_above_the_path_still_holds_the_branch_from_a_filter`
+pins the pair together: a chain is inserted after the fold is applied, and the hidden set is still measured over the
+profile, so no filter can walk a reader back into a branch they closed.
+
+**Derived, deliberately, with no column.** A fold is a `tasks.children_collapsed` column because §7 asks it to survive
+leaving the screen, a restart and a profile switch. Which rows are scaffolding is the opposite: a fact about the filter
+the reader has on right now, computed from `input.tasks` on every render and stored nowhere. Persisting it would
+resurrect somebody's context rows in a notebook where the filter is gone, and `TaskRow.shownForContext` therefore travels
+to no Firestore document and no backup entry — §11 and §12 carry the columns, not this.
+
+**RED, and three expectations that were mine rather than the app's.** The eight tests written before any of this existed
+failed as a block — `8 tests completed, 8 failed` — seven of them timing out on a path the renderer did not draw yet and
+the eighth for a reason of its own, and they went green as the renderer grew the rule. Three corrections were then
+needed, and each is named rather than smoothed over.
+`a_plain_list_without_a_filter_draws_no_context_rows_at_all` was that eighth: it asserted a topic header count of two and
+died with `List is empty` — the app draws ungrouped rows with no header at all, which is right and was news to me; the
+assertion moved to the two rows' depths, which is what that test is actually guarding.
+`a_filtered_row_is_drawn_under_the_ancestors_the_filter_dropped` had the `shownForContext` flags inverted — I wrote the
+fixture's *answers* as the scaffolding and its scaffolding as an answer, and its own first failure caught it.
+And `a_search_ignores_the_fold_because_a_query_is_a_question_not_a_way_of_browsing` expected `listOf("child")` and now
+expects `listOf("head", "child")`: the code follows the clause and the expectation was the pre-clause behaviour, so the
+expectation moved, the reason is written into the test, and the two assertions that name which row is scaffolding were
+added so the test cannot quietly return to asserting nothing.
+
+**A vacuity run that exposed its own test.** Eight deliberate breaks — each marking channel, both control
+suppressions, the two selection refusals and the select-all filter — produced **six failures of twelve**, which is one
+per break. The first pass produced **three of nine**, because the five presentation breaks all landed in a single test
+that asserted its channels in order and stopped at the first. That is a weak test, not a weak break set, so the
+presentation assertions were split into four tests and one control test, each of which now fails under its own break and
+names itself in the failure list. One fixture note came out of the same split: `contextAndMatchCards()` is called once
+per test, because `row()` seeds uuids equal to titles and calling it twice in one fixture would plant the duplicate
+identity the hierarchy refuses on purpose.
+
+**A review pass then took the block apart, and seven of its findings were real.** The reviewer was given the diff, the
+Russian clause and the app's own contracts, and told to be skeptical; the findings, with what each cost:
+
+* `missingAncestorsBy` replaced a per-row call that rebuilt the uuid index per row — quadratic in the size of the
+  account on a screen that re-renders every second a timer runs. The fold counts had already been made one-pass for the
+  same reason; the new walk broke the rule in the next function.
+* A topic header's long press swept the whole topic from `_state.value.items` and so swept the scaffolding with it —
+  the fourth door into a batch, after the long press, the tick and "select all". `TaskTree`'s sibling test had been
+  written against three of the four.
+* A row the reader selected *while it was an answer*, which the next filter demotes to context, kept its id in the
+  batch while its tick was hidden: un-countable, still deleted. The rule is now exact — a context row cannot
+  **arrive** in a batch and can always **leave** one, and the tick is drawn for the rows that hold one.
+* A context row is filed under the header of the answer it leads rather than the header its own `group_id` names, and a
+  collapsed topic now marks its path rows as grouped. Without both, a row whose ancestor names a topic the profile does
+  not list (which no gesture produces and a sync pull or a restore can) was emitted into the tail — a parent drawn
+  *below* the child, which is the false root in a shape §7's clause does not mention.
+* Two of my comments claimed the fold guard stopped a context row that "happened to have a drawn branch under it". It
+  cannot: `foldDeltas` counts within the filter's survivors and a context row is not among them, so the count is
+  unreachable by construction. The guard stays as defence in depth, the sentences now say what is reachable, and
+  `a_scaffolding_row_with_a_count_still_grows_no_fold_control` binds the pair directly so a future change of universe
+  cannot break it in silence.
+* A move can no longer be anchored on a scaffolding row. The test for it needed aiming twice: the first draft asked to
+  place the row *after* the anchor, which is where the stored sequence already had it — so the move was a no-op and the
+  test stayed green with the guard deleted, which is the single most instructive failure of this block. `placeAfter =
+  false` makes it a move that really moves, and a second command in the same fixture, aimed at a matched sibling,
+  proves a legal move still writes.
+
+Two findings were refused, with the reason in the code: the category *dot* still paints the scaffolding row's own
+category colour, because that says which category the row belongs to, which is true of it exactly as of an answer; and
+the editor, swipe panel and lifecycle actions stay live on a context row, because §7's clause is about not presenting a
+child as a root, not about making a parent the filter hid untouchable — and a delete from that card already goes through
+§9's branch question. Accepted as hygiene: two test-class comments still describing the old margin behaviour as current,
+and the mark's ink lifted from the decorative tertiary to `ink_text_secondary`, since a claim-bearing shape drawn under
+the card's own 0.78 must not be the weakest thing on the row.
+
+The two break passes together — eight presentation and refusal breaks, then seven more on the review fixes — named
+themselves in **6 of 12** and **5 of 18**; the one that did not was the drag-anchor guard above, and the fix was to the
+test, not to the assertion's wording.
+
+**Deliberately not in this commit, and named so.** Two frames: the 16dp mark at the head of a title at 320dp, and
+«показано для контекста» in line B's give-way slot at font scale 1.3. Robolectric's LEGACY metrics cannot see either —
+the box arithmetic here is real, the glyph widths are not — so §19 photographs them, and `docs/HIERARCHY.md` says so in
+the same words. Nothing else in §7 is open after this block: the storage, the list, the control, the count, the name and
+the filter clause are all implemented and asserted.
+
+**Gates after the block, measured on the tree this commit holds**: 148 classes / **1906** JVM tests / 0 failures / 0 errors / 0 skipped (1888 before it; the +18 are `TasksFilterContextTest`'s eighteen, six of which are the review round's); `lintDebug` 0 errors / **150** warnings, unchanged since §9; `assembleDebug` produced `app-debug.apk` of 15 435 828 bytes, sha256 `d9c535c4583ec7b9cb0caee2ea005084fb9ead9285dd2756f79e7877a8c013ae`; `scripts/check-localization.py`: **pass**, 994 EN strings / 989 RU / 57 plurals, 0 missing, 0 quantity gaps, 0 placeholder mismatches. One gate caught a mistake of mine rather than a lie: `EnglishLiteralAssertionTest` refused the fixture title `"plan"`, which is a real label in this app (`plan_section_title`), so the seed data became "planning". The gate's rule is that a UI test may compare a rendered string to `getString(...)` or to a number and never to an English word; a seeded title that happens to *be* a resource value cannot be told apart from an assertion about that label, so the fixture moves and the rule does not.

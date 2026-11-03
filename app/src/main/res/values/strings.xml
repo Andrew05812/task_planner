@@ -130,6 +130,11 @@
          Russian needs four forms for it, English two. The noun is "nested task" rather than the delete dialog's
          "subtask" on purpose — this number counts the whole branch under the row, not the generation below it. -->
     <string name="branch_toggle">Show or hide this branch</string>
+    <!-- §7's filter clause: when a category or status filter drops a parent, the parent is drawn above its child so
+         the child does not read as a root task. That row is not an answer to the filter, and the line the category
+         name would occupy says so instead — the shape at the head of the title and the card sitting back are the two
+         channels a sighted reader gets, and this sentence is the one a screen reader and a magnified reader both get. -->
+    <string name="row_shown_for_context">shown for context</string>
     <plurals name="branch_collapse">
         <item quantity="one">Collapse the open branch: hide %1$d nested task</item>
         <item quantity="other">Collapse the open branch: hide %1$d nested tasks</item>

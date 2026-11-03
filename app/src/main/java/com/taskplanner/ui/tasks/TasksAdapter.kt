@@ -124,7 +124,9 @@ class TasksAdapter(
         private val indentPerLevel = binding.root.context.resources.getDimensionPixelSize(R.dimen.task_depth_indent)
 
         private val longPressRunnable = Runnable {
-            if (!dragging && current != null) {
+            // The card cannot reach a row the screen refuses to select; the refusal itself lives in the view model,
+            // which is the only place that knows which rows are scaffolding.
+            if (!dragging && current != null && current?.shownForContext != true) {
                 longPressFired = true
                 current?.task?.let { onLongPressTask(it) }
             }
@@ -327,7 +329,8 @@ class TasksAdapter(
             val branch = item.foldRows
             val collapsed = item.task.childrenCollapsed
 
-            b.branchFold.visibility = if (branch > 0 && !item.selectionMode) View.VISIBLE else View.GONE
+            val scaffolding = item.shownForContext
+            b.branchFold.visibility = if (branch > 0 && !item.selectionMode && !scaffolding) View.VISIBLE else View.GONE
             b.branchCount.text = branch.toString()
             // The topic header's convention, kept: 90 degrees is "open, the rows are below me", 0 is "closed,
             // the rows are what I am pointing at. Rotation alone would leave a reader who cannot see the screen
@@ -377,7 +380,14 @@ class TasksAdapter(
             b.taskStatus.setBackgroundResource(p.pillBackgroundRes)
             b.taskStatus.setTextColor(ContextCompat.getColor(context, p.pillTextRes))
 
-            b.taskCategory.text = item.category?.name ?: context.getString(R.string.no_category)
+            b.taskCategory.text = if (item.shownForContext) {
+                // The word that would stand here is the category the filter was *not* asking for, and a reader who
+                // saw it would read the row as a match with a surprising category. The slot says what the row is
+                // instead: a sentence, so it reaches a screen reader and a magnified reader as well as an eye.
+                context.getString(R.string.row_shown_for_context)
+            } else {
+                item.category?.name ?: context.getString(R.string.no_category)
+            }
             // Restored on every bind: a holder whose previous row had no room for the name would otherwise
             // keep it hidden for the rest of the list's life, and the room is re-measured below.
             b.taskCategory.visibility = View.VISIBLE
@@ -467,13 +477,28 @@ class TasksAdapter(
             bindWork(item)
             bindBranch(item)
 
-            b.dragHandle.visibility = if (selectionMode || !reorderEnabled) View.GONE else View.VISIBLE
-            b.selectionCheck.visibility = if (selectionMode) View.VISIBLE else View.GONE
+            b.dragHandle.visibility =
+                if (selectionMode || !reorderEnabled || item.shownForContext) View.GONE else View.VISIBLE
+            // A scaffolding row shows a tick only when it already holds one: an answer selected before the
+            // filter changed keeps its mark and stays untappable-out, and a fresh context row never grows a
+            // box a reader can press into a batch they did not ask for.
+            b.selectionCheck.visibility =
+                if (selectionMode && (!item.shownForContext || item.isSelected)) View.VISIBLE else View.GONE
             b.selectionCheck.setImageResource(
                 if (item.isSelected) R.drawable.ic_check_circle else R.drawable.ic_radio_unchecked
             )
             b.selectionCheck.alpha = if (item.isSelected) 1f else 0.6f
-            b.taskCard.alpha = if (item.isSelected) 0.92f else 1f
+            // Three channels mark a scaffolding row, because one of them is a colour claim: the card sits back, a
+            // shape leads its title, and line B says what the row is. Alpha alone would be the pale-green lesson of
+            // Stage 4's audit — a difference only the eye that knows where to look can find.
+            b.taskCard.alpha = when {
+                item.shownForContext -> 0.78f
+                item.isSelected -> 0.92f
+                else -> 1f
+            }
+            b.taskTitle.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                if (item.shownForContext) R.drawable.ic_context_branch else 0, 0, 0, 0
+            )
         }
     }
 
