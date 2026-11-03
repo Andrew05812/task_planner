@@ -6839,3 +6839,72 @@ Two things the gate did *not* hide: the tasks package was run on its own (261 te
 implementation stages, which is how the drawing RED stayed visible; and the whole suite was re-run after the review
 round's fixes rather than trusting the package run, because the review changed a production `object`'s signature, the
 fragment's menu path and the header layout, all of which other classes touch.
+
+## 20φ — Stage 16 §6.1: the row's hierarchy menu, and the crash a review found before a finger did
+
+§6.1 asks for indent and outdent *on the task row* and forbids the obvious build: «не загромождай карточку постоянными
+четырьмя кнопками. Допустимы компактное contextual menu, editor actions или раскрываемые controls». One `ImageButton` in
+the swipe panel (`hierarchyButton`, the same 76dp box the other two verbs use, `android:visibility="gone"` by default)
+opens a two-row `PopupMenu`: *Subtask of the row above*, *One level up*.
+
+**One rule, two readers.** §5 decided every admissibility question inside `TaskHierarchyRepository`'s transaction; §6
+needs the same answers *before* drawing a menu, and a second implementation in the view layer would be a second
+opinion — the kind that lets a control offer what the domain then refuses, which a reader experiences as an app that
+cannot be trusted with their tree. `TaskHierarchyPolicy.indentRefusal` and `outdentRefusal` were extracted out of the
+repository's own bodies over one shared `TreeFacts` value, the repository now calls them, and `HierarchyMenu` calls the
+same two. §5's 40-odd `HierarchyMoveTest` cases are the evidence the extraction changed nothing it decides.
+
+**RED, in the order it happened.** `HierarchyControlsTest` was written before the production code and its first runs
+were compile failures against the API the tests named. When the implementation landed, two of the 26 tests failed and
+both were the tests' own defects, named here rather than smoothed over: a fixture that wrote `parent = "rest"` — the
+*variable's* name, not any row's uuid, so the doubled-uuid case it meant to seed was a dangling link — and an assertion
+whose failure message *executed the command it was asserting about*, so the second call was a repeat indent the domain
+correctly refused. Both were fixed by repairing the test; no expectation was moved. The two cross-checks that survived
+(`what the menu calls allowed the repository writes`, `every refusal the menu names is the refusal the repository
+answers`) are the ones that matter: they run the menu's rule and the repository's write on one fixture and compare.
+
+**Then a review agent read the block, and found a crash no test had.**
+
+| finding | verdict | what the code does now |
+|---|---|---|
+| `reasonLabel` answers `0` for the two silent refusals, and `build` handed that straight to `context.getString` — a `Resources.NotFoundException`, not an empty title, on an ordinary press | **true, reproduced**: the RED run printed `android.content.res.Resources$NotFoundException: String resource ID #0x0` from `HierarchyMenu.build` | `isSilent` is *derived* from `reasonLabel` answering "no sentence exists", so the pair cannot drift; a silent row is hidden (`isVisible = false`) and the labels are total. `a menu row is never titled with a resource that does not exist` walks every value in the enum, which is how the class of bug was closed rather than the one instance |
+| the crash needed only *one* direction to be silent: a row that can rise, drawn under a neighbour with no identity of its own | **true** | `a row whose indent is silent and whose lift is real still opens a menu the reader can use` seeds exactly that (P, blank row, half-under-P), asserts the render draws the control, the menu opens, the lift is live and the indent is not shown |
+| `hierarchyOffers` measured the profile's **flat** sequence while the screen draws one **block per topic header** — so a topic's first row was judged by another topic's last row: a move the reader sees as admissible refused with «другая тема», and (under any non-manual sort) a row with a legal visible parent drawn with no control at all | **true** | the policy now takes `blocks: List<List<Task>>`; the render builds exactly the blocks it emits (a collapsed topic contributes none) and publishes `HierarchyScreen`, whose `blockFor(taskId)` is what the pressed card's menu reads. Two tests: one at the menu, one at the render |
+| the `!row.isContext` and `!selectionMode` guards in `canEditHierarchy` were invisible to the suite: the context row that happened to be drawn first had no offer either way | **true** | `a row drawn only to hold the path stands down the offer the rule would make for it` filters to a three-level chain's leaf, so the *middle* row is scaffolding **and** would be offered a lift — the guard is then the only thing keeping the control off it |
+| the refusal-redraw line in `runHierarchyCommand` was claimed by a test that never called the command | **true** | the test is renamed to what it asserts (`a row the domain would refuse is offered no control and writes nothing when pressed anyway`); `moveTaskBeside` now shares the one handler, and the KDoc says plainly that the redraw is load-bearing for a drag (the gesture has already `submitList`ed the moved rows) and courteous for an indent. The frame of a refused drag snapping back is owed to §19 |
+| `HierarchyMenu.hasOffer` was production code no screen path used, while six tests treated it as "the rule the render reads" | **true** | deleted; the tests call the two real paths — `HierarchyMenu.offer(...).anythingAvailable` for the menu, `TaskHierarchyPolicy.hierarchyOffers(...)` for the render |
+| `plan.stored.first { it.uuid == plan.head.parentUuid }` took the *first* duplicate where `facts.byUuid` keeps the *last*, and throws where the old code refused | **true** | reads the same `facts` the rule consulted and returns `PARENT_NOT_IN_PROFILE` when it finds nothing |
+| the subtree walk is bounded by the contract, so a descendant five rows down is refused by the depth rule rather than named a loop | **true, harmless** | kept — and pinned: `a descendant deeper than the walk can reach is still refused, for a reason the menu can tell` seeds a six-row chain and asserts the move is refused *and* that the reason is one the menu has a sentence for. No cycle can be written either way; only the wording differs, and §4 records that notebooks deeper than the contract exist |
+| the panel now reveals three 76dp boxes where it revealed two | **true, accepted** | the width test measures both states: three boxes on a row that can be moved, two on one that cannot, the control's own box ≥ 48dp, and the card still keeping ≥ 72dp of itself at 320dp |
+
+**Vacuity, in rounds.** A block that goes green proves nothing about the assertions being able to fail, so the
+production answers were broken one round at a time and each round's failures were read against the claim it was
+supposed to test: A (offers never drawn / menu rows always enabled / one refusal stripped of its sentence / the menu
+reading stored instead of drawn) — 4 breaks, 7 failures, every break named; B (offers always drawn / the two screen
+guards dropped / no candidate named / the control never drawn) — 11 failures, and this round is what exposed the guard
+gap and the missing render-level case; C (outdent allowed at the root / depth never refused / no redraw on refusal /
+the control always drawn) — 8 failures, 4 breaks accounted; D and E were single breaks to attribute the two guards
+separately, each producing exactly one failure in the test that claims it. After the review's fixes, two more single
+breaks: showing a silent row (1 failure, the mixed-case test) and measuring offers over the flat sequence again
+(1 failure, the render-block test).
+
+**Owned elsewhere.** `CategoryTasksViewModel.kt:91` still calls the raw `TaskRepository.deleteTask`, and the list's
+delete dialog still opens with "Delete Task?" before the branch question — both are §6 block B/C work, recorded in
+`docs/HIERARCHY.md` rather than fixed beside a menu that does not exist yet. The 32dp group-header kebab stays §16's.
+Nothing about the *domain* is owed: §5 and §9 already own the writes.
+
+**Closing §20τ's open item.** It recorded that 21 test classes kept the old teardown order until something measured them; this block is that something, and the count was 23 rather than 21, because the audit swept the whole JVM tree instead of the one package CI happened to hit.
+
+**A second thing the same review week turned up, in nobody's diff.** Only `TasksOrderingTest` had been given the
+teardown order CI run 81's race taught (`fixture.close()` before `Dispatchers.resetMain()`); **23 classes still had
+the raced order**, spread over ten packages, and a new class written this week inherited it by copy-paste. All 23 were
+rewritten mechanically — swap the two statements, one pointer comment — and no assertion moved. `HierarchyControlsTest`
+itself now carries the correct order from its first commit.
+
+**Gates after the block, measured on the tree this commit holds**: 150 classes / **1958** JVM tests / 0 failures / 0
+errors / 0 skipped (1926 before; +32 are `HierarchyControlsTest`, and no existing test was deleted, renamed away or
+relaxed); `lintDebug` 0 errors / **150** warnings, unchanged since §8; `assembleDebug` produced `app-debug.apk` of
+15 625 702 bytes, sha256 `6785c0d1889bda0eb7a902fe39a1c513b5e18ea4586c051d6aae3627eac985df`;
+`scripts/check-localization.py` **pass** — 1008 EN strings / 1003 RU / 57 plurals, 0 missing, 0 quantity gaps, 0
+placeholder mismatches (ten new strings, each with its Russian, no plural added because no row of this menu carries a
+count).

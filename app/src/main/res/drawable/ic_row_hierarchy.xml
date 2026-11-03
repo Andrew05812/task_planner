@@ -1,0 +1,20 @@
+<!--
+  The row control that opens §6's hierarchy menu: a bar with an arrow pushing in under it, and the line the row
+  would land on beneath both.
+
+  It is not the card's fold chevron (§7) and not the drag handle (§3): three shapes for three verbs, because a reader
+  who mistakes one for another moves their data. The geometry is closed polygons rather than a stroke, so it reads at
+  the 36dp the panel's own padding leaves it — the same box `ic_edit` and `ic_delete` are drawn in.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/ink_accent"
+        android:pathData="M3,5H10V2L18,8L10,14V11H3Z" />
+    <path
+        android:fillColor="@color/ink_accent"
+        android:pathData="M3,18H21V21H3Z" />
+</vector>

@@ -63,6 +63,7 @@ class TaskCardWorkTest {
             onComplete = {},
             onWorkToggle = { task -> tapped = task },
             onToggleBranch = {},
+            onHierarchy = { _, _ -> },
             onToggleGroup = {},
             onGroupMenu = { _, _ -> },
             onStartDrag = {}

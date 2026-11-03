@@ -109,6 +109,166 @@ object TaskHierarchyPolicy {
             .keys
 
     /**
+     * What a tree already known, read once so every later question costs a lookup rather than a walk.
+     *
+     * Built for a whole render and for one transaction, never per row: [indentRefusal] and [outdentRefusal] are asked
+     * by the menu for every row the screen draws, and each of them would otherwise rebuild the uuid index, the levels
+     * and the ambiguity set — quadratic in the size of the account on a screen that re-renders once a second while a
+     * timer runs. §14's 10k benchmark is what this exists to keep inside a frame.
+     */
+    data class TreeFacts internal constructor(
+        val rows: List<Task>,
+        val byUuid: Map<String, Task>,
+        val byId: Map<Long, Task>,
+        val ambiguous: Set<String>,
+        val levels: Map<String, Int>,
+        /** The deepest row hanging under each identity: 1 for a leaf. Computed upward in [MAX_TASK_LEVELS] passes. */
+        val heights: Map<String, Int>,
+        /** Every identity with an ambiguous identity somewhere below it — see [hierarchyOffers]. */
+        val tainted: Set<String>
+    )
+
+    fun factsOf(rows: List<Task>): TreeFacts {
+        val byUuid = rows.filter { it.uuid.isNotBlank() }.associateBy { it.uuid }
+        val ambiguous = ambiguousUuids(rows)
+        val levels = levelsByUuid(rows)
+        val heights = HashMap<String, Int>(byUuid.size)
+        byUuid.keys.forEach { heights[it] = 1 }
+        // Bottom-up by level rather than by recursion: a cycle in a column with no foreign key must stop costing a
+        // bounded number of passes, not a stack overflow. Three passes is the deepest tree this app permits.
+        repeat(MAX_TASK_LEVELS) {
+            rows.forEach { row ->
+                val parentUuid = row.parentUuid?.takeIf { it.isNotBlank() } ?: return@forEach
+                val height = (heights[row.uuid] ?: 1) + 1
+                if ((heights[parentUuid] ?: 1) < height) heights[parentUuid] = height
+            }
+        }
+        // Ancestors of every row claiming a doubled identity. A head with one below it cannot be moved as a block,
+        // because "everything under this row" has two answers — which is [blockIsKnowable]'s rule, read from here so
+        // it costs one set lookup per row instead of a subtree rebuild.
+        val tainted = HashSet<String>()
+        rows.filter { it.uuid in ambiguous }.forEach { row ->
+            ancestorsOf(row, byUuid).forEach { tainted += it.uuid }
+            tainted += row.uuid
+        }
+        return TreeFacts(rows, byUuid, rows.associateBy { it.id }, ambiguous, levels, heights, tainted)
+    }
+
+    /**
+     * The level [row] sits at in [facts]' tree, counted from 1 for a topic's own child.
+     *
+     * A blank identity has no level to report — nothing can be hung on it, which is what every caller has just
+     * established before asking — and an identity not in the set is answered the same way rather than crashing: a
+     * row the screen drew from a list these facts were not built over cannot be safely re-parented, and the caller's
+     * own lookup answers that.
+     */
+    fun levelOf(facts: TreeFacts, row: Task): Int =
+        if (row.uuid.isBlank()) 1 else facts.levels[row.uuid] ?: 1
+
+    /**
+     * Why hanging [head] under [candidate] would be refused, or null when the write would be made.
+     *
+     * **This is the one rule, read by two callers.** §5 decided every question here inside
+     * `TaskHierarchyRepository.indentTask`; §6 needs the same answers before it draws a menu, and a second
+     * implementation in the view layer would be a second *opinion* — the kind that lets a button offer what the domain
+     * then refuses, which a reader experiences as a control that does not work. The repository now calls this
+     * function, so the two cannot disagree by construction, and `HierarchyMoveTest` (§5's cases) plus
+     * `HierarchyControlsTest`'s agreement cases are the proof that reading the rule out of the transaction did not
+     * change what it decides.
+     *
+     * The order is the repository's, and it is not arbitrary: a loop is named before a depth, because a cycle that
+     * passed every other test would stop the walk in [levelsByUuid] and come back looking like a shallow row.
+     */
+    fun indentRefusal(head: Task, candidate: Task?, facts: TreeFacts): HierarchyMoveRefusal? = when {
+        candidate == null -> HierarchyMoveRefusal.NO_ROW_ABOVE
+        candidate.id == head.id -> HierarchyMoveRefusal.ANCHOR_IN_SUBTREE
+        // The candidate is inside the head's own branch: walking *up* from it answers the question in at most the
+        // contract's depth, where asking for the whole subtree would answer it once per row on the screen.
+        hangsUnder(candidate, head.uuid, facts) -> HierarchyMoveRefusal.ANCHOR_IN_SUBTREE
+        candidate.id !in facts.byId -> HierarchyMoveRefusal.PARENT_NOT_IN_PROFILE
+        candidate.groupId != head.groupId -> HierarchyMoveRefusal.DIFFERENT_TOPIC
+        candidate.uuid.isBlank() -> HierarchyMoveRefusal.PARENT_UNNAMED
+        candidate.uuid == head.parentUuid -> HierarchyMoveRefusal.NO_DEEPER_PARENT
+        candidate.uuid in facts.ambiguous -> HierarchyMoveRefusal.AMBIGUOUS_PARENT
+        !fitsUnder(levelOf(facts, candidate), facts.heights[head.uuid] ?: 1) -> HierarchyMoveRefusal.DEPTH_EXCEEDED
+        else -> null
+    }
+
+    /** The same rule asked without holding the facts; a single call site, never a loop over a screen. */
+    fun indentRefusal(head: Task, candidate: Task?, stored: List<Task>): HierarchyMoveRefusal? =
+        indentRefusal(head, candidate, factsOf(stored))
+
+    /**
+     * Why lifting [head] one level would be refused, or null when the write would be made.
+     *
+     * The same extraction as [indentRefusal], and the same reason. A row with no parent link, and a row whose link
+     * names nothing in the profile, are refused alike: the renderer already draws both at the margin, so an outdent
+     * would invent a level nobody can see rather than remove one.
+     */
+    fun outdentRefusal(head: Task, facts: TreeFacts): HierarchyMoveRefusal? {
+        val parentUuid = head.parentUuid?.takeIf { it.isNotBlank() }
+            ?: return HierarchyMoveRefusal.ALREADY_AT_TOPIC_ROOT
+        val parent = facts.byUuid[parentUuid] ?: return HierarchyMoveRefusal.ALREADY_AT_TOPIC_ROOT
+        if (parent.uuid in facts.ambiguous) return HierarchyMoveRefusal.AMBIGUOUS_PARENT
+        val grandparentUuid = parent.parentUuid?.takeIf { it.isNotBlank() } ?: return null
+        if (grandparentUuid in facts.ambiguous) return HierarchyMoveRefusal.AMBIGUOUS_PARENT
+        // The row above the parent is gone. Lifting further would write a link to nothing, which the renderer would
+        // draw as a margin row with an invisible owner; the reader gets a refusal instead.
+        if (grandparentUuid !in facts.byUuid) return HierarchyMoveRefusal.PARENT_NOT_IN_PROFILE
+        return null
+    }
+
+    /** The same rule asked without holding the facts; a single call site, never a loop over a screen. */
+    fun outdentRefusal(head: Task, stored: List<Task>): HierarchyMoveRefusal? =
+        outdentRefusal(head, factsOf(stored))
+
+    /**
+     * Whether [candidate] hangs somewhere below [ancestorUuid], walking up at most the depth the contract allows.
+     *
+     * Bounded and visited-guarded for the same reason [subtreeOf] is: `parent_uuid` is a plain column, so a cycle is
+     * a thing a pull or a hand-edited backup can write, and this function is called once per drawn row.
+     */
+    private fun hangsUnder(candidate: Task, ancestorUuid: String, facts: TreeFacts): Boolean {
+        if (ancestorUuid.isBlank()) return false
+        val seen = hashSetOf(candidate.uuid)
+        var next = candidate.parentUuid
+        repeat(MAX_TASK_LEVELS + 1) {
+            val walker = next ?: return false
+            if (walker.isBlank() || !seen.add(walker)) return false
+            if (walker == ancestorUuid) return true
+            next = facts.byUuid[walker]?.parentUuid
+        }
+        return false
+    }
+
+    /**
+     * Which rows could be re-parented by a press right now — the answer §6's card control is drawn from.
+     *
+     * **The candidate is read inside a block, and a block is what the screen draws between two headers.** The profile
+     * holds one sequence and the reader sees one block per topic, so measuring over the stored order would judge a
+     * topic's first row against another topic's last one: refusing a move the reader can see is admissible, and
+     * naming the reason as "another topic" about a row that is not above it on the screen. Each list in [blocks] is
+     * therefore one header's worth of rows, in the order the list draws them; a collapsed topic contributes none, and
+     * a row the screen does not draw is not an indent candidate.
+     *
+     * The depth, identity and parent questions are answered against [facts], built from the profile's stored rows,
+     * because that is what the domain checks when the press arrives. One pass over the rows and one [TreeFacts] for
+     * the whole screen, so ten thousand rows cost a render rather than ten thousand rebuilds.
+     */
+    fun hierarchyOffers(blocks: List<List<Task>>, facts: TreeFacts): Map<Long, Boolean> =
+        blocks.flatMap { block ->
+            block.mapIndexed { index, row ->
+                val candidate = if (index > 0) block[index - 1] else null
+                // A head with a doubled identity inside its own branch cannot be moved as a block, and the menu will not
+                // be able to name a reason the reader did not cause — so no control is drawn for it at all.
+                val unknowable = row.uuid in facts.ambiguous || row.uuid in facts.tainted
+                val canIndent = !unknowable && indentRefusal(row, candidate, facts) == null
+                val canOutdent = !unknowable && outdentRefusal(row, facts) == null
+                row.id to (canIndent || canOutdent)
+            }
+        }.toMap()
+
+    /**
      * Whether the block a move would carry can be named: the head's own identity, and every identity inside the
      * block, have to belong to exactly one row.
      *

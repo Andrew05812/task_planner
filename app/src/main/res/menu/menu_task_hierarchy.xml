@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The two things §6 lets a reader do to a task's place in the tree from the list itself: hang it on the row above,
+  or lift it out of the one it hangs on.
+
+  Both titles are replaced when the menu is built — `HierarchyMenu` puts the action's name on a press that would work
+  and the *reason* on one that would not, which is how «нельзя indent, если нет допустимого родителя» reaches the
+  reader as a sentence rather than as a missing row or a dead button. What is written here is the allowed case, so a
+  menu that failed to set its titles says something true about a normal row.
+
+  No "move to" here on purpose. §6.3's destination picker is its own block — it has to draw the topic path, name the
+  row's children, and compute the depth before the reader confirms — and smuggling a half version of it next to two
+  one-press actions would be the worst of both.
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/action_indent_task"
+        android:title="@string/row_indent" />
+
+    <item
+        android:id="@+id/action_outdent_task"
+        android:title="@string/row_outdent" />
+</menu>

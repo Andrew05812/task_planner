@@ -43,6 +43,13 @@ class TasksAdapter(
      * takes the task and nothing else, and the screen decides where the state is stored.
      */
     private val onToggleBranch: (com.taskplanner.data.model.Task) -> Unit,
+    /**
+     * Opens §6's hierarchy menu for one row, anchored on the control that was pressed.
+     *
+     * The adapter cannot decide what the menu holds: the answer depends on which rows the screen drew in what order,
+     * and the view model is the only place holding that. So the control reports the press and hands over the row.
+     */
+    private val onHierarchy: (View, com.taskplanner.data.model.Task) -> Unit,
     private val onToggleGroup: (TaskGroup) -> Unit,
     private val onGroupMenu: (View, TaskGroup) -> Unit,
     private val onStartDrag: (RecyclerView.ViewHolder) -> Unit,
@@ -507,6 +514,17 @@ class TasksAdapter(
 
             bindWork(item)
             bindBranch(item)
+
+            // §6's one control for two verbs. The decision is the render's rather than the adapter's because it
+            // depends on which rows the screen drew and in what order, and because a `ListAdapter` rebinds only what
+            // changed — so a row's own flag is the only way a control can be *taken away* from a card that is already
+            // on screen. A row with nothing available draws nothing: an indent that cannot indent is a button that
+            // has learned to do nothing, and §7's fold control is the precedent for hiding rather than grey-out on
+            // the card itself (the menu's greyed rows are a different case — they say why).
+            b.hierarchyButton.visibility = if (item.canEditHierarchy) View.VISIBLE else View.GONE
+            b.hierarchyButton.setOnClickListener {
+                current?.task?.let { task -> onHierarchy(b.hierarchyButton, task) }
+            }
 
             b.dragHandle.visibility =
                 if (selectionMode || !reorderEnabled || item.shownForContext) View.GONE else View.VISIBLE

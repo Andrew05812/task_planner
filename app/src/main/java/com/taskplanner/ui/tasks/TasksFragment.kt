@@ -153,6 +153,7 @@ class TasksFragment : Fragment() {
             onComplete = { task -> viewModel.completeTask(task) },
             onWorkToggle = { task -> viewModel.toggleWork(task) },
             onToggleBranch = { task -> viewModel.toggleBranchCollapse(task.id) },
+            onHierarchy = { anchor, task -> showHierarchyMenu(anchor, task) },
             onToggleGroup = { group -> viewModel.toggleGroupCollapsed(group) },
             onGroupMenu = { anchor, group -> showGroupMenu(anchor, group) },
             onStartDrag = { vh -> itemTouchHelper.startDrag(vh) }
@@ -484,6 +485,30 @@ class TasksFragment : Fragment() {
         ) { name ->
             if (name.isNotBlank()) viewModel.createGroup(name)
         }
+    }
+
+    /**
+     * Opens the hierarchy menu for one row, over the lists the last render drew from.
+     *
+     * The screen supplies the context and the commands; the decision about what may be pressed is `HierarchyMenu`'s,
+     * read from the same policy the repository writes under — so a greyed row is a refusal the domain would have
+     * answered, and an enabled one is a write it will make. A row that a newer render has already dropped answers
+     * "nothing is available", which is the honest reading of a card that stopped being on screen mid-press.
+     */
+    private fun showHierarchyMenu(anchor: View, task: Task) {
+        val screen = viewModel.hierarchyContext ?: return
+        // The block the card was drawn inside, not the profile's sequence: an indent hangs a row on the row the
+        // reader sees above it, and a topic's first row has nothing above it even when storage says otherwise.
+        val block = screen.blockFor(task.id) ?: return
+        HierarchyMenu.build(
+            context = requireContext(),
+            anchor = anchor,
+            row = task,
+            drawn = block,
+            stored = screen.stored,
+            onIndent = { row, above -> viewModel.indentTask(row.id, above.id) },
+            onOutdent = { row -> viewModel.outdentTask(row.id) }
+        ).show()
     }
 
     private fun showGroupMenu(anchor: View, group: TaskGroup) {

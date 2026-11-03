@@ -107,6 +107,21 @@
     <string name="topic_completed">тема выполнена</string>
     <!-- То же, что в английском: кнопка открывает меню из трёх пунктов, поэтому «Изменить» — про одну задачу, а не про тему. -->
     <string name="topic_actions">Действия с темой</string>
+    <!-- §6: названия дел, а не геометрии. «Отступ» — это клавиатура, а «сделать подзадачей строки выше» — это то,
+         что случится с самой заметкой читателя. Отказ называется тем же способом, что и разрешение: строка меню
+         несёт причину, а не превращается в мёртвую кнопку. Управление «поднять» требует родительного («уровня
+         выше»), управление «сделать» — творительного («подзадачей»), и это те же два падежа, что различают уже
+         подписанные здесь пару свернуть/развернуть. -->
+    <string name="row_hierarchy">Изменить, где стоит задача</string>
+    <string name="row_indent">Сделать подзадачей строки выше</string>
+    <string name="row_outdent">Поднять на уровень выше</string>
+    <string name="indent_no_row_above">Сверху нет строки, к которой её прикрепить</string>
+    <string name="indent_other_topic">Строка выше относится к другой теме</string>
+    <string name="indent_already_under_it">Она уже висит на этой строке</string>
+    <string name="indent_too_deep">Ветка не может быть глубже третьего уровня</string>
+    <string name="indent_own_child">Эта строка — в её собственной ветке</string>
+    <string name="outdent_at_topic_root">Она уже принадлежит самой теме</string>
+    <string name="outdent_parent_missing">Её родителя нет в этом блокноте</string>
     <string name="mark_topic_completed">Отметить тему выполненной</string>
     <string name="mark_topic_open">Снять отметку о выполнении</string>
     <!-- Both labels name the state and the press: свернуть and развернуть differ by one unstressed prefix, and

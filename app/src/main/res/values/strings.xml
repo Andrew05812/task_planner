@@ -146,6 +146,22 @@
          «Edit», which is the card's own word for opening one task. §8 asks the header for a TalkBack description;
          this is the part of that which was actually wrong on the row. -->
     <string name="topic_actions">Topic actions</string>
+    <!-- §6: the two things the list lets a reader do to a task's place in the tree, and the seven sentences that
+         explain why one of them is not possible. The names say the act, not the geometry — «Indent» names a key on a
+         keyboard, "Make it a subtask of the row above" names what happens to the reader's own note. A refusal is
+         never shown as the action's own name, and never shown as a dead button with no reason: the menu row carries
+         the sentence instead. Two refusals get no sentence at all (a doubled or blank parent identity), because a
+         broken notebook is not a choice the reader made — those rows simply draw no control. -->
+    <string name="row_hierarchy">Change where this task sits</string>
+    <string name="row_indent">Make it a subtask of the row above</string>
+    <string name="row_outdent">Move it up one level</string>
+    <string name="indent_no_row_above">Nothing above it to hang on</string>
+    <string name="indent_other_topic">The row above belongs to another topic</string>
+    <string name="indent_already_under_it">It already hangs on that row</string>
+    <string name="indent_too_deep">A branch cannot go deeper than the third level</string>
+    <string name="indent_own_child">That row is inside its own branch</string>
+    <string name="outdent_at_topic_root">It already belongs to the topic itself</string>
+    <string name="outdent_parent_missing">Its parent is not in this notebook</string>
     <string name="mark_topic_completed">Mark topic completed</string>
     <string name="mark_topic_open">Clear the topic’s completion</string>
     <plurals name="branch_collapse">

@@ -204,6 +204,55 @@ be holding, which is the one path that could revert a topic's mark without the r
 that are real — `upsertGroup` for sync and restore, `insertImportedGroups` for an import — each carry the column
 deliberately, so the dead one is gone rather than documented.
 
+## A row's place in the tree is editable from the row itself
+
+§6.1 asks for indent and outdent on the task row and is exact about the shape it will accept: «не загромождай карточку
+постоянными четырьмя кнопками. Допустимы компактное contextual menu, editor actions или раскрываемые controls». One
+control does it. It lives in the swipe panel — where this screen already keeps the row's other verbs — so the card
+itself spends no width on a shape only some rows can use, and it opens a two-row menu: *Subtask of the row above* and
+*One level up*.
+
+**The rule is written once, and the menu reads it.** Whether a press would write anything is
+`TaskHierarchyPolicy.indentRefusal` and `TaskHierarchyPolicy.outdentRefusal`'s answer, over one `TreeFacts` value built
+from the profile's stored rows. Those two functions were extracted out of `TaskHierarchyRepository`'s own transaction —
+the repository now calls them — so a menu that offered what the domain refuses is not a thing that can be
+mis-programmed later; `HierarchyMoveTest` (§5) and `HierarchyControlsTest`'s agreement cases are the evidence the
+extraction changed what nothing decides.
+
+**The candidate is the row drawn above, inside the same topic block.** An indent hangs a row on what the reader sees
+over it, and the screen draws one block per topic header while storage keeps a single sequence in which two topics'
+rows alternate. Measuring over the stored order would judge a topic's first row by the last row of the block before it
+— refusing a move the reader can plainly see is admissible, and explaining it as "another topic" about a row that is
+not above it at all. So `TaskHierarchyPolicy.hierarchyOffers` takes a list of blocks, the render builds exactly the
+blocks it emits (a collapsed topic contributes none, and a row the screen does not draw is not a candidate), and the
+menu reads the same block back from `TasksViewModel.HierarchyScreen.blockFor`. `HierarchyControlsTest` has one case
+per half of that: a row whose stored neighbour belongs to another topic still gets its control, and the screen
+publishes the block the menu will use.
+
+**A refusal is a sentence, not an absence.** §6 forbids offering what cannot be done, and §6.3 forbids showing an
+impossible destination as clickable. A row that simply vanished is a fact the reader cannot ask about, so the disabled
+row carries the reason in the reader's own terms — «Сверху нет строки, к которой её прикрепить», «Ветка не может быть
+глубже третьего уровня» — and cannot be pressed. Seven refusals have sentences. Two do not, and they are silent on purpose: a blank or
+doubled parent identity is a fault in the notebook rather than a choice anyone made, and the row draws no control at
+all when both directions are silent. When only one is — a row that can rise, sitting under a neighbour with no
+identity to hang it on — the control is drawn for the direction that works and the unexplainable row is *not shown*.
+`HierarchyMenu.isSilent` is derived from `reasonLabel` answering "no sentence exists", so the pair cannot drift apart,
+and `a menu row is never titled with a resource that does not exist` walks every refusal in the enum: the two silent
+cases used to hand `getString(0)` to the popup, which is not an empty title but a `Resources.NotFoundException` on an
+ordinary press.
+
+**Two facts of the screen, not of the tree, also stand the control down.** A scaffolding row (drawn because some other
+answer needs the path) and any row while a batch is being picked get nothing: re-parenting would move a reader's real
+rows from behind a row nobody pointed at, and a moved row is a row whose children moved with it. Both guards are tested
+at the render rather than at the adapter — `a row drawn only to hold the path stands down the offer the rule would make
+for it` seeds a three-level chain, filters to the leaf, and asserts the middle row gets no control *even though the
+domain would hand it a lift*.
+
+**A refused press leaves the screen on storage.** `runHierarchyCommand` is one handler for all three commands, and its
+refusal branch draws the stored order again. That is load-bearing for a drag — the gesture has already `submitList`ed
+the rows as the finger left them, so without it the screen would keep an order no write ever produced — and courteous
+for an indent, where nothing moved. The device matrix still owes the frame of a refused drag snapping back.
+
 ## What that makes possible today
 
 * **An import keeps the depth a paste had.** A Google Keep export decides structure by indentation and nothing
@@ -408,11 +457,18 @@ that owns reminders rather than quietly rewired in a hierarchy commit.
 
 ## What Stage 16 still owns
 
-Everything that **changes the shape** of the tree by hand, and it is deliberately not in this build:
+What is left of the stage's shape-changing work, and what this build knows it still owes a proof to. Editing by hand now
+exists in the list (§6.1 below) and nowhere else:
 
-* No indent / outdent control in the editor or on the row, and no "move to" sheet. The operations exist and are
-  tested at the repository; nothing offers them yet, so a tree still arrives through an import and is edited by
-  dragging within one sibling set.
+* **§6.1 is in; §6.2 and §6.3 are not.** The row's own hierarchy menu — one control in the swipe panel, two named
+  actions, the domain's refusal shown as a disabled reason — is implemented and asserted in a JVM
+  (`HierarchyControlsTest`, see "A row's place in the tree is editable from the row itself" above). Still owed: the
+  explicit hierarchy block in `TaskDetailFragment` (current topic, parent task, level, and the two moves, with an
+  invalid destination shown before the save rather than refused after it), and the free "move to" destination picker —
+  which §6.3 only allows if the list is built from admissible nodes, excludes the row's own subtree, shows each
+  candidate's topic and parent path, and names the resulting depth in the confirmation. Nothing in §6.1 opens a
+  picker: the menu's indent is always "the row above", because that is the only destination this screen can show the
+  reader as they press it.
 * **Two channels of the context mark have no photograph yet.** §7's filter clause is implemented and asserted in a JVM
   (`TasksFilterContextTest`, see "A filter that hides a parent draws the parent anyway" above), but the 16dp shape at
   the head of a title and the Russian sentence in line B's give-way slot are box arithmetic here and glyph widths on a

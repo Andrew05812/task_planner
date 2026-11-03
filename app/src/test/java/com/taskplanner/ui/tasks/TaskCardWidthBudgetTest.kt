@@ -111,7 +111,7 @@ class TaskCardWidthBudgetTest {
         val adapter = TasksAdapter(
             onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {},
             onDeleteRequest = {}, onStart = {}, onPause = {}, onResume = {}, onComplete = {},
-            onWorkToggle = {}, onToggleBranch = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
+            onWorkToggle = {}, onToggleBranch = {}, onHierarchy = { _, _ -> }, onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
         )
         adapter.submitList(
             listOf(

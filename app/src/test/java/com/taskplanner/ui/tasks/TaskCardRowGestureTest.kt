@@ -71,7 +71,7 @@ class TaskCardRowGestureTest {
             onLongPressTask = { longPresses += it },
             onToggleSelection = { selectionToggles += it },
             onEdit = {}, onDeleteRequest = {}, onStart = {}, onPause = {}, onResume = {},
-            onComplete = {}, onWorkToggle = {}, onToggleBranch = {}, onToggleGroup = {}, onGroupMenu = { _, _ -> },
+            onComplete = {}, onWorkToggle = {}, onToggleBranch = {}, onHierarchy = { _, _ -> }, onToggleGroup = {}, onGroupMenu = { _, _ -> },
             onStartDrag = {}
         )
         adapter.submitList(

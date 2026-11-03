@@ -104,7 +104,20 @@ sealed interface TasksListItem {
          * a row the reader selected would offer: a fold, a handle and a tick that act on a task nobody asked about
          * are three ways to lose data the filter was hiding.
          */
-        val shownForContext: Boolean = false
+        val shownForContext: Boolean = false,
+        /**
+         * Whether this row's place in the tree can be changed by a press right now — so whether the card draws the
+         * control that offers it (§6).
+         *
+         * Three facts make it up, and the render is the only place holding all three: the rows on screen in the order
+         * the reader sees them (an indent hangs a row on what is *drawn* above it), the profile's rows as stored
+         * (which is what the domain will validate against, and the only source for a parent link that names nothing),
+         * and the mode the screen is in. A scaffolding row gets nothing for the same reason it gets no fold and no
+         * handle: it is on the screen because something else needed the path, and re-parenting the reader's real row
+         * from behind that would be an edit to a task nobody pointed at. A batch in progress stands down too — a
+         * moved row is a row whose children moved with it, and a selection is a promise about specific ones.
+         */
+        val canEditHierarchy: Boolean = false
     ) : TasksListItem
 }
 
@@ -253,6 +266,35 @@ class TasksViewModel @Inject constructor(
      * case where the data never moved and only the screen did.
      */
     private var lastRender: RenderInput? = null
+
+    /**
+     * The blocks the last render drew, in the order it drew them, and the profile's rows it measured those against.
+     *
+     * §6's hierarchy menu needs both and cannot rebuild either: a block is what an indent hangs a row on — the rows
+     * the reader sees under one header, in the order the list put them — while [HierarchyScreen.stored] holds the
+     * parents a filter or a fold took off screen, which is what the depth and the parent-link questions are answered
+     * against, because that is what the write will be validated against. Read-only from outside, and `null` before
+     * the first render, which is the only state in which no card can have been pressed.
+     */
+    var hierarchyContext: HierarchyScreen? = null
+        private set
+
+    /**
+     * What the screen drew: [blocks] is one entry per topic header — the rows under it, in the order the list drew
+     * them, and an empty one for a collapsed topic — followed by the rows drawn under no header at all.
+     *
+     * [blockFor] answers the one question a pressed card asks: which sequence was *this* row drawn inside, because
+     * that is the only sequence in which "the row above it" means what the reader sees.
+     */
+    class HierarchyScreen internal constructor(
+        val blocks: List<List<Task>>,
+        val stored: List<Task>
+    ) {
+        fun blockFor(taskId: Long): List<Task>? = blocks.firstOrNull { block -> block.any { it.id == taskId } }
+    }
+
+    /** One header's worth of rows as the screen draws them; a null [group] is the tail drawn under no header. */
+    private data class Section(val group: TaskGroup?, val rows: List<DisplayedRow>)
 
     /**
      * The ids this screen drew as the path above somebody's match, from the last render.
@@ -411,35 +453,51 @@ class TasksViewModel @Inject constructor(
         // advertise a fold that changes nothing the reader can see.
         val drawn = ordered.mapTo(HashSet()) { it.id }
         val foldDeltas = TaskHierarchyPolicy.foldDeltas(afterFilters, drawn)
+        // The screen is drawn as one block per topic header, and that is the shape the hierarchy questions are asked
+        // in. The profile holds one sequence, in which two topics' rows alternate; the reader never sees that sequence,
+        // they see `notes` under its own header and `receipt` under another. Measuring an indent over the flat order
+        // would judge a topic's first row by the last row of the block before it — refusing a move the reader can see
+        // is admissible, and naming the reason "another topic" about a row that is not above it on the screen.
+        val rowsByGroup = displayed.groupBy { it.displayGroupId }
+        val matchesByGroup = drawnMatches.groupBy { it.groupId }
+        val groupUuids = input.groups.mapTo(HashSet()) { it.uuid }
+        val groupedIds = displayed.mapNotNullTo(HashSet()) { row ->
+            row.task.id.takeIf { row.displayGroupId in groupUuids }
+        }
+        val sections = input.groups.map { group ->
+            // A collapsed topic draws none of its rows, and the path rows belong to it as much as the answers do —
+            // counting them as grouped is what keeps them out of the tail, under no header at all.
+            Section(group, if (group.collapsed) emptyList() else rowsByGroup[group.uuid].orEmpty())
+        } + Section(null, displayed.filterNot { it.task.id in groupedIds })
+        val blockTasks = sections.map { section -> section.rows.map { it.task } }
+        // §6: which rows a press could re-parent, asked once for the whole screen on one read of storage, over the
+        // blocks the reader is looking at. The same rule the menu will read when the press arrives, so a card cannot
+        // promise a control whose menu has nothing enabled in it.
+        val hierarchyOffers = TaskHierarchyPolicy.hierarchyOffers(
+            blockTasks, TaskHierarchyPolicy.factsOf(input.tasks)
+        )
 
         val items = mutableListOf<TasksListItem>()
-        val groupedTaskIds = mutableSetOf<Long>()
-        val groupsWithTasks = input.groups.map { group ->
-            group to drawnMatches.filter { it.groupId == group.uuid }
-        }
-        groupsWithTasks.forEach { (group, groupMatches) ->
-            if (groupMatches.isEmpty() && !input.groups.contains(group)) return@forEach
-            val allSelected = groupMatches.isNotEmpty() && groupMatches.all { it.id in selected }
-            // The count answers "how many of this topic's rows matched", and scaffolding is not an answer to a
-            // question nobody asked it.
-            items += TasksListItem.GroupHeader(group, groupMatches.size, allSelected)
-            if (!group.collapsed) {
-                displayed.filter { it.displayGroupId == group.uuid }.forEach { row ->
-                    items += taskRow(row, input, categoryMap, selected, depths[row.task.id] ?: 0, foldDeltas, mode)
-                    groupedTaskIds += row.task.id
-                }
-            } else {
-                // A collapsed topic draws none of its rows, and the path rows belong to it as much as the answers
-                // do — leaving them out would drop them into the tail, under no header at all, which is exactly the
-                // presentation this block exists to stop.
-                groupedTaskIds += displayed.filter { it.displayGroupId == group.uuid }.map { it.task.id }
+        sections.forEach { section ->
+            val group = section.group
+            if (group != null) {
+                val groupMatches = matchesByGroup[group.uuid].orEmpty()
+                val allSelected = groupMatches.isNotEmpty() && groupMatches.all { it.id in selected }
+                // The count answers "how many of this topic's rows matched", and scaffolding is not an answer to a
+                // question nobody asked it.
+                items += TasksListItem.GroupHeader(group, groupMatches.size, allSelected)
             }
-        }
-        displayed.filter { it.task.id !in groupedTaskIds }.forEach { row ->
-            items += taskRow(row, input, categoryMap, selected, depths[row.task.id] ?: 0, foldDeltas, mode)
+            section.rows.forEach { row ->
+                items += taskRow(
+                    row, input, categoryMap, selected, depths[row.task.id] ?: 0, foldDeltas, hierarchyOffers, mode
+                )
+            }
         }
 
         _categories.value = input.categories
+        // Whatever a card is about to be asked about, it is asked about the screen that was just drawn: the blocks and
+        // the storage are published with the items, so a press and a render can never be reading different trees.
+        hierarchyContext = HierarchyScreen(blockTasks, input.tasks)
         _state.update {
             it.copy(
                 items = items,
@@ -462,6 +520,7 @@ class TasksViewModel @Inject constructor(
         selected: Set<Long>,
         depth: Int,
         foldDeltas: Map<Long, TaskHierarchyPolicy.FoldDelta>,
+        hierarchyOffers: Map<Long, Boolean>,
         selectionMode: Boolean
     ) = TasksListItem.TaskRow(
         row.task,
@@ -486,7 +545,11 @@ class TasksViewModel @Inject constructor(
             foldDeltas[row.task.id]?.hides ?: 0
         },
         selectionMode = selectionMode,
-        shownForContext = row.isContext
+        shownForContext = row.isContext,
+        // Two of the three facts are the screen's, not the tree's: a scaffolding row is not a row to re-parent (it
+        // is here because an answer needs the path), and nothing moves while a batch is being picked, because a moved
+        // row takes its children with it and a selection is a promise about specific ones.
+        canEditHierarchy = !row.isContext && !selectionMode && hierarchyOffers[row.task.id] == true
     )
 
     private fun Priority.rank(): Int = when (this) {
@@ -832,6 +895,49 @@ class TasksViewModel @Inject constructor(
         }
     }
 
+    /**
+     * §6: hang a row on the one the screen drew above it, or lift it out of the one it hangs on.
+     *
+     * The screen names the candidate rather than letting the repository reach for its own predecessor, because under
+     * a filter the two are different rows and the reader pressed a control about the one they were looking at. The
+     * rule that decided whether the control was there at all is the domain's ([HierarchyMenu]), so a refusal here
+     * means the tree changed underneath the card between the draw and the press.
+     *
+     * A refusal is not nothing: the list is drawn again from storage, the way [toggleBranchCollapse] does for the
+     * same reason, rather than left holding a shape no write ever produced.
+     */
+    fun indentTask(taskId: Long, underTaskId: Long) {
+        viewModelScope.launch {
+            runHierarchyCommand { hierarchyRepository.indentTask(taskId, underTaskId) }
+        }
+    }
+
+    /** The lift that undoes an indent: the row goes back to whatever holds its parent, with its own branch intact. */
+    fun outdentTask(taskId: Long) {
+        viewModelScope.launch {
+            runHierarchyCommand { hierarchyRepository.outdentTask(taskId) }
+        }
+    }
+
+    /**
+     * One answer for every command that edits the tree: run it, and if the domain refused, draw the stored order again.
+     *
+     * The redraw is load-bearing for [moveTaskBeside] and courteous for the other two. A drag has already been applied
+     * to the list — the gesture calls `submitList` with the rows as the finger left them, and a refusal writes nothing,
+     * so without this the screen would keep showing an order that never existed. An indent or a lift moves the list
+     * only when the write lands, so the same call here republishes what is already drawn; it is shared rather than
+     * split because "a refused command leaves the screen on storage" is one rule, and two handlers is where a rule
+     * starts to disagree with itself.
+     */
+    private suspend fun runHierarchyCommand(call: suspend () -> HierarchyMoveResult) {
+        try {
+            if (call() is HierarchyMoveResult.Refused) lastRender?.let(::render)
+        } catch (e: Exception) {
+            setError(e)
+            lastRender?.let(::render)
+        }
+    }
+
     fun moveTaskToGroup(taskId: Long, groupUuid: String?) {
         viewModelScope.launch {
             try {
@@ -892,13 +998,7 @@ class TasksViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            try {
-                val outcome = hierarchyRepository.moveWithinSiblings(taskId, anchorTaskId, placeAfter)
-                if (outcome is HierarchyMoveResult.Refused) lastRender?.let(::render)
-            } catch (e: Exception) {
-                setError(e)
-                lastRender?.let(::render)
-            }
+            runHierarchyCommand { hierarchyRepository.moveWithinSiblings(taskId, anchorTaskId, placeAfter) }
         }
     }
 

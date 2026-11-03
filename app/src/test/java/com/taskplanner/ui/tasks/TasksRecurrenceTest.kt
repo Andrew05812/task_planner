@@ -74,9 +74,11 @@ class TasksRecurrenceTest {
 
     @After
     fun tearDown() {
+        // The fixture first, the dispatcher after — a resetMain() landing while a Room thread is still
+        // emitting races the dispatcher. CI run 81 found it; AppFixture.close keeps the account.
+        fixture.close()
         Dispatchers.resetMain()
         TimeZone.setDefault(defaultZone)
-        fixture.close()
     }
 
     private fun instant(iso: String): Long = ZonedDateTime.parse(iso).toInstant().toEpochMilli()

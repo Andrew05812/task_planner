@@ -130,6 +130,7 @@ class TaskCardBranchTest {
         onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {}, onDeleteRequest = {},
         onStart = {}, onPause = {}, onResume = {}, onComplete = {}, onWorkToggle = {},
         onToggleBranch = { task -> foldRequests += task.id },
+        onHierarchy = { _, _ -> },
         onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
     )
 

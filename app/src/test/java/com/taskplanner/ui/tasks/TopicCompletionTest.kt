@@ -90,8 +90,10 @@ class TopicCompletionTest {
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        // The fixture first, the dispatcher after — a resetMain() landing while a Room thread is still
+        // emitting races the dispatcher. CI run 81 found it; AppFixture.close keeps the account.
         fixture.close()
+        Dispatchers.resetMain()
     }
 
     /**
@@ -167,7 +169,7 @@ class TopicCompletionTest {
 
     private fun adapter() = TasksAdapter(
         onTaskClick = {}, onLongPressTask = {}, onToggleSelection = {}, onEdit = {}, onDeleteRequest = {},
-        onStart = {}, onPause = {}, onResume = {}, onComplete = {}, onWorkToggle = {}, onToggleBranch = {},
+        onStart = {}, onPause = {}, onResume = {}, onComplete = {}, onWorkToggle = {}, onToggleBranch = {}, onHierarchy = { _, _ -> },
         onToggleGroup = {}, onGroupMenu = { _, _ -> }, onStartDrag = {}
     )
 

@@ -80,8 +80,10 @@ class HierarchyDeleteCommandTest {
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        // The fixture first, the dispatcher after — a resetMain() landing while a Room thread is still
+        // emitting races the dispatcher. CI run 81 found it; AppFixture.close keeps the account.
         fixture.close()
+        Dispatchers.resetMain()
     }
 
     private fun row(title: String, parent: String? = null, position: Int): Task = runBlocking {

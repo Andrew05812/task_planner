@@ -58,8 +58,10 @@ class TasksReminderTest {
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        // The fixture first, the dispatcher after — a resetMain() landing while a Room thread is still
+        // emitting races the dispatcher. CI run 81 found it; AppFixture.close keeps the account.
         fixture.close()
+        Dispatchers.resetMain()
     }
 
     private fun inFuture(minutes: Int): Date = Date(System.currentTimeMillis() + minutes * MINUTE)

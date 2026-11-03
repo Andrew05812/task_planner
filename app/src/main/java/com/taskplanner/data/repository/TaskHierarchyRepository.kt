@@ -87,27 +87,11 @@ class TaskHierarchyRepository @Inject constructor(
             plan.stored.getOrNull(plan.stored.indexOfFirst { it.id == taskId } - 1)
                 ?: return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.NO_ROW_ABOVE)
         }
-        if (above.id in plan.blockIds) {
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.ANCHOR_IN_SUBTREE)
-        }
-        if (above.groupId != plan.head.groupId) {
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.DIFFERENT_TOPIC)
-        }
-        if (above.uuid.isBlank()) {
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.PARENT_UNNAMED)
-        }
-        if (above.uuid == plan.head.parentUuid) {
-            // It already holds this row: an indent has nowhere deeper to go, and doing it again would rewrite the
-            // same link and stamp a row for a push that carries no change.
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.NO_DEEPER_PARENT)
-        }
-        if (above.uuid in plan.ambiguous) {
-            // The parent is chosen by identity, so a doubled identity is unusable here too: the level validated and
-            // the level drawn would come from two different chains.
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.AMBIGUOUS_PARENT)
-        }
-        if (!TaskHierarchyPolicy.fitsUnder(levelOf(plan.stored, above), plan.height)) {
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.DEPTH_EXCEEDED)
+        // Every question about whether this may be written is `indentRefusal`'s, because §6's menu reads that same
+        // function to decide what to offer. The candidate is still chosen here — this is the one thing the screen
+        // cannot be trusted with, which row the profile's own sequence actually holds above the head.
+        TaskHierarchyPolicy.indentRefusal(plan.head, above, plan.facts)?.let {
+            return@edit HierarchyMoveResult.Refused(it)
         }
         taskDao.setTaskParent(plan.head.id, above.uuid, plan.now)
         HierarchyMoveResult.Accepted(plan.block.map { it.id }, above.id, placeAfter = true, rowsRewritten = 1)
@@ -122,25 +106,19 @@ class TaskHierarchyRepository @Inject constructor(
      * renderer draws that row at the margin already, so an outdent would invent a level nobody can see.
      */
     suspend fun outdentTask(taskId: Long): HierarchyMoveResult = edit(taskId) { plan ->
-        val parentUuid = plan.head.parentUuid?.takeIf { it.isNotBlank() }
-            ?: return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.ALREADY_AT_TOPIC_ROOT)
-        val parent = plan.stored.firstOrNull { it.uuid == parentUuid }
-            ?: return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.ALREADY_AT_TOPIC_ROOT)
-        if (parent.uuid in plan.ambiguous) {
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.AMBIGUOUS_PARENT)
+        // Which lift is *possible* is `outdentRefusal`'s — the same question §6's menu asks before it draws a row.
+        // What follows is the part only the transaction can do: where the block lands once it is released.
+        TaskHierarchyPolicy.outdentRefusal(plan.head, plan.facts)?.let {
+            return@edit HierarchyMoveResult.Refused(it)
         }
-        // The row rises to whatever holds its parent, and that link is written by identity — so it has to be as
-        // single-valued as the parent it leaves behind.
+        // Read from the same facts the rule above consulted, rather than searching the stored list again: a `first`
+        // over the list takes the first row claiming an identity while `byUuid` keeps the last, and the refusal the
+        // reader is told has to be the one the transaction actually checked.
+        val parent = plan.facts.byUuid[plan.head.parentUuid]
+            ?: return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.PARENT_NOT_IN_PROFILE)
         val grandparentUuid = parent.parentUuid?.takeIf { it.isNotBlank() }
-        if (grandparentUuid != null && grandparentUuid in plan.ambiguous) {
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.AMBIGUOUS_PARENT)
-        }
-        if (grandparentUuid != null && plan.stored.none { it.uuid == grandparentUuid }) {
-            // The row above the parent is gone. Lifting further would write a link to nothing, which the renderer
-            // would draw as a margin row with an invisible owner; the reader gets a refusal instead.
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.PARENT_NOT_IN_PROFILE)
-        }
-        val anchor = TaskHierarchyPolicy.subtreeOf(plan.stored, parent).lastOrNull { it.id !in plan.blockIds } ?: parent
+        val anchor = TaskHierarchyPolicy.subtreeOf(plan.stored, parent).lastOrNull { it.id !in plan.blockIds }
+            ?: parent
         val reordered = TaskHierarchyPolicy.sequenceAfterMove(plan.stored, plan.block, anchor.id, placeAfter = true)
             ?: return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.ROW_MISSING)
         taskDao.setTaskParent(plan.head.id, grandparentUuid, plan.now)
@@ -186,7 +164,7 @@ class TaskHierarchyRepository @Inject constructor(
             if (parent.groupId != destination) {
                 return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.TOPIC_MISMATCH)
             }
-            if (!TaskHierarchyPolicy.fitsUnder(levelOf(plan.stored, parent), plan.height)) {
+            if (!TaskHierarchyPolicy.fitsUnder(TaskHierarchyPolicy.levelOf(plan.facts, parent), plan.height)) {
                 return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.DEPTH_EXCEEDED)
             }
             anchor = TaskHierarchyPolicy.subtreeOf(plan.stored, parent).lastOrNull { it.id !in plan.blockIds } ?: parent
@@ -403,6 +381,10 @@ class TaskHierarchyRepository @Inject constructor(
                 blockIds = blockIds,
                 height = TaskHierarchyPolicy.heightOf(stored, head),
                 ambiguous = ambiguous,
+                // The same shape §6's menu reads its answers from, built once per transaction rather than once per
+                // question, so the rule the reader is shown and the rule that decides the write are literally the
+                // same function over the same data.
+                facts = TaskHierarchyPolicy.factsOf(stored),
                 // One instant per edit: an operation that writes the head, the block's topic and the crossed
                 // positions must not stamp them minutes apart, or a device comparing two rows of one tree would
                 // read them as unrelated changes.
@@ -420,6 +402,7 @@ class TaskHierarchyRepository @Inject constructor(
         val blockIds: Set<Long>,
         val height: Int,
         val ambiguous: Set<String>,
+        val facts: TaskHierarchyPolicy.TreeFacts,
         val now: Long
     )
 
@@ -436,14 +419,8 @@ class TaskHierarchyRepository @Inject constructor(
         return changed.map { (_, task) -> task.id }.toSet()
     }
 
-    /**
-     * The level [row] sits at in this profile's tree, counted from 1 for a topic's own child.
-     *
-     * A row with a blank identity has no level to report — nothing can point at it as a parent, which is what the two
-     * callers have just established before asking — so the answer is the topic's own level rather than a crash.
-     */
-    private fun levelOf(rows: List<Task>, row: Task): Int =
-        if (row.uuid.isBlank()) 1 else TaskHierarchyPolicy.levelsByUuid(rows).getValue(row.uuid)
+    // No level helper of its own: `TaskHierarchyPolicy.levelOf` is what both this class and §6's menu read, and a
+    // second copy in the repository is exactly the drift the extraction was done to prevent.
 
     /**
      * Whether this profile owns [uuid] as a live topic.

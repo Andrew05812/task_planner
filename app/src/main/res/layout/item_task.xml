@@ -38,6 +38,22 @@
             android:padding="20dp"
             android:src="@drawable/ic_delete"
             app:tint="@color/ink_error" />
+
+        <!-- §6's hierarchy control, in the panel rather than on the card because the brief forbids a fourth permanent
+             button on a row whose line C already spends its last dp on the fold. Same 76dp box as the other two, so
+             the touch target clears `touch_target_min` without a new measurement, and gone by default: a row with
+             neither action available draws nothing, and the panel keeps the width it had before this stage. -->
+        <ImageButton
+            android:id="@+id/hierarchyButton"
+            android:layout_width="76dp"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/row_hierarchy"
+            android:padding="20dp"
+            android:src="@drawable/ic_row_hierarchy"
+            android:visibility="gone"
+            app:tint="@color/ink_accent"
+            tools:visibility="visible" />
     </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView

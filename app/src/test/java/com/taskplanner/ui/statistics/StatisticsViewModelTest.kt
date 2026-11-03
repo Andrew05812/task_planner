@@ -82,8 +82,10 @@ class StatisticsViewModelTest {
     fun tearDown() {
         // The main dispatcher goes before the storage does: the screen's watcher holds Room flows open, and
         // taking the looper away first is what keeps a late invalidation from being blamed on the next test.
-        Dispatchers.resetMain()
+        // The fixture first, the dispatcher after — a resetMain() landing while a Room thread is still
+        // emitting races the dispatcher. CI run 81 found it; AppFixture.close keeps the account.
         fixture.close()
+        Dispatchers.resetMain()
     }
 
     private fun addTask(title: String, dueAt: Long? = null): Task = runBlocking {
