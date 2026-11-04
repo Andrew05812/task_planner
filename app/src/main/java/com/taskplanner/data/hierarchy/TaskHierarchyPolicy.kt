@@ -413,14 +413,10 @@ object TaskHierarchyPolicy {
         // does not own never reaches here at all — the loop below only asks about topics it holds.
         fun offer(topic: TaskGroup?, parent: Task?) {
             if (parent != null && parent.id in blockIds) return
-            // The head's own position leaves here, before the rule is asked. [moveRefusal] has no branch for it —
-            // re-hanging a block on the parent it already hangs on, in the topic it is already filed in, is a write
-            // the transaction takes — and `TaskHierarchyRepository.moveSubtreeUnder` anchors the block *after* the
-            // destination's subtree, so that press is not a no-op: it moves the row to the tail of its own sibling
-            // set (or to the tail of the topic's root list) while the sheet's preview shows nothing changing. §6.3
-            // asks the reader to see the new path, the new level and the topic before confirming, so a destination
-            // that cannot say anything new is not one this list hands over. Re-ordering inside the current sibling set
-            // belongs to the drag, and the repository still accepts the write when a caller asks for it directly.
+            // The head's own position leaves here, before the rule is asked, for the reason this function's KDoc
+            // gives: the preview cannot say anything new about a place the block already occupies, while the write
+            // really does move it to the tail of its own sibling set. Stated once, up there, because a rule the file
+            // explains twice is a rule two comments can disagree about.
             if (topic?.uuid == ownTopicUuid && parent?.uuid == ownParentUuid) return
             if (moveRefusal(
                     head = head,

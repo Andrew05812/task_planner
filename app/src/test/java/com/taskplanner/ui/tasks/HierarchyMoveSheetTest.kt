@@ -5,10 +5,11 @@ import android.content.DialogInterface
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import com.taskplanner.R
 import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
@@ -66,12 +67,22 @@ import org.robolectric.shadows.ShadowDialog
  *  * **An empty list is no control at all.** [TaskHierarchyPolicy.destinationsFor] can answer `emptyList()`; a
  *    dialog with nothing in it is a dead button, so the editor does not draw the button either.
  *
- * The rows are built by [MoveToDialog] from `item_move_destination.xml` on the editor's own published snapshot
- * ([TasksViewModel.hierarchyContext]) — [TaskHierarchyPolicy.factsOf] over `stored`, the whole profile, never the
- * filtered screen — and the button is `hierarchyMoveButton` in `fragment_task_detail.xml`'s `hierarchy_section`, run
- * through [HierarchyEditor] exactly like the two moves §6.2 put there. Robolectric gives real box arithmetic and no
- * glyph widths, so every width claim here is measured and none is about text: whether Russian fits at 320dp with the
- * font at 1.3, what TalkBack really says, and how the sheet reads in light and dark belong to §11's device matrix.
+ * The rows are built by [MoveDestinationAdapter] from `item_move_destination.xml`, on the editor's own published
+ * snapshot ([TasksViewModel.hierarchyContext]) — [TaskHierarchyPolicy.factsOf] over `stored`, the whole profile,
+ * never the filtered screen — and the button is `hierarchyMoveButton` in `fragment_task_detail.xml`'s
+ * `hierarchy_section`, run through [HierarchyEditor] exactly like the two moves §6.2 put there. Robolectric gives
+ * real box arithmetic and no glyph widths, so every width claim here is measured and none is about text: whether
+ * Russian fits at 320dp with the font at 1.3, what TalkBack really says, and how the sheet reads in light and dark
+ * belong to §11's device matrix.
+ *
+ * **1B turned the panel into a list, and the walking follows.** The sheet now inflates `dialog_move_to.xml` and hands
+ * its destinations to a `ListAdapter` over a `RecyclerView`, so a row is one of the recycler's *bound children* rather
+ * than one of a stack this file walked: [rowsOf] measures and lays the panel out at the narrow width, then reads the
+ * children the list bound. The layout is asked for here because Robolectric gives a dialog no window to inherit a
+ * measure spec from — the height the sheet gets from a handset is a §11 frame — and [MoveToDialog.open] submits its
+ * list synchronously, so nothing in this file races a background diff. Every test name §6.3 wrote is still below with
+ * the assertions it wrote, and the cases under «the sheet as a list» are 1B's own; only the way a row is reached
+ * changed.
  */
 @RunWith(RobolectricTestRunner::class)
 class HierarchyMoveSheetTest {
@@ -87,6 +98,27 @@ class HierarchyMoveSheetTest {
 
         /** The narrowest width the app is designed against, and the one the card budget was photographed at. */
         const val NARROW_DP = 320
+
+        /**
+         * A sheet height that holds every destination these fixtures can admit, so the row-by-row claims read a list
+         * rather than a viewport. The recycling claim measures the opposite height, and says so where it is made.
+         */
+        const val FULL_SHEET_HEIGHT_PX = 4000
+
+        /**
+         * A sheet the height of a small phone screen: enough for a handful of destination rows, nowhere near enough
+         * for the long list, which is the point the recycling claim is measured at.
+         */
+        const val SHEET_VIEWPORT_HEIGHT_PX = 240
+
+        /**
+         * A destination list long enough that a panel which inflated it all would be the finding, not the design.
+         *
+         * Two hundred is not the §14 figure — it is the smallest number that a `LinearLayout` stack would build
+         * every row of, while a recycler with a phone-sized viewport binds a handful, which is the property 1B
+         * exists to buy.
+         */
+        const val LONG_SHEET_DESTINATIONS = 200
     }
 
     @Before
@@ -229,9 +261,33 @@ class HierarchyMoveSheetTest {
     }
 
     private fun rowsOf(sheet: AlertDialog): List<View> {
-        val list = sheet.findViewById<ViewGroup>(R.id.moveDestinationList)
-        assertNotNull("the sheet holds a list of destinations", list)
-        return (0 until list!!.childCount).map { list.getChildAt(it) }
+        val list = sheetList(sheet)
+        return (0 until list.childCount).map { list.getChildAt(it) }
+    }
+
+    /**
+     * The sheet's list, laid out at the width the app is designed against, with its bound rows ready to read.
+     *
+     * 1B made the panel a `RecyclerView`, and a recycler binds on layout rather than on construction: under
+     * Robolectric the dialog has no window to inherit a measure spec from, so the height the sheet would get from
+     * the handset is asked for here instead — [FULL_SHEET_HEIGHT_PX], tall enough that every destination these
+     * fixtures admit fits inside it, which is what lets the row-by-row claims below compare a list against a list.
+     * The height the *recycling* claim needs is the opposite one, and `the sheet holds its destinations in the
+     * adapter and binds only the rows that fit` measures it on its own.
+     *
+     * Nothing here waits on a diff: [MoveToDialog.open] submits its list synchronously, so the adapter already holds
+     * the destinations by the time the press returns, and the children walked below are the rows the reader is shown.
+     */
+    private fun sheetList(sheet: AlertDialog): RecyclerView {
+        val list = sheet.findViewById<RecyclerView>(R.id.moveDestinationList)
+        assertNotNull("the sheet holds a recycler of destinations", list)
+        val width = (NARROW_DP * app.resources.displayMetrics.density).toInt()
+        list!!.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(FULL_SHEET_HEIGHT_PX, View.MeasureSpec.EXACTLY)
+        )
+        list.layout(0, 0, list.measuredWidth, list.measuredHeight)
+        return list
     }
 
     /**
@@ -625,6 +681,182 @@ class HierarchyMoveSheetTest {
             titles.contains("office-block") && titles.contains("errand-block"))
     }
 
+    // ── the sheet as a list ────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The destinations live in an adapter, and the panel builds only the rows it can show.
+     *
+     * 1B's own claim, and the one the previous shape could not make: the sheet used to inflate one four-view row per
+     * stored destination into a `LinearLayout` inside a `ScrollView` before the dialog was even shown, so the list's
+     * length was the reader's profile — the §14 10k case, paid on the main thread for a choice between two of those
+     * rows. A `RecyclerView` holds the count instead, and binds what its viewport fits.
+     *
+     * Both halves are measured, because either alone is vacuous: the adapter has to answer the whole count (a panel
+     * that bound *nothing* would also bind "fewer than the list holds"), and the bound children have to be strictly
+     * fewer than that count (a stack that inflated everything would bind them all, and would still say the count is
+     * 200). The rows that are bound are the *top of the list the sheet was handed*, in the policy's order — so the
+     * shrinking is a viewport's doing rather than a list the panel quietly dropped. The destination values are
+     * synthesised rather than seeded, because the claim is about views: the sheet owns no rule, so what it does with
+     * a list it is handed is the same whatever produced the list.
+     */
+    @Test
+    fun `the sheet holds its destinations in the adapter and binds only the rows that fit`() {
+        val office = group("office-block")
+        val head = row("planning", position = 0, group = office.uuid)
+        val model = drawn()
+        val screen = model.hierarchyContext!!
+        val destinations = syntheticDestinations(LONG_SHEET_DESTINATIONS)
+
+        val sheet = MoveToDialog.open(themed(), head, screen, destinations) {}
+        val list = sheet.findViewById<RecyclerView>(R.id.moveDestinationList)
+        assertNotNull("the sheet's destinations sit in a recycler, not in a stack of views", list)
+        val adapter = list!!.adapter
+        assertTrue("and the app's own list machinery drives it, the way every other list here is driven: $adapter",
+            adapter is ListAdapter<*, *>)
+        assertEquals("the whole destination list is held by that adapter, which is what the reader scrolls through",
+            LONG_SHEET_DESTINATIONS, adapter!!.itemCount)
+
+        // A sheet-height viewport rather than the full list: the measure the dialog's own panel gets from a window,
+        // asked for here because Robolectric gives a view no window to inherit one from.
+        val width = (NARROW_DP * app.resources.displayMetrics.density).toInt()
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
+        list.measure(
+            widthSpec,
+            View.MeasureSpec.makeMeasureSpec(SHEET_VIEWPORT_HEIGHT_PX, View.MeasureSpec.EXACTLY)
+        )
+        list.layout(0, 0, list.measuredWidth, list.measuredHeight)
+        val boundInViewport = list.childCount
+        assertTrue("the recycler binds the rows that fit — $boundInViewport of them, for " +
+            "${destinations.size} destinations", boundInViewport > 0)
+        assertTrue("and strictly fewer than the list it holds: $boundInViewport bound of ${destinations.size}",
+            boundInViewport < destinations.size)
+        assertEquals("the row it bound first is the first destination it was handed, so the count was not met by " +
+            "dropping rows on the way", textsOf(destinations.first()), rowTexts(list.getChildAt(0)))
+
+        // The contrast that keeps the two counts above from being satisfied by a panel that binds nothing: the same
+        // list, measured with a taller sheet, binds strictly more rows out of the same adapter. A stack that inflated
+        // every destination would answer the first measure with all of them and fail `boundInViewport <
+        // destinations.size`; a panel that bound nothing would fail the measure above it.
+        list.measure(widthSpec, View.MeasureSpec.makeMeasureSpec(FULL_SHEET_HEIGHT_PX, View.MeasureSpec.EXACTLY))
+        list.layout(0, 0, list.measuredWidth, list.measuredHeight)
+        assertTrue("a taller sheet binds more of the same list — $boundInViewport rows at " +
+            "${SHEET_VIEWPORT_HEIGHT_PX}px against ${list.childCount} rows at ${FULL_SHEET_HEIGHT_PX}px",
+            list.childCount > boundInViewport)
+    }
+
+    /**
+     * A destination list long enough to tell a recycler from a stack of views, built without a profile.
+     *
+     * Each entry is exactly the shape [TaskHierarchyPolicy.destinationsFor] returns — a topic, a row above the block,
+     * the level the head lands at, the count that travels and the path that tells the row apart — so the rows the
+     * adapter binds state the same four facts a real destination does. The titles are the test's own data, never a
+     * resource label, and are read back off the bound row rather than compared to anything the app renders.
+     */
+    private fun syntheticDestinations(count: Int): List<MoveDestination> = (1..count).map { index ->
+        val topicName = "topic-block-$index"
+        MoveDestination(
+            topic = TaskGroup(uuid = "topic-$index", userId = userId, name = topicName),
+            parent = Task(
+                title = "row-$index", description = "", uuid = "row-$index", userId = userId,
+                groupId = "topic-$index", order = index
+            ),
+            resultingLevel = 2,
+            travellingCount = 1,
+            pathTitles = listOf(topicName, "row-$index")
+        )
+    }
+
+    // ── the diff the list runs on ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * One row per place in the tree — the identity half of the diff the sheet's list runs on.
+     *
+     * The sheet's list is rebuilt from a fresh measurement of the tree on every press, and the editor does
+     * re-measure the destinations on every snapshot it publishes — so the same place regularly arrives as a newly read
+     * copy of it. Identity is the pair of uuids (topic, parent) rather than the whole value precisely so that such a
+     * re-read is not a rebuild: an adapter that already holds the place keeps its row where it is, and a reader is
+     * not left watching a sheet they are aiming at jump. The submission today's dialog makes is one insert into an
+     * empty adapter, so this is the callback's contract, held to its letter here rather than inferred from the panel. `(no topic, no parent)` — the unfiled tree's own root — is a place
+     * like any other, and a `null` on one side must not match a topic on the other, or the standalone root and a
+     * topic's root would become one row wearing two different names.
+     */
+    @Test
+    fun `the list knows one place in the tree from another`() {
+        val reRead = place(topic = "office-block", parent = "planning", level = 3)
+        assertTrue("the same topic and the same parent are one row, even when the level it promises has moved on: " +
+            "a re-read is not a rebuild",
+            MoveDestinationAdapter.DIFF.areItemsTheSame(place(topic = "office-block", parent = "planning"), reRead))
+        assertFalse("a different row above the block inside the same topic is a different place",
+            MoveDestinationAdapter.DIFF.areItemsTheSame(
+                place(topic = "office-block", parent = "planning"),
+                place(topic = "office-block", parent = "notes")
+            ))
+        assertFalse("and the unfiled tree's root is not a topic's root, although both have no parent — one `null` " +
+            "never matches a topic",
+            MoveDestinationAdapter.DIFF.areItemsTheSame(
+                place(topic = null, parent = null),
+                place(topic = "office-block", parent = null)
+            ))
+        assertTrue("read twice, the unfiled root is still the one row it is",
+            MoveDestinationAdapter.DIFF.areItemsTheSame(
+                place(topic = null, parent = null),
+                place(topic = null, parent = null)
+            ))
+    }
+
+    /**
+     * The other half of the same question: a row that stayed put but now says something different.
+     *
+     * Content is the whole [MoveDestination] value, because every field of it is printed — the level the block lands
+     * at, how many tasks travel, the path that tells two same-named rows apart. A destination read twice from an
+     * unchanged tree must not rebind anything (the sheet is republished while a reader is looking at it), and one
+     * whose facts moved has to rebind rather than keep the stale number on screen.
+     */
+    @Test
+    fun `the list knows when the row it holds has stopped saying the same thing`() {
+        val shallow = place(topic = "office-block", parent = "planning", level = 2)
+        assertFalse("the level a row promises is content, so a deeper answer rebinds the row it belongs to",
+            MoveDestinationAdapter.DIFF.areContentsTheSame(shallow, place(topic = "office-block", parent = "planning", level = 3)))
+        assertFalse("and so is the count that travels with the block",
+            MoveDestinationAdapter.DIFF.areContentsTheSame(shallow, place(topic = "office-block", parent = "planning", travelling = 4)))
+        assertTrue("two reads of the same place with the same facts are one value — nothing is rebound for a change " +
+            "that is not a change",
+            MoveDestinationAdapter.DIFF.areContentsTheSame(
+                shallow,
+                place(topic = "office-block", parent = "planning", level = 2)
+            ))
+    }
+
+    /**
+     * One destination, built from the two things that make it a place, for the diff's own two questions.
+     *
+     * The rows and topics are values rather than stored rows because the claim is about the comparison the list
+     * runs, not about storage: [TaskHierarchyPolicy.destinationsFor] is already pinned elsewhere for what it admits,
+     * and `HierarchyDestinationTest` holds that. Titles are this file's own data.
+     */
+    private fun place(
+        topic: String?,
+        parent: String?,
+        level: Int = 2,
+        travelling: Int = 1
+    ): MoveDestination = MoveDestination(
+        // The two stamps are pinned rather than defaulted: `createdAt` and `updatedAt` otherwise fall to
+        // `System.currentTimeMillis()`, and a value that differs because the clock ticked between the two reads
+        // would make the content question below answer at random.
+        topic = topic?.let {
+            TaskGroup(uuid = it, userId = userId, name = it, createdAt = STAMP, updatedAt = STAMP)
+        },
+        parent = parent?.let {
+            Task(
+                title = "row-$it", description = "", uuid = it, userId = userId, groupId = topic,
+                createdAt = STAMP, updatedAt = STAMP
+            )
+        },
+        resultingLevel = level,
+        travellingCount = travelling,
+        pathTitles = listOfNotNull(topic, parent?.let { "row-$it" })
+    )
+
     // ── the confirmation, and the write behind it ──────────────────────────────────────────────────────────
 
     /**
@@ -818,7 +1050,8 @@ class HierarchyMoveSheetTest {
         val screen = model.hierarchyContext!!
 
         assertEquals("the domain has no destination to offer this head",
-            emptyList<MoveDestination>(), MoveToDialog.destinations(head, screen))
+            emptyList<MoveDestination>(),
+            MoveToDialog.destinations(head, screen, TaskHierarchyPolicy.factsOf(screen.stored)))
         val blocked = bound(model, head)
         assertFalse("so no Move-to control is drawn for it", drawn(blocked.binding.hierarchyMoveButton))
         val before = ShadowDialog.getLatestDialog()
@@ -844,9 +1077,10 @@ class HierarchyMoveSheetTest {
      * search box quietly remove destinations.
      *
      * The claim is made twice, on purpose, because only one of them is the code a reader runs. The first half judges
-     * the list the dialog is handed from a snapshot it holds (the overload a caller with no facts of its own uses);
-     * the second presses the editor's own button while the filter is up and reads the rows off the sheet — which is
-     * the only way to reach the facts [HierarchyEditor] built for the emission being drawn.
+     * the list the dialog is handed through the one entry point 1B left, fed here with facts built over `stored` —
+     * which is how any caller holding no tree of its own must build them; the second presses the editor's own button
+     * while the filter is up and reads the rows off the sheet, which is the only way to reach the facts
+     * [HierarchyEditor] built for the emission being drawn.
      */
     @Test
     fun `the sheet reads the whole stored profile, not the filtered screen`() {
@@ -867,7 +1101,9 @@ class HierarchyMoveSheetTest {
         assertTrue("while the published snapshot still holds the whole profile",
             screen.stored.any { it.id == hidden.id })
 
-        val list = MoveToDialog.destinations(head, screen)
+        // 1B left one entry point, the one [HierarchyEditor] calls with the tree it measured for this emission; the
+        // facts are handed over the stored profile here for the same reason the editor hands them over from there.
+        val list = MoveToDialog.destinations(head, screen, TaskHierarchyPolicy.factsOf(screen.stored))
         assertTrue("and the sheet offers the row the screen is not showing: $list",
             list.any { it.parent?.id == hidden.id })
         assertEquals("which is the policy's own answer over the stored profile, row for row",
@@ -921,6 +1157,24 @@ class HierarchyMoveSheetTest {
         val (_, sheet) = openSheet(model, head)
         val rows = rowsOf(sheet)
         assertTrue("the sheet has rows to measure", rows.isNotEmpty())
+
+        // The panel's own inset, measured rather than admired: `dialog_move_to.xml` exists partly because the
+        // code-built panel had none, so a row of this sheet must sit inside the container by the app's screen margin
+        // and not run to the dialog's edge. Robolectric lays this out at the narrowest width the design is held to,
+        // which is where a missing inset would be felt most.
+        val list = rows.first().parent as RecyclerView
+        val panel = list.parent as View
+        val narrowSpec = View.MeasureSpec.makeMeasureSpec(
+            (NARROW_DP * app.resources.displayMetrics.density).toInt(), View.MeasureSpec.EXACTLY
+        )
+        panel.measure(narrowSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        panel.layout(0, 0, panel.measuredWidth, panel.measuredHeight)
+        val margin = app.resources.getDimensionPixelSize(R.dimen.screen_margin)
+        assertEquals("the container insets its list by the app's own screen margin, on the left", margin, list.left)
+        assertEquals("and on the right, so no destination touches the dialog's edge",
+            panel.width - margin, list.right)
+        assertEquals("which leaves the rows the panel less both insets at ${NARROW_DP}dp: ${list.width}px",
+            panel.width - 2 * margin, list.width)
 
         val density = app.resources.displayMetrics.density
         val width = (NARROW_DP * density).toInt()

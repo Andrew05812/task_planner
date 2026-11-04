@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  §6.3's "Move to" sheet: the panel a Material alert dialog puts under its own title, and the list the reader
+  presses.
+
+  This file exists because every other list in this app is a `RecyclerView` fed by a `ListAdapter`
+  (`ui/tasks/TasksAdapter`, the Stage 15 keep preview) and the sheet used to inflate one four-view row per stored
+  destination into a `LinearLayout` inside a `ScrollView`, on the main thread, before the dialog was even shown.
+  A destination list is as long as the profile: the §14 10k case is ten thousand rows built for a choice between
+  them, and a reader who opens the sheet to move one task should not pay for the nine thousand they will never see.
+  The list view is the app's own answer to that, with `MoveDestinationAdapter` diffing the rows.
+
+  **The padding belongs here, not in code.** The panel AppCompat hands a custom view (`@id/customPanel`) carries
+  no padding of its own: the dialog's title and message get theirs from the layouts that live beside them. The
+  code-built panel this file replaces therefore drew its rows flush against the dialog's edge — the finding 1B was
+  written to close — so the horizontal inset is the house's `screen_margin`, the same token every list row on every
+  fragment uses, and the vertical inset is the scale's own `spacing_small`/`spacing_normal`. No literal, because
+  `dimens.xml` says the scale exists so that no layout needs one again.
+
+  **`wrap_content` on the list is what makes the recycling real, not what defeats it.** The dialog measures this
+  panel against the window's own height, so the list is bounded by what is left of the screen and
+  `LinearLayoutManager` binds only the rows that fit — which is the whole reason it replaces a `ScrollView` around
+  a stack of views. How many rows that is on a given handset, whether the Material scroll indicators appear, and
+  whether the sheet ends up taller than the window on a long topic list are frames for §11's device matrix; the
+  JVM test measures the same property directly (`HierarchyMoveSheetTest` bounds a large list and counts bound
+  children against the adapter's), because Robolectric gives box arithmetic and no window constraints to inherit.
+
+  The header says which task is being moved and where it sits now — `move_current_path_format`, the same sentence
+  the confirmation repeats — because a destination list is only half the question «куда я это перенесу»; the other
+  half is «откуда», and the reader should not have to remember it from the screen behind the dialog. The dialog's
+  own title stays `move_to_title`, which is what TalkBack reads as the heading (§6.3's design decision 6).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/screen_margin"
+    android:paddingEnd="@dimen/screen_margin"
+    android:paddingTop="@dimen/spacing_small"
+    android:paddingBottom="@dimen/spacing_normal">
+
+    <!-- The task the editor is holding: the row whose branch every destination below would carry. -->
+    <TextView
+        android:id="@+id/moveSheetHeadTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+        tools:text="draft" />
+
+    <!-- Where it sits now, in the app's own sentence. Wrapped rather than ellipsized: a path cut off is a place the
+         reader cannot check, and §6.3 asks the current path to be seen before the press. -->
+    <TextView
+        android:id="@+id/moveSheetCurrentPath"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        tools:text="Now: office-block → planning → draft" />
+
+    <!-- The destinations, one row each, drawn by `MoveDestinationAdapter` from `item_move_destination.xml` in the
+         policy's own order. `scrollbars` rather than a `ScrollView` wrapper: the list is the scroller. -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/moveDestinationList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:scrollbars="vertical"
+        tools:itemCount="3"
+        tools:listitem="@layout/item_move_destination" />
+</LinearLayout>

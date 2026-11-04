@@ -2,16 +2,14 @@ package com.taskplanner.ui.tasks
 
 import android.content.Context
 import android.view.LayoutInflater
-import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ScrollView
 import androidx.appcompat.app.AlertDialog
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.taskplanner.R
 import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.hierarchy.TaskHierarchyPolicy.MoveDestination
 import com.taskplanner.data.model.Task
-import com.taskplanner.databinding.ItemMoveDestinationBinding
+import com.taskplanner.databinding.DialogMoveToBinding
 
 /**
  * §6.3: the "Move to" sheet — the destination list [TaskHierarchyPolicy.destinationsFor] already answers, put on
@@ -25,12 +23,17 @@ import com.taskplanner.databinding.ItemMoveDestinationBinding
  * кликабельные» is satisfied by that absence rather than by a greyed-out row. Where the domain has nothing to offer,
  * [HierarchyEditor] draws no button at all, so an empty dialog is a state this file cannot be asked to produce.
  *
- * **Shape: a Material alert dialog with a custom row layout, then a second dialog that confirms.** The house stack
- * is [MaterialAlertDialogBuilder] — eight uses and zero bottom sheets — so the sheet is the app's own dialog with
- * `item_move_destination.xml` rows in a scrollable panel rather than a new dependency in the tree. Two steps because
- * the brief asks for a preview *before* the press: choosing a row opens [confirm], whose message is the whole
- * sentence — the path the task sits on now, the path the press writes, how many tasks travel, the level it lands at
- * and whether there is a topic at all. Only that dialog's own button reaches
+ * **Shape: a Material alert dialog whose panel is `dialog_move_to.xml`, then a second dialog that confirms.** The
+ * house stack is [MaterialAlertDialogBuilder] — eight uses and zero bottom sheets — so the sheet is the app's own
+ * dialog, and its list is the app's own list machinery: a `RecyclerView` carrying [MoveDestinationAdapter]'s rows,
+ * one per destination, in the order the policy returned them. The panel used to be a `LinearLayout` inside a
+ * `ScrollView` that inflated every stored destination before the dialog was shown, which is the one shape a 10k
+ * profile cannot pay for, and every other list in this app already recycles — §6.3's sheet was the last screen to
+ * skip it. Two steps because the brief asks for a preview *before* the press: choosing a row opens [confirm], whose
+ * message is the whole sentence — the path the task sits on now, the path the press writes, how many tasks travel,
+ * the level it lands at and whether there is a topic at all. The panel's own header says which task is being moved
+ * and where it hangs now, so the reader is not asked to remember the screen behind the dialog while choosing among
+ * places to leave it. Only the confirmation's own button reaches
  * [TasksViewModel.moveTaskUnder], which runs the repository's one transaction inside `runHierarchyCommand`, so a
  * refusal leaves the screen on storage exactly as an indent or a drag does.
  *
@@ -69,7 +72,10 @@ object MoveToDialog {
      * already measured that same tree once for the emission being drawn, and a [TaskHierarchyPolicy.TreeFacts] indexes
      * the whole profile — its uuid map, its levels, its heights and its ambiguity sets — so building it twice inside one
      * emission is the per-question rebuild §14's render benchmark exists to catch. The profile is still what is read;
-     * only the ownership of the build moves.
+     * only the ownership of the build moves. This is the only entry point the sheet has, and the caller that reaches it
+     * is [HierarchyEditor.refresh] — so a caller with no facts of its own builds them the same way, over `stored`, and
+     * the guarantee is tested against the button the reader presses rather than against a second door nobody walks
+     * through.
      */
     fun destinations(
         head: Task,
@@ -81,16 +87,6 @@ object MoveToDialog {
         profileTopicUuids = screen.topics.map { it.uuid }.toSet(),
         facts = facts
     )
-
-    /**
-     * The same answer for a caller that holds no facts yet: they are read here, once, from `screen.stored`.
-     *
-     * A caller that already measured the tree hands its [TaskHierarchyPolicy.TreeFacts] to the overload above; this
-     * one exists so a caller with nothing but the snapshot still builds exactly one, over the profile rather than the
-     * screen.
-     */
-    fun destinations(head: Task, screen: TasksViewModel.HierarchyScreen): List<MoveDestination> =
-        destinations(head, screen, TaskHierarchyPolicy.factsOf(screen.stored))
 
     /**
      * The head's own position, walked through the policy: the topic it is filed under (or the words that say it is
@@ -116,8 +112,17 @@ object MoveToDialog {
     }
 
     /**
-     * The sheet on screen: one row per destination it was handed, in that order, and a press that opens the
-     * confirmation rather than writing.
+     * The sheet on screen: the panel `dialog_move_to.xml` draws, its list holding one row per destination it was
+     * handed, in that order, and a press that opens the confirmation rather than writing.
+     *
+     * The list is submitted on this thread, before the dialog is shown, and it lands on this thread: the adapter is
+     * freshly built and holds nothing, which is the case [androidx.recyclerview.widget.AsyncListDiffer] diffs inline
+     * rather than handing to its background executor, and its result is dispatched immediately when the caller is
+     * already on the main thread — which a click handler is. RecyclerView 1.3.2 offers no public "apply the pending
+     * update now" call, so the sheet does not pretend to have one: the synchronicity is the differ's own documented
+     * fast path, and `HierarchyMoveSheetTest` reads the bound rows without pumping a looper first, which is what
+     * makes it a tested claim rather than a hope. A sheet that showed its header and an empty panel for the frames a
+     * background diff took would be the dead control §6.3 refuses, and every row-reading test would have to race it.
      *
      * Returns the dialog it showed, because the caller is the screen that has to be able to say it showed one.
      */
@@ -128,26 +133,28 @@ object MoveToDialog {
         destinations: List<MoveDestination>,
         onMove: (MoveDestination) -> Unit
     ): AlertDialog {
-        val list = LinearLayout(context).apply {
-            id = R.id.moveDestinationList
-            orientation = LinearLayout.VERTICAL
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        }
+        val sheet = DialogMoveToBinding.inflate(LayoutInflater.from(context))
+        // «Откуда» before «куда»: the task this editor holds and the path it sits on now, in the same sentence the
+        // confirmation repeats. A list of places to go is half the question the reader is being asked.
+        sheet.moveSheetHeadTitle.text = head.title
+        sheet.moveSheetCurrentPath.text = context.getString(
+            R.string.move_current_path_format, pathOf(context, currentPathLegs(context, head, screen))
+        )
         val dialog = MaterialAlertDialogBuilder(context)
             .setTitle(R.string.move_to_title)
-            .setView(ScrollView(context).apply { addView(list) })
+            .setView(sheet.root)
             .setNegativeButton(R.string.cancel, null)
             .create()
-        destinations.forEach { destination ->
-            addRow(context, list, destination) { chosen ->
-                // The choice is not the write: the first dialog goes away and the second one asks.
-                dialog.dismiss()
-                confirm(context, head, screen, chosen, onMove)
-            }
+        val adapter = MoveDestinationAdapter { chosen ->
+            // The choice is not the write: the first dialog goes away and the second one asks.
+            dialog.dismiss()
+            confirm(context, head, screen, chosen, onMove)
         }
+        // Attached before it is fed, so the update lands on a list that is already listening rather than on a change
+        // the recycler has to discover at its first layout.
+        sheet.moveDestinationList.layoutManager = LinearLayoutManager(context)
+        sheet.moveDestinationList.adapter = adapter
+        adapter.submitList(destinations)
         dialog.show()
         return dialog
     }
@@ -172,28 +179,6 @@ object MoveToDialog {
         .create()
         .apply { show() }
 
-    /** One row of the list: the destination's name, its path, its level and its count, and the sentence under them. */
-    private fun addRow(
-        context: Context,
-        parent: LinearLayout,
-        destination: MoveDestination,
-        onPicked: (MoveDestination) -> Unit
-    ) {
-        val row = ItemMoveDestinationBinding.inflate(LayoutInflater.from(context), parent, true)
-        val title = titleOf(context, destination)
-        val path = pathOf(context, pathLegs(context, destination))
-        val details = detailsOf(context, destination)
-        row.moveDestinationTitle.text = title
-        row.moveDestinationPath.text = path
-        row.moveDestinationMeta.text = details
-        // One description for the whole choice, so a screen reader says it in one breath and the three lines under
-        // it — each marked unimportant in the layout — are not left to be walked a stop at a time.
-        row.root.contentDescription = context.getString(
-            R.string.move_row_description_format, title, path, details, context.getString(R.string.move_action)
-        )
-        row.root.setOnClickListener { onPicked(destination) }
-    }
-
     /**
      * The preview the confirmation prints.
      *
@@ -214,8 +199,14 @@ object MoveToDialog {
         context.getString(R.string.move_level_format, destination.resultingLevel)
     )
 
-    /** The row's name: the task the block would hang on, the topic it would join, or the standalone tree. */
-    private fun titleOf(context: Context, destination: MoveDestination): String =
+    /**
+     * The row's name: the task the block would hang on, the topic it would join, or the standalone tree.
+     *
+     * `internal`, with [pathLegs], [pathOf], [detailsOf] and [rowDescription] below it, because
+     * [MoveDestinationAdapter] binds them and [confirm] prints them: one copy of what a destination states, written
+     * once, and the adapter owns only which row a press chose.
+     */
+    internal fun titleOf(context: Context, destination: MoveDestination): String =
         destination.parent?.title ?: destination.topic?.name ?: context.getString(R.string.move_to_standalone)
 
     /**
@@ -225,12 +216,12 @@ object MoveToDialog {
      * when there is not — so the no-topic case is *said*, not left as an empty first column, which is the difference
      * between a row that answers «is there a topic» and a row a reader has to guess about.
      */
-    private fun pathLegs(context: Context, destination: MoveDestination): List<String> =
+    internal fun pathLegs(context: Context, destination: MoveDestination): List<String> =
         (if (destination.topic == null) listOf(context.getString(R.string.move_topic_none)) else emptyList()) +
             destination.pathTitles
 
     /** The legs joined with the arrow the resource carries, never one built in Kotlin. */
-    private fun pathOf(context: Context, legs: List<String>): String = when (legs.size) {
+    internal fun pathOf(context: Context, legs: List<String>): String = when (legs.size) {
         0, 1 -> legs.firstOrNull().orEmpty()
         else -> legs.reduce { left, right -> context.getString(R.string.move_path_format, left, right) }
     }
@@ -242,9 +233,23 @@ object MoveToDialog {
         )
 
     /** The row's third line: the level the block lands at, and the count that travels to it. */
-    private fun detailsOf(context: Context, destination: MoveDestination): String = context.getString(
+    internal fun detailsOf(context: Context, destination: MoveDestination): String = context.getString(
         R.string.move_row_details_format,
         context.getString(R.string.move_level_format, destination.resultingLevel),
         travelling(context, destination)
     )
+
+    /**
+     * The row's one spoken sentence: the name, the path, the level and the count, and the action the row offers.
+     *
+     * §6.3 asks TalkBack to read the topic, the parent, the level, the number of tasks in the moved subtree *and the
+     * allowed action*; five legs, and the fifth is the action, so `move_action` is carried here rather than left to
+     * the platform's generic "double-tap to activate". The three lines under the row are taken out of the
+     * accessibility tree in `item_move_destination.xml` on the strength of this sentence covering what they say —
+     * which is what `HierarchyMoveSheetTest`'s screen-reader case holds it to.
+     */
+    internal fun rowDescription(context: Context, title: String, path: String, details: String): String =
+        context.getString(
+            R.string.move_row_description_format, title, path, details, context.getString(R.string.move_action)
+        )
 }

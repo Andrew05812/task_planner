@@ -30,8 +30,8 @@
     <item type="id" name="historyTitleText" />
     <item type="id" name="profilesTitleText" />
     <item type="id" name="settingsTitleText" />
-    <!-- §6.3: the list the "Move to" sheet fills with one row per admissible destination. Built in code inside the
-         dialog's custom panel, so the id has to be declared rather than carried by a layout the dialog has no file
-         for — and the test reads its rows through it. -->
-    <item type="id" name="moveDestinationList" />
+    <!-- `moveDestinationList` lived here until 1B: an id a test named before any layout carried it. The sheet now
+         inflates `dialog_move_to.xml`, whose RecyclerView declares that name itself, so the rule this file's header
+         states — "if a later stage removes the view, remove its id with it" — applies, and the orphan goes. The name
+         is not lost, only re-homed: nothing here declares it, and the layout is where a reader finds it. -->
 </resources>
