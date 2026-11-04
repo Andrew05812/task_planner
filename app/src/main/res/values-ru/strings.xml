@@ -139,6 +139,29 @@
     <string name="hierarchy_topic_root">Это корневая задача темы</string>
     <string name="hierarchy_standalone">Отдельная задача</string>
     <string name="hierarchy_indent_action">Сделать подзадачей «%1$s»</string>
+    <!-- §6.3: «Переместить в…» — список допустимых мест и подтверждение перед записью. Стрелка живёт в
+         `move_path_format`, как в `goal_change_format`: путь, собранный склейкой в коде, был бы английским
+         предложением, которое перевод не может переставить. Два соединителя ниже содержат только аргументы —
+         это пунктуация, а не текст, поэтому в обоих языках они одинаковые. -->
+    <string name="move_action">Переместить в другое место</string>
+    <string name="move_to_title">Переместить куда</string>
+    <string name="move_to_standalone">Отдельные задачи</string>
+    <string name="move_topic_none">Без темы</string>
+    <string name="move_path_format">%1$s → %2$s</string>
+    <string name="move_level_format">Уровень %1$d</string>
+    <string name="move_row_details_format">%1$s · %2$s</string>
+    <string name="move_row_description_format">%1$s, %2$s, %3$s, %4$s</string>
+    <string name="move_confirm_title">Переместить сюда эту ветку?</string>
+    <string name="move_confirm_message">%1$s · %2$s · %3$s · %4$s</string>
+    <string name="move_current_path_format">Сейчас: %1$s</string>
+    <string name="move_new_path_format">Переместить в: %1$s</string>
+    <string name="move_confirm_action">Переместить</string>
+    <plurals name="move_travelling_count">
+        <item quantity="one">%1$d задача уйдёт вместе с ней</item>
+        <item quantity="few">%1$d задачи уйдут вместе с ней</item>
+        <item quantity="many">%1$d задач уйдут вместе с ней</item>
+        <item quantity="other">%1$d задачи уйдут вместе с ней</item>
+    </plurals>
     <string name="mark_topic_completed">Отметить тему выполненной</string>
     <string name="mark_topic_open">Снять отметку о выполнении</string>
     <!-- Both labels name the state and the press: свернуть and развернуть differ by one unstressed prefix, and

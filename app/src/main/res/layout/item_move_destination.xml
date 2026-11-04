@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One place the §6.3 "Move to" sheet can put a branch, and the row a reader presses to move a whole subtree there.
+
+  Three lines, stacked rather than shared, for the reason Stage 15 learned on the Keep preview row and Stage 14 on
+  the task card: at 320dp with the font at 1.3, labels put beside a weighted sibling reflow inside their own words
+  and the weighted part was measured at 0px. A destination's title is the one thing the row exists to say, so it
+  gets the column to itself and the path and the meta lines sit under it.
+
+  `minHeight` is the app's own touch floor (`touch_target_min`), not a comfortable size: this is a target a thumb
+  aims at in a scrollable list, and the brief puts the floor at 48dp. The row is the click target — `clickable` and
+  `focusable` here rather than on one of the text views — so a keyboard or switch-access user reaches the choice
+  itself, and the whole row lights up under `selectableItemBackground` the way the other rows of this app do.
+
+  The three text views are taken out of the accessibility tree because the row speaks for them: `MoveToDialog` sets
+  one `contentDescription` on this view carrying the title, the path, the level and the travelling count, assembled
+  out of resources, so TalkBack reads the whole choice in one breath instead of making the reader walk three stops.
+  Hiding them is only honest while that description covers everything they say — which is what
+  `HierarchyMoveSheetTest`'s screen-reader case holds it to. No colour carries a decision here: an admissible
+  destination is a row that is drawn, and an inadmissible one is not drawn at all.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/moveDestinationRow"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:baselineAligned="false"
+    android:clickable="true"
+    android:focusable="true"
+    android:importantForAccessibility="yes"
+    android:minHeight="@dimen/touch_target_min"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/spacing_small"
+    android:paddingEnd="@dimen/spacing_small"
+    android:paddingTop="@dimen/spacing_xs"
+    android:paddingBottom="@dimen/spacing_xs">
+
+    <!-- The task the block would hang on, the topic it would join, or the standalone tree. -->
+    <TextView
+        android:id="@+id/moveDestinationTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:importantForAccessibility="no"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Body"
+        tools:text="notes" />
+
+    <!-- «Тема → Родитель → Подзадача»: the legs that tell two rows of one title apart, joined with the arrow the
+         resource carries. Wrapped rather than ellipsized — a path that is cut off is a context the reader cannot
+         check before pressing. -->
+    <TextView
+        android:id="@+id/moveDestinationPath"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:importantForAccessibility="no"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        tools:text="office-block → planning → notes" />
+
+    <!-- The level the block lands at and how many tasks travel with it. -->
+    <TextView
+        android:id="@+id/moveDestinationMeta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:importantForAccessibility="no"
+        android:textAppearance="@style/TextAppearance.TaskPlanner.Caption"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        tools:text="Level 3 · 2 tasks move with it" />
+</LinearLayout>

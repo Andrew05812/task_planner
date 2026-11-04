@@ -14,7 +14,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * §6.2: the hierarchy block of the task editor — the three facts about where this task sits, and the two moves the
+ * §6.2: the hierarchy block of the task editor — the three facts about where this task sits, and the moves the
  * reader can actually make from here.
  *
  * **Everything it prints comes out of the tree.** The three values are read from [TasksViewModel.hierarchyContext],
@@ -24,14 +24,21 @@ import kotlinx.coroutines.launch
  * («не выводить родителя из названия или порядка строки»), and what a reader would experience as the app inventing a
  * tree they did not write.
  *
- * **The rule is not re-implemented here either.** What a press would do is [HierarchyMenu]'s answer, asked from the
- * candidate [TaskHierarchyPolicy.previousSibling] names and the facts this class already built — the same offer the
- * card's menu builds and the same two policy functions that answer under
+ * **The rule is not re-implemented here either.** What an Indent or an Outdent press would do is [HierarchyMenu]'s
+ * answer, asked from the candidate [TaskHierarchyPolicy.previousSibling] names and the facts this class already
+ * built — the same offer the card's menu builds and the same two policy functions that answer under
  * [com.taskplanner.data.repository.TaskHierarchyRepository]'s transaction; every refusal is titled by
  * [HierarchyMenu.indentLabel] and [HierarchyMenu.outdentLabel], the list's own sentences, and an action the app has
  * no sentence for is hidden by the same [HierarchyMenu.isSilent] the list hides it with. A second opinion in the
  * editor is how a button ends up offering what the domain then refuses, and the reader who presses it has learned
  * that the tree is not safe here.
+ *
+ * **§6.3's third verb is the domain's list, not this screen's opinion.** Where the block could go is
+ * [TaskHierarchyPolicy.destinationsFor], read over the published snapshot's whole stored profile through
+ * [MoveToDialog.destinations]; the editor measures it once per emission, keeps it as the answer the button was drawn
+ * from, and hands it to the sheet when the button is pressed. An empty answer draws no button at all — the same rule
+ * §6.1 applies to a row whose moves are unexplainable, and for the same reason: a control that can only ever open a
+ * list of nothing, or die on press, is a control the reader is right to stop trusting.
  *
  * **One copy is the editor's own, on purpose.** An offered Indent names the task it would hang the row on
  * (`hierarchy_indent_action`) rather than borrowing `row_indent`, whose «the row above» is a fact about the block the
@@ -39,11 +46,11 @@ import kotlinx.coroutines.launch
  * task the list would have named. A refusal needs no such split — the domain's reason does not care which screen
  * read it out — and so only the refusal sentences are shared verbatim.
  *
- * **It owns six views and nothing else.** The topic, parent and level lines, the two buttons and the block that holds
- * them: those are the only views this class touches, which is what lets a hierarchy press leave the title the reader
- * is typing alone (rule 6 of §6.2). The commands go to [TasksViewModel.indentTask] and [TasksViewModel.outdentTask] —
- * the list's two commands, into the repository's one transaction — and the block redraws itself from the snapshot the
- * write re-emits, never from a guess made before it.
+ * **It owns seven views and nothing else.** The topic, parent and level lines, the three buttons and the block that
+ * holds them: those are the only views this class touches, which is what lets a hierarchy press leave the title the
+ * reader is typing alone (rule 6 of §6.2). The commands go to [TasksViewModel.indentTask], [TasksViewModel.outdentTask]
+ * and [TasksViewModel.moveTaskUnder] — the list's own commands, into the repository's one transaction — and the
+ * block redraws itself from the snapshot the write re-emits, never from a guess made before it.
  */
 class HierarchyEditor(
     private val context: Context,
@@ -57,6 +64,7 @@ class HierarchyEditor(
     private val levelRow = binding.hierarchyLevel
     private val indentButton = binding.hierarchyIndentButton
     private val outdentButton = binding.hierarchyOutdentButton
+    private val moveButton = binding.hierarchyMoveButton
 
     /**
      * The task on screen as the editor was told it, and as the published snapshot now holds it.
@@ -70,6 +78,16 @@ class HierarchyEditor(
 
     /** The offer the last measurement produced, kept so a press names the row the policy chose rather than a new guess. */
     private var offer: HierarchyMenu.Offer? = null
+
+    /**
+     * The places the last snapshot could put this row, as the domain answered them.
+     *
+     * Kept for the same reason as [offer]: the sheet the button opens has to draw the list this screen was drawn
+     * from, so the row a reader presses and the control they saw are one measurement. The list is the policy's
+     * answer over `stored` — never over the blocks on screen — because that is what the repository's transaction is
+     * validated against, and an empty answer is what takes the button off the screen.
+     */
+    private var destinations: List<TaskHierarchyPolicy.MoveDestination> = emptyList()
 
     private var following: Job? = null
 
@@ -85,6 +103,17 @@ class HierarchyEditor(
         outdentButton.setOnClickListener {
             val head = shown ?: return@setOnClickListener
             if (offer?.canOutdent == true) viewModel.outdentTask(head.id)
+        }
+        // The door and the sheet are the same answer: a row with nothing admissible has no button, and a press that
+        // reaches this handler anyway — through the listener, not through the screen — opens no dialog.
+        moveButton.setOnClickListener {
+            val head = shown ?: return@setOnClickListener
+            val screen = viewModel.hierarchyContext ?: return@setOnClickListener
+            val offered = destinations
+            if (offered.isEmpty()) return@setOnClickListener
+            MoveToDialog.open(context, head, screen, offered) { destination ->
+                viewModel.moveTaskUnder(head.id, destination.parent?.id, destination.topic?.uuid)
+            }
         }
     }
 
@@ -121,6 +150,7 @@ class HierarchyEditor(
             // `held` stays as the fragment left it, so the next emission finds the row again by itself.
             shown = null
             offer = null
+            destinations = emptyList()
             section.visibility = View.GONE
             return
         }
@@ -130,6 +160,7 @@ class HierarchyEditor(
         val measured = offerAt(current, candidate, facts)
         shown = current
         offer = measured
+        destinations = MoveToDialog.destinations(current, screen)
 
         // A topic the snapshot has no header for is read the same way the list reads it — filed under nothing — so
         // the two screens cannot name two different topics for one row.
@@ -154,7 +185,23 @@ class HierarchyEditor(
             outdentButton, measured.outdentReason,
             context.getString(HierarchyMenu.outdentLabel(measured.outdentReason)), measured.canOutdent
         )
+        writeMoveAction()
         section.visibility = View.VISIBLE
+    }
+
+    /**
+     * The Move-to action, drawn from the destination list the domain returned.
+     *
+     * Two states, not three: a row whose block can be filed somewhere gets the button, and a row the policy answers
+     * `emptyList()` for gets none. There is no disabled-but-drawn case here because the refusal is not a sentence the
+     * screen owns — the list *is* the answer to "where could this go", and a control that opens nothing is the dead
+     * button §6.1 already refuses, on the same grounds and with the same remedy.
+     */
+    private fun writeMoveAction() {
+        val available = destinations.isNotEmpty()
+        val wanted = if (available) View.VISIBLE else View.GONE
+        if (moveButton.visibility != wanted) moveButton.visibility = wanted
+        if (moveButton.isEnabled != available) moveButton.isEnabled = available
     }
 
     /**

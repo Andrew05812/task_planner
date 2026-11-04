@@ -928,6 +928,32 @@ class TasksViewModel @Inject constructor(
     }
 
     /**
+     * §6.3: put the block under the row the "Move to" sheet named, inside the topic it named.
+     *
+     * The pair the command takes is the destination as the sheet drew it — a parent row, or none for a topic's own
+     * child, and a topic uuid, or none for the standalone tree — and nothing here decides whether that place is
+     * admissible. [com.taskplanner.data.hierarchy.TaskHierarchyPolicy.destinationsFor] already answered that before
+     * the row was drawn, and [com.taskplanner.data.repository.TaskHierarchyRepository.moveSubtreeUnder] asks the same
+     * function again inside its transaction, so a destination the sheet named is one the write takes unless the tree
+     * changed between the two. A null `destinationGroupUuid` is a state the model holds rather than a missing
+     * argument: `tasks.group_id` is nullable, and the standalone tree is a place a branch can live.
+     *
+     * The whole block moves in that one transaction — parent link, topic and positions of every row under the head —
+     * which is why there is no second command here for the topic alone: `moveTaskToGroup` files one row and leaves
+     * its children where they were, and a tree split across two topics is the state no screen can explain.
+     *
+     * Like the other three hierarchy commands, it runs inside [runHierarchyCommand]: a refusal writes nothing, so the
+     * screen is drawn from storage again rather than left holding what the dialog promised.
+     */
+    fun moveTaskUnder(taskId: Long, parentTaskId: Long?, destinationGroupUuid: String?) {
+        viewModelScope.launch {
+            runHierarchyCommand {
+                hierarchyRepository.moveSubtreeUnder(taskId, parentTaskId, destinationGroupUuid)
+            }
+        }
+    }
+
+    /**
      * One answer for every command that edits the tree: run it, and if the domain refused, draw the stored order again.
      *
      * The redraw is load-bearing for [moveTaskBeside] and courteous for the other two. A drag has already been applied

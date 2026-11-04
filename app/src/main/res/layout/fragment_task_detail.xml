@@ -471,6 +471,20 @@
                     android:minWidth="@dimen/touch_target_min"
                     android:text="@string/row_outdent" />
 
+                <!-- §6.3's third verb: the destination list the domain already answers, read into a sheet. Same row
+                     treatment as the two above it — full width, 48dp floor, text button — and the label is a
+                     sentence rather than a verb because the two beside it are. `HierarchyEditor` takes this button
+                     off the screen when the policy has no destination to offer: an empty sheet is a dead control. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/hierarchyMoveButton"
+                    style="@style/Widget.TaskPlanner.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:minHeight="@dimen/touch_target_min"
+                    android:minWidth="@dimen/touch_target_min"
+                    android:text="@string/move_action" />
+
             </LinearLayout>
 
             <!-- Repeat: whether the task comes back. The block is the collapsed one — a plain task shows

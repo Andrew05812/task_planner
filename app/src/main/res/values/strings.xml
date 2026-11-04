@@ -179,6 +179,30 @@
     <string name="hierarchy_topic_root">Root task of the topic</string>
     <string name="hierarchy_standalone">Standalone task</string>
     <string name="hierarchy_indent_action">Make it a subtask of %1$s</string>
+    <!-- §6.3: "Move to" — the sheet the destination list is read into, and the confirmation in front of the write.
+         Every fact the brief asks for per option has its own resource: the topic leg, or the words that say there is
+         none, the path, the level the block lands at, and the travelling count as a *plural* rather than as a number
+         with a noun pasted onto it. The arrow lives in `move_path_format` — the `goal_change_format` precedent —
+         because a path built by Kotlin concatenation is an English sentence no translation may reorder. The two
+         joiners below carry only arguments, so they are the same in both languages by design: they are punctuation,
+         not copy. -->
+    <string name="move_action">Move to another place</string>
+    <string name="move_to_title">Move to</string>
+    <string name="move_to_standalone">Standalone tasks</string>
+    <string name="move_topic_none">No topic</string>
+    <string name="move_path_format">%1$s → %2$s</string>
+    <string name="move_level_format">Level %1$d</string>
+    <string name="move_row_details_format">%1$s · %2$s</string>
+    <string name="move_row_description_format">%1$s, %2$s, %3$s, %4$s</string>
+    <string name="move_confirm_title">Move this branch here?</string>
+    <string name="move_confirm_message">%1$s · %2$s · %3$s · %4$s</string>
+    <string name="move_current_path_format">Now: %1$s</string>
+    <string name="move_new_path_format">After: %1$s</string>
+    <string name="move_confirm_action">Move</string>
+    <plurals name="move_travelling_count">
+        <item quantity="one">%1$d task moves with it</item>
+        <item quantity="other">%1$d tasks move with it</item>
+    </plurals>
     <string name="mark_topic_completed">Mark topic completed</string>
     <string name="mark_topic_open">Clear the topic’s completion</string>
     <plurals name="branch_collapse">
