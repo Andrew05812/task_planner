@@ -144,29 +144,34 @@ class TaskHierarchyRepository @Inject constructor(
         destinationGroupUuid: String?
     ): HierarchyMoveResult = edit(taskId) { plan ->
         val destination = destinationGroupUuid?.takeIf { it.isNotBlank() }
-        if (destination != null && !ownsTopic(plan.userId, destination)) {
-            return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.TOPIC_MISSING)
+        // Two questions belong here because only this transaction can ask them: whether the profile owns the
+        // destination topic, and which stored row `newParentId` actually names. Everything else the write has to
+        // decide — the row itself, the block, a parent with no identity or with two, a topic that does not match, a
+        // branch that would pass the third level — is `moveRefusal`'s, because §6.3's "Move to" sheet reads that same
+        // function to decide what it draws as pressable. A destination the sheet names and the write refuses is the
+        // failure the extraction exists to prevent, and `HierarchyMoveTest` (§5's cases, unedited) is the proof that
+        // reading the rule out of this body did not change what it decides.
+        val parent = newParentId?.let { id -> plan.stored.firstOrNull { it.id == id } }
+        val profileTopicUuids = if (destination != null && ownsTopic(plan.userId, destination)) {
+            setOf(destination)
+        } else {
+            emptySet()
         }
-        val parent = newParentId?.let { id ->
-            plan.stored.firstOrNull { it.id == id }
-                ?: return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.PARENT_NOT_IN_PROFILE)
-        }
+        // The lookup's own answer is reached *after* the rule runs, so a topic this profile cannot hold is still the
+        // reason named first — the order the §5 tests pin, and the one place where the two halves of one decision
+        // have to be put back in line.
+        val refusal = TaskHierarchyPolicy.moveRefusal(
+            head = plan.head,
+            blockIds = plan.blockIds,
+            blockHeight = plan.height,
+            parent = parent,
+            destinationGroupUuid = destination,
+            profileTopicUuids = profileTopicUuids,
+            facts = plan.facts
+        ) ?: (if (newParentId != null && parent == null) HierarchyMoveRefusal.PARENT_NOT_IN_PROFILE else null)
+        refusal?.let { return@edit HierarchyMoveResult.Refused(it) }
         val anchor: Task?
         if (parent != null) {
-            if (parent.id == plan.head.id) return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.SAME_ROW)
-            if (parent.id in plan.blockIds) {
-                return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.ANCHOR_IN_SUBTREE)
-            }
-            if (parent.uuid.isBlank()) return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.PARENT_UNNAMED)
-            if (parent.uuid in plan.ambiguous) {
-                return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.AMBIGUOUS_PARENT)
-            }
-            if (parent.groupId != destination) {
-                return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.TOPIC_MISMATCH)
-            }
-            if (!TaskHierarchyPolicy.fitsUnder(TaskHierarchyPolicy.levelOf(plan.facts, parent), plan.height)) {
-                return@edit HierarchyMoveResult.Refused(HierarchyMoveRefusal.DEPTH_EXCEEDED)
-            }
             anchor = TaskHierarchyPolicy.subtreeOf(plan.stored, parent).lastOrNull { it.id !in plan.blockIds } ?: parent
         } else {
             // A row arriving as a topic's own child belongs at the end of that topic's list of roots — and *after*
@@ -379,7 +384,12 @@ class TaskHierarchyRepository @Inject constructor(
                 head = head,
                 block = block,
                 blockIds = blockIds,
+                // The block's own depth, which `destinationsFor` asks the same way from the same facts: a sheet that
+                // measured the travelling branch differently would offer a place the write then refuses.
                 height = TaskHierarchyPolicy.heightOf(stored, head),
+                // The set the door above already consulted. `facts.ambiguous` is the same set, and that is the one
+                // [TaskHierarchyPolicy.moveRefusal] reads — kept here because §5's shape of this snapshot is what the
+                // transaction is documented by, not because a second copy of the answer is wanted.
                 ambiguous = ambiguous,
                 // The same shape §6's menu reads its answers from, built once per transaction rather than once per
                 // question, so the rule the reader is shown and the rule that decides the write are literally the

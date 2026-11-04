@@ -1,6 +1,7 @@
 package com.taskplanner.data.hierarchy
 
 import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskGroup
 
 /**
  * The rules of the task tree, computed over the rows themselves and free of both the database and the screen.
@@ -81,8 +82,30 @@ object TaskHierarchyPolicy {
     }
 
     /** The height of a subtree: 1 for a row with nothing under it, one more for each level below. */
-    fun heightOf(rows: List<Task>, head: Task): Int =
-        levelsByUuid(subtreeOf(rows, head)).values.maxOrNull() ?: 1
+    fun heightOf(rows: List<Task>, head: Task): Int = blockHeight(factsOf(rows), head)
+
+    /**
+     * How tall [head]'s own branch is in [facts], counted from the head itself: 1 for a leaf.
+     *
+     * The one arithmetic behind every "can this block go there" question — [indentRefusal]'s depth test,
+     * [destinationsFor]'s candidates and `TaskHierarchyRepository`'s own transaction all read it here, so the depth a
+     * menu offers and the depth a write refuses are the same number. Bounded by the contract rather than by the
+     * branch: [TreeFacts.heights] is computed in [MAX_TASK_LEVELS] passes, and §10 records that a pull or a restored
+     * backup can leave the notebook deeper than the contract draws it. That is the safe direction — a too-tall block
+     * is refused a level early, never written — and it is the same number [heightOf] has always given, because
+     * [levelsByUuid] stops counting at the same bound.
+     */
+    fun blockHeight(facts: TreeFacts, head: Task): Int = facts.heights[head.uuid] ?: 1
+
+    /**
+     * The identity of [row]'s topic, or null when the row belongs to the standalone tree.
+     *
+     * A blank and a null `group_id` are one case, not two: `tasks.group_id` is nullable and an import writes `''` for
+     * a line the source never filed, so "unfiled" arrives in the notebook both ways. Everything that asks *which*
+     * topic — the render, a destination list, a move — already treats the two alike, and this is where that rule lives
+     * rather than in each caller's own `takeIf`.
+     */
+    fun rootOf(row: Task): String? = row.groupId?.takeIf { it.isNotBlank() }
 
     /**
      * Whether [blockHeight] rows can hang under a parent at [parentLevel] and still stay inside the contract.
@@ -190,7 +213,7 @@ object TaskHierarchyPolicy {
         candidate.uuid.isBlank() -> HierarchyMoveRefusal.PARENT_UNNAMED
         candidate.uuid == head.parentUuid -> HierarchyMoveRefusal.NO_DEEPER_PARENT
         candidate.uuid in facts.ambiguous -> HierarchyMoveRefusal.AMBIGUOUS_PARENT
-        !fitsUnder(levelOf(facts, candidate), facts.heights[head.uuid] ?: 1) -> HierarchyMoveRefusal.DEPTH_EXCEEDED
+        !fitsUnder(levelOf(facts, candidate), blockHeight(facts, head)) -> HierarchyMoveRefusal.DEPTH_EXCEEDED
         else -> null
     }
 
@@ -221,6 +244,208 @@ object TaskHierarchyPolicy {
     /** The same rule asked without holding the facts; a single call site, never a loop over a screen. */
     fun outdentRefusal(head: Task, stored: List<Task>): HierarchyMoveRefusal? =
         outdentRefusal(head, factsOf(stored))
+
+    /**
+     * Why moving [head]'s block under [parent] inside topic [destinationGroupUuid] would be refused, or null when the
+     * write would be made.
+     *
+     * **This is the one rule, read by two callers** — the same extraction §6.1 made of [indentRefusal] and
+     * [outdentRefusal], and for the same reason. §5 wrote every question below inline inside
+     * `TaskHierarchyRepository.moveSubtreeUnder`; §6.3's "Move to" sheet has to answer the same questions *before* it
+     * draws a row, and a second implementation in a view layer would be a second *opinion* — the kind that lets a
+     * sheet offer a destination the domain then refuses, which a reader experiences as a control that does not work.
+     * The repository calls this function now, so the two cannot disagree by construction, and `HierarchyMoveTest`
+     * (§5's cases, unedited) plus `HierarchyDestinationTest`'s agreement cases are the proof that reading the rule out
+     * of the transaction did not change what it decides.
+     *
+     * The order is the repository's own, and it is not arbitrary. A topic this profile does not own is named first,
+     * because the destination itself is the thing in question — nothing under it is worth measuring until the notebook
+     * can hold it. A parent outside [facts]' rows comes next, because [HierarchyMoveRefusal.SAME_ROW] and
+     * [HierarchyMoveRefusal.ANCHOR_IN_SUBTREE] are answered from [blockIds], and an id belongs to a profile: hand this
+     * function another profile's row and those two answers come back "that is not inside the block you are moving" —
+     * true, and useless. [HierarchyMoveRefusal.SAME_ROW] before
+     * [HierarchyMoveRefusal.ANCHOR_IN_SUBTREE] because the head's own id is inside its own block, and the honest name
+     * for a row dropped onto itself is not "its own child". A parent with no identity is named before a doubled one
+     * because they fail differently: a blank uuid has no ancestry to measure at all, while a doubled one has two.
+     * [HierarchyMoveRefusal.TOPIC_MISMATCH] reads the caller's [destinationGroupUuid] rather than the parent's own
+     * topic, because the write carries the whole block to the destination — a parent link and a `group_id` naming two
+     * topics is the state no screen can explain to a reader afterwards. [HierarchyMoveRefusal.DEPTH_EXCEEDED] is last
+     * because it is the one question here that asks about the parent's *ancestry*, and ancestry can only be trusted
+     * once that row is known to have one identity and one topic.
+     *
+     * A null [parent] means "become [destinationGroupUuid]'s own child", which nothing here can refuse except the
+     * topic's ownership; a null or blank [destinationGroupUuid] means the standalone tree, which the model does
+     * support — see [rootOf].
+     */
+    fun moveRefusal(
+        head: Task,
+        blockIds: Set<Long>,
+        blockHeight: Int,
+        parent: Task?,
+        destinationGroupUuid: String?,
+        profileTopicUuids: Set<String>,
+        facts: TreeFacts
+    ): HierarchyMoveRefusal? {
+        val destination = destinationGroupUuid?.takeIf { it.isNotBlank() }
+        return when {
+            destination != null && destination !in profileTopicUuids -> HierarchyMoveRefusal.TOPIC_MISSING
+            parent == null -> null
+            // Answered while the caller is still naming the parent, for the reason above: every question after this
+            // one reads [blockIds], [facts] or the parent's ancestry, and a row of another profile is answered
+            // correctly by none of them. `TaskHierarchyRepository` answers the same fact with its own lookup —
+            // `newParentId` reaching nothing is a fact about storage rather than about the tree — and this line is the
+            // half the sheet needs, because a snapshot can name a row the profile no longer holds.
+            parent.id !in facts.byId -> HierarchyMoveRefusal.PARENT_NOT_IN_PROFILE
+            parent.id == head.id -> HierarchyMoveRefusal.SAME_ROW
+            parent.id in blockIds -> HierarchyMoveRefusal.ANCHOR_IN_SUBTREE
+            parent.uuid.isBlank() -> HierarchyMoveRefusal.PARENT_UNNAMED
+            parent.uuid in facts.ambiguous -> HierarchyMoveRefusal.AMBIGUOUS_PARENT
+            parent.groupId != destination -> HierarchyMoveRefusal.TOPIC_MISMATCH
+            !fitsUnder(levelOf(facts, parent), blockHeight) -> HierarchyMoveRefusal.DEPTH_EXCEEDED
+            else -> null
+        }
+    }
+
+    /**
+     * One place "Move to" can land the block, with everything the sheet has to say about it.
+     *
+     * [topic] is the topic object rather than a name or a uuid-as-string because two topics can hold rows of the same
+     * title, and a sheet that shows one of them has to be able to say which. `null` is the standalone tree: a task
+     * with no `group_id` is a state this notebook holds today (`Task.groupId` is nullable, and the renderer draws
+     * those rows under no header), so it is a destination rather than a defect.
+     *
+     * [parent] of `null` means the topic's own child — the shallowest place the tree has, and the only destination a
+     * topic always offers. [resultingLevel] is the level the *head* lands at, so a sheet can name the position a
+     * press writes rather than the row it was clicked on; [travellingCount] is the size of the block the press
+     * carries, the head included, which is what makes "this moves four tasks" sayable before the write instead of
+     * afterwards. [pathTitles] is the topic's name (when there is one) then every ancestor's title down to
+     * [parent]: the one thing that tells two rows of the same title apart on a list that shows titles.
+     */
+    data class MoveDestination(
+        val topic: TaskGroup?,
+        val parent: Task?,
+        val resultingLevel: Int,
+        val travellingCount: Int,
+        val pathTitles: List<String>
+    )
+
+    /**
+     * Where a "Move to" sheet may put [head]'s block, in one list the sheet only has to render.
+     *
+     * The exclusions §3 demands — the row itself, anything under it, another user's rows, a topic the profile does
+     * not hold, a parent with no identity or with two, a move past the third level — are not re-decided here. Each
+     * candidate is handed to [moveRefusal], the function the repository consults inside its own transaction, and a
+     * non-null answer means the row is not drawn at all rather than drawn and clickable (§6.3: «не показывай
+     * недопустимые варианты как кликабельные»). That is why this lives in the policy and not in the sheet: a
+     * destination the list shows has to be one the write takes.
+     *
+     * [topics] and [profileTopicUuids] come from the caller's snapshot, never read from storage here — the sheet
+     * already holds both, and a policy that queried would be a policy the §14 benchmark cannot call once per drawn
+     * row. A topic missing from [profileTopicUuids] yields nothing at all, including nothing for the rows filed under
+     * it: that is a fault in the notebook, and §6.1's rule for those is that they are not offered as a press. A topic
+     * that the profile owns but [topics] does not name is skipped for the same reason — a destination with no title
+     * is a row the sheet cannot honestly draw.
+     *
+     * The order is the caller's sequence, not a map's: topics in the order the snapshot lists them, each topic's own
+     * root first and then its rows in stored order, and the standalone tree last. [MoveDestination]s therefore come
+     * out the same way for the same rows every time, which is what a list view diffing them between two renders needs.
+     * One [subtreeOf] pass for the block, one pass over [facts]' rows for the candidates, and one bounded ancestor
+     * walk per offered row — never a `subtreeOf` or a `factsOf` per row, which is the arithmetic §14's 10k benchmark
+     * exists to catch.
+     */
+    fun destinationsFor(
+        head: Task,
+        topics: List<TaskGroup>,
+        profileTopicUuids: Set<String>,
+        facts: TreeFacts
+    ): List<MoveDestination> {
+        val block = subtreeOf(facts.rows, head)
+        val blockIds = block.map { it.id }.toSet()
+        val blockHeight = blockHeight(facts, head)
+        val destinations = ArrayList<MoveDestination>()
+
+        // One candidate, asked the same question the write will ask it — admitted only on a `null` answer, so a row
+        // the sheet can be pressed on is a row the repository takes.
+        //
+        // The block's own rows leave before the rule is consulted: `moveRefusal` answers them as SAME_ROW and
+        // ANCHOR_IN_SUBTREE, and while that is the right answer for a write, walking a whole branch to re-derive what
+        // TreeFacts already holds is the quadratic shape this function exists to avoid. A row of a topic the profile
+        // does not own never reaches here at all — the loop below only asks about topics it holds.
+        fun offer(topic: TaskGroup?, parent: Task?) {
+            if (parent != null && parent.id in blockIds) return
+            if (moveRefusal(
+                    head = head,
+                    blockIds = blockIds,
+                    blockHeight = blockHeight,
+                    parent = parent,
+                    // The destination and its name are one value, never two that could disagree: a sheet that could
+                    // show a parent under a topic the write did not name would be the split this whole file refuses.
+                    destinationGroupUuid = topic?.uuid,
+                    profileTopicUuids = profileTopicUuids,
+                    facts = facts
+                ) != null
+            ) {
+                return
+            }
+            destinations += MoveDestination(
+                topic = topic,
+                parent = parent,
+                resultingLevel = if (parent == null) 1 else levelOf(facts, parent) + 1,
+                travellingCount = block.size,
+                pathTitles = if (parent == null) {
+                    listOfNotNull(topic?.name)
+                } else {
+                    listOfNotNull(topic?.name) + titlesDownTo(facts, parent)
+                }
+            )
+        }
+
+        topics.forEach { topic ->
+            // A topic the profile does not own produces nothing at all — its rows included, because the loop below is
+            // the only place they are asked about. A topic with no identity of its own is skipped by the same rule:
+            // [rootOf] already answers "unfiled" for a blank `group_id`, and the write normalises a blank destination
+            // to the standalone tree, so a row of the sheet wearing such a group's name would promise a filing the
+            // transaction does not make.
+            if (topic.uuid.isBlank() || topic.uuid !in profileTopicUuids) return@forEach
+            offer(topic, parent = null)
+            facts.rows.forEach { row ->
+                if (rootOf(row) == topic.uuid) offer(topic, parent = row)
+            }
+        }
+        // The standalone tree, last: no topic owns it, so no ownership question is asked, and its roots are the rows
+        // `rootOf` answers `null` for.
+        offer(null, parent = null)
+        facts.rows.forEach { row ->
+            if (rootOf(row) == null) offer(null, parent = row)
+        }
+        return destinations
+    }
+
+    /**
+     * The titles from the top of [parent]'s branch down to [parent] itself, at most [MAX_TASK_LEVELS] of them.
+     *
+     * The same bounded, visited-guarded walk [hangsUnder] uses, for the same reason: `parent_uuid` is a plain column
+     * with no foreign key, so a chain that loops is a thing an import or a restored backup can leave behind, and a
+     * sheet building its rows must not be the place that finds out — with a hung main thread. A step whose parent
+     * names no row stops the walk rather than inventing an ancestor.
+     *
+     * A parent whose *own* identity is blank or doubled never reaches here, because [moveRefusal] refuses it first.
+     * Two rows claiming one identity *above* the parent can: they are duplicates of one logical row, the walk stops
+     * at the identity rather than at the row, and the title it prints is the one the renderer prints for that same
+     * identity — so the path and the write cannot disagree about which branch the block would land on.
+     */
+    private fun titlesDownTo(facts: TreeFacts, parent: Task): List<String> {
+        val titles = ArrayList<String>()
+        val seen = HashSet<String>()
+        var walker: Task? = parent
+        var depth = 0
+        while (walker != null && depth < MAX_TASK_LEVELS && seen.add(walker.uuid)) {
+            titles += walker.title
+            walker = walker.parentUuid?.takeIf { it.isNotBlank() }?.let { facts.byUuid[it] }
+            depth++
+        }
+        return titles.reversed()
+    }
 
     /**
      * Whether [candidate] hangs somewhere below [ancestorUuid], walking up at most the depth the contract allows.
