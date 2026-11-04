@@ -364,11 +364,22 @@ class HierarchyMoveSheetTest {
         row("notes", parent = "planning", position = 1, group = office.uuid)
         row("receipts", position = 2, group = errand.uuid)
         val head = row("draft", position = 3)
+        // A second root of the unfiled tree. The head sits on the first one, so `(no topic, no parent)` is its own
+        // position and the policy withholds it: before this row the answer was exactly five and the guard below sat on
+        // its measured value. This is a place the block genuinely could go, and it gives that floor its slack back —
+        // and a sixth row to count, so the exclusion is measured rather than assumed.
+        row("figures", position = 4)
         val model = drawn()
         val screen = model.hierarchyContext!!
         val admitted = admitted(head, screen)
         assertTrue("the fixture admits more than one row to draw, or this proves nothing: $admitted",
             admitted.size >= 5)
+        // The margin above that floor, stated as a number rather than as a floor: 1A's exclusion left this fixture at
+        // exactly five, so the next legitimate place to withhold would have fired the guard instead of shortening a
+        // list. Six is what the tree below actually admits — two topic roots, three of their rows, and one more root
+        // of the unfiled tree — with the head's own position the only place taken off.
+        assertEquals("the sheet is handed six destinations and the guard above has a row of slack: $admitted",
+            6, admitted.size)
 
         val (_, sheet) = openSheet(model, head)
         assertEquals("the heading is the app's own sentence, so the dialog has a title a reader can be told",
@@ -536,6 +547,10 @@ class HierarchyMoveSheetTest {
         // sits on the office root, the block is too tall to fit under any row of any topic, and the destination that
         // used to make the sheet's row count reachable was the very row the policy now withholds.
         group("errand-block")
+        // A third topic, for the same reason one more time: with the block's own position withheld, the sheet was
+        // drawing exactly two rows, and a floor sitting on its measured value turns the next legitimate exclusion into
+        // a failing guard rather than a shorter list. This one adds a destination the write really would make.
+        group("family-block")
         val branch = row("planning", position = 0, group = office.uuid)
         row("notes", parent = "planning", position = 1, group = office.uuid)
         row("figures", parent = "notes", position = 2, group = office.uuid)
@@ -549,6 +564,11 @@ class HierarchyMoveSheetTest {
         val branchRows = rowsOf(branchSheet)
         assertTrue("the branch has destinations to state its count on, or `all {}` below is vacuous: " +
             "${branchRows.size}", branchRows.size >= 2)
+        // The margin again as a number: a block three rows tall fits under no parent in any topic, so only the roots
+        // are admissible — the two other topics' and the unfiled tree's own — and 1A's exclusion left this floor with
+        // nothing above it.
+        assertEquals("and the guard above has a row of slack — three places for a three-tall branch: " +
+            "${branchRows.size}", 3, branchRows.size)
         assertTrue("every row of that sheet says it in the form the resource has for three",
             branchRows.all { metaLine(it).contains(travelling(3)) })
         assertTrue("and not in the form for one — the count on the row is the count of the block",
@@ -822,6 +842,11 @@ class HierarchyMoveSheetTest {
      * "nothing admissible" about a topic the profile still owns — which, by the rule above, would take the whole
      * control away. This is the difference between a filtered list and a filtered *tree*, and it is what would let a
      * search box quietly remove destinations.
+     *
+     * The claim is made twice, on purpose, because only one of them is the code a reader runs. The first half judges
+     * the list the dialog is handed from a snapshot it holds (the overload a caller with no facts of its own uses);
+     * the second presses the editor's own button while the filter is up and reads the rows off the sheet — which is
+     * the only way to reach the facts [HierarchyEditor] built for the emission being drawn.
      */
     @Test
     fun `the sheet reads the whole stored profile, not the filtered screen`() {
@@ -856,6 +881,21 @@ class HierarchyMoveSheetTest {
         )
         assertNotEquals("and a sheet built from the filtered screen would have been the shorter list — the exact " +
             "failure this claim is about", listTexts(filtered), listTexts(list))
+
+        // The same claim against the path production actually takes, not against an overload it no longer calls.
+        // `HierarchyEditor.refresh` measures the destinations with the [TaskHierarchyPolicy.TreeFacts] it built for
+        // this emission (`factsOf(screen.stored)`, one build per snapshot) and the sheet draws that very list, so the
+        // rows on screen are the only version of this guarantee a reader can be affected by. Handing that build the
+        // filtered blocks instead — `factsOf(screen.blocks.flatten())`, which is the mutation this half is written
+        // against — shortens what the editor keeps and the assertions below feel it, while every other fixture in
+        // this class runs unfiltered, where the two reads are the same rows and nothing would notice.
+        val (_, sheet) = openSheet(model, head)
+        val drawn = rowsOf(sheet)
+        assertEquals("the sheet the reader really opens under a filter still lists the whole profile, row for row and " +
+            "in the policy's order: ${rowTexts(drawn)}",
+            listTexts(admitted(head, screen)), rowTexts(drawn))
+        assertEquals("and the row the screen is hiding is drawn there rather than dropped with the filter",
+            1, drawn.count { pathLine(it) == pathOf("errand-block", "receipts") })
     }
 
     // ── the row as a target, and as a sentence ─────────────────────────────────────────────────────────────

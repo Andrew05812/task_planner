@@ -294,10 +294,15 @@ class HierarchyDestinationTest {
      * therefore not a destination, and the exclusion belongs to this list rather than to the dialog, which draws what
      * it is handed.
      *
-     * Both halves of the position have to match. Same topic with another parent above the block, and the same
-     * parentless position under another topic, both stay on the list — which is what makes the rule "where it already
-     * is" rather than "where it came from". The write itself is untouched: a caller that asks the repository for that
-     * position directly still gets it, because this is a statement about what a sheet may offer.
+     * Both halves of the position have to match. Same topic with another parent above the block, the same parent's
+     * *other* child, and the same parentless position under another topic all stay on the list — which is what makes
+     * the rule "where it already is" rather than "where it came from". The write itself is untouched: a caller that
+     * asks the repository for that position directly still gets it, because this is a statement about what a sheet
+     * may offer.
+     *
+     * Both heads here live in a topic. `the position a topic-less block already sits at is not offered` holds the
+     * half where neither side has a topic uuid at all — the unfiled tree — which is the other half of the same
+     * comparison and is not reachable from this fixture.
      */
     @Test
     fun `the position the block already sits at is not offered`() {
@@ -309,6 +314,10 @@ class HierarchyDestinationTest {
         row("notes", position = 2, group = errand.uuid)
         row("draft", position = 3)
         val underAParent = row("figures", parent = "planning", position = 4, group = office.uuid)
+        // A second child of `planning`: a row the head hangs beside, not above. It is the shape the exclusion must
+        // *keep* — moving a block under another child of its own parent is a real move into a different branch — and
+        // it sits inside the head's own subtree, so it never reaches the list of destinations for `head` below.
+        val siblingUnderParent = row("carried", parent = "planning", position = 5, group = office.uuid)
 
         // (1) The head sits on the office topic's root: the destination (office, no parent) is where it already is.
         val list = destinations(head)
@@ -330,12 +339,71 @@ class HierarchyDestinationTest {
             false, belowList.any { it.topic?.uuid == office.uuid && it.parent?.id == head.id })
         assertTrue("while that topic's own root, which is a different parent, is: $belowList",
             belowList.any { it.topic?.uuid == office.uuid && it.parent == null })
+        assertTrue("and another child of that same parent — the row it hangs beside, which is a different branch to " +
+            "move into, not the place it already sits — is: $belowList",
+            belowList.any { it.topic?.uuid == office.uuid && it.parent?.id == siblingUnderParent.id })
 
         // (3) The rule is about the sheet, not about the write: the repository still takes that exact position when a
         // caller asks for it, and the tree comes back unchanged for the assertions above to still hold.
         accepted(withRestoredProfile {
             runBlocking { hierarchy.moveSubtreeUnder(head.id, newParentId = null, destinationGroupUuid = office.uuid) }
         })
+    }
+
+    /**
+     * The other half of the same exclusion — the half where both sides of the comparison are `null`.
+     *
+     * `the position the block already sits at is not offered` seats both of its heads inside a topic, so what it
+     * measures is the rule's *topic* leg: a destination wearing the head's own topic uuid. The standalone tree is
+     * the case where that leg carries nothing on either side, because [TaskHierarchyPolicy.rootOf] answers `null` for
+     * a head with no `group_id` and a destination's `topic` is `null` for the unfiled tree's own root — so the two
+     * `null`s have to compare equal for the exclusion to fire at all. An `if (ownTopicUuid != null && …)` guard
+     * around the filter removes it for exactly the heads that live outside every topic, and every fixture that
+     * existed before this one either seated its head in a topic (so the guard never mattered) or asked about a
+     * position that was never the head's own (so the extra row went unnoticed). That is a whole half of a domain rule
+     * with nothing holding it: the sheet would hand a reader of the unfiled tree the place they already are, the row
+     * whose press silently re-orders their notebook behind a preview that says nothing moved.
+     *
+     * Both shapes are seated here, because the two topic-less pairs are different questions. A head that is itself a
+     * root of the standalone tree must not be handed `(no topic, no parent)`, while that same tree *with a row above
+     * the block* stays on offer — the topic-less mirror of "same topic, another parent". A head that hangs on a row
+     * of that tree is the other half: `(no topic, that row)` leaves, and the tree's own root — plus a root that is
+     * not its parent — survives.
+     */
+    @Test
+    fun `the position a topic-less block already sits at is not offered`() {
+        val office = group("office-block")
+        row("planning", position = 0, group = office.uuid)
+        row("notes", parent = "planning", position = 1, group = office.uuid)
+        // Two roots of the standalone tree, and a row hanging under the second of them: one head for each pair the
+        // rule has to answer without a topic uuid on either side.
+        val onRoot = row("draft", position = 2)
+        val host = row("carried", position = 3)
+        val underHost = row("figures", parent = "carried", position = 4)
+
+        // (1) A head that is itself a root of the unfiled tree: `(no topic, no parent)` is where it already sits.
+        val rootList = destinations(onRoot)
+        assertEquals("the unfiled root the block already sits on is not offered",
+            false, rootList.any { it.topic == null && it.parent == null })
+        assertTrue("while that same parentless position under a topic is: $rootList",
+            rootList.any { it.topic?.uuid == office.uuid && it.parent == null })
+        assertTrue("and the same unfiled tree with a row above the block is: $rootList",
+            rootList.any { it.topic == null && it.parent?.id == host.id })
+        assertEquals("three places inside the topic and two more on the unfiled tree: the head's own position is the " +
+            "only destination withheld — its own row is not a destination at all, the block filter takes it before " +
+            "the rule is asked", 5, rootList.size)
+
+        // (2) A head hanging on a row of the unfiled tree: the pair `(no topic, that row)` leaves, and the tree's own
+        // root is a different parent, so it stays.
+        val underList = destinations(underHost)
+        assertEquals("the row it hangs on, in the tree it already lives in, is not offered",
+            false, underList.any { it.topic == null && it.parent?.id == host.id })
+        assertTrue("while that tree's own root, which is a different parent, is: $underList",
+            underList.any { it.topic == null && it.parent == null })
+        assertTrue("and the other root of that tree, which is a different row again, is: $underList",
+            underList.any { it.topic == null && it.parent?.id == onRoot.id })
+        assertEquals("three places inside the topic and two more on the unfiled tree, with its own parent the only " +
+            "one withheld", 5, underList.size)
     }
 
     @Test
