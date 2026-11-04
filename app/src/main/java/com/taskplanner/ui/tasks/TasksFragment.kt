@@ -275,6 +275,18 @@ class TasksFragment : Fragment() {
                 viewModel.workConflict.collect { conflict -> conflict?.let { showWorkConflict(it) } }
             }
         }
+        // The delete windows. §4 makes the pre-read async — the press asks the repository what the set would take
+        // before anything can be shown — so the answer arrives on its own and this is the one place that turns it
+        // into a window. `bind` is production, shared with whatever screen takes it next: it collects the view
+        // model's one-shot channel while this view is started, shows one dialog per request, and stops with the view,
+        // which is what keeps a recreate from summoning a window the reader was already shown.
+        DeleteDialog.bind(
+            owner = viewLifecycleOwner,
+            scope = viewLifecycleOwner.lifecycleScope,
+            requests = viewModel.deleteRequests,
+            context = { requireContext() },
+            onAnswer = { request, policy -> viewModel.resolveDelete(request, policy) }
+        )
     }
 
     /**
@@ -407,73 +419,33 @@ class TasksFragment : Fragment() {
 
     // ---------------------------------------------------------------- dialogs
 
+    /**
+     * One press of a card's delete control asks the domain and then shows whatever one window the answer calls for.
+     *
+     * §4's whole requirement is about this line and the order it puts things in. The shape used to be a confirmation
+     * whose positive button *then* ran the command — and only the command's `Confirm` answer, the one that says "this
+     * row holds a branch", put up the two real choices in a second window. So the reader confirmed a delete before
+     * knowing which delete they had confirmed. Now the screen states the press to the repository first
+     * ([TasksViewModel.requestDelete], whose `deleteBatchSummary` read is a read and writes nothing) and the window
+     * that follows is chosen from that answer: the plain confirmation for a row with nothing under it, the branch
+     * choice for a row with something under it. [DeleteDialog] draws both, because the shape is not this screen's to
+     * invent twice.
+     */
     private fun confirmDelete(task: Task) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.dialog_delete_task_title)
-            .setMessage(R.string.dialog_delete_task_message)
-            .setPositiveButton(R.string.delete) { _, _ ->
-                viewModel.deleteSelectedFor(listOf(task.id), onChoice = { rows, children, affected ->
-                    askBranchPolicy(rows, children, affected) { policy ->
-                        viewModel.deleteSelectedFor(listOf(task.id), policy)
-                    }
-                })
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        viewModel.requestDelete(listOf(task.id))
     }
 
     /**
-     * The question Stage 16 §9 makes a parent's delete ask: what happens to the rows hanging under it.
+     * The selection bar's delete: the same single window, over the whole set.
      *
-     * Two operations, not a confirmation — and the domain, not this screen, decided that the question was worth
-     * asking, because a filter can hide the children that make it one. The destructive choice sits on the negative
-     * button and cancelling is the third, so a mis-tap cannot be the branch's funeral.
+     * The set is evaluated before any of it is written — `deleteBatchSummary` counts a parent and its own selected
+     * descendant once each, and [TasksViewModel.deleteRows] refuses to start on the first half while the second half
+     * still has a question open — so bulk never regresses into "delete, then discover".
      */
-    private fun askBranchPolicy(
-        branchRows: Int,
-        children: Int,
-        subtree: Int,
-        onPick: (HierarchyDeletePolicy) -> Unit
-    ) {
-        val message = if (branchRows == 1) {
-            getString(
-                R.string.delete_branch_message,
-                resources.getQuantityString(R.plurals.delete_branch_children, children, children),
-                resources.getQuantityString(R.plurals.delete_branch_rows, subtree, subtree)
-            )
-        } else {
-            getString(
-                R.string.delete_branch_message_batch,
-                branchRows,
-                resources.getQuantityString(R.plurals.delete_branch_rows, subtree, subtree)
-            )
-        }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.delete_branch_title)
-            .setMessage(message)
-            .setPositiveButton(R.string.delete_policy_promote) { _, _ ->
-                onPick(HierarchyDeletePolicy.PROMOTE_CHILDREN)
-            }
-            .setNegativeButton(R.string.delete_policy_subtree) { _, _ ->
-                onPick(HierarchyDeletePolicy.DELETE_SUBTREE)
-            }
-            .setNeutralButton(R.string.cancel, null)
-            .show()
-    }
-
     private fun confirmDeleteSelected() {
-        val count = lastState.selectedIds.size
-        if (count == 0) return
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.confirm_delete_selected_title)
-            .setMessage(getString(R.string.confirm_delete_selected_message, count))
-            .setPositiveButton(R.string.delete) { _, _ ->
-                viewModel.deleteSelected(onChoice = { rows, children, affected ->
-                    askBranchPolicy(rows, children, affected) { policy -> viewModel.deleteSelected(policy = policy) }
-                })
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        val ids = lastState.selectedIds.toList()
+        if (ids.isEmpty()) return
+        viewModel.requestDelete(ids, fromSelection = true)
     }
 
     private fun promptCreateGroup() {

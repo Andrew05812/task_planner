@@ -106,10 +106,13 @@
     <string name="dialog_delete_task_title">Delete Task</string>
     <string name="dialog_delete_task_message">Are you sure you want to delete this task?</string>
     <!-- Stage 16 §9: a row with rows under it has two deletes, and the reader picks one. The count travels as a
-         plural because English says "1 subtask" and Russian needs three forms for the same number. -->
+         plural because English says "1 subtask" and Russian needs three forms for the same number.
+         §4 then fixed *when* the choice is offered: one window per delete press, and this is that window, so the
+         message has to carry both figures and both consequences on its own — there is no earlier confirmation behind
+         it that the reader has already answered. -->
     <string name="delete_branch_title">Tasks with subtasks</string>
-    <string name="delete_branch_message">You are deleting a task with %1$s under it, %2$s in all. Move them up a level, or delete the whole branch?</string>
-    <string name="delete_branch_message_batch">%1$d of the selected tasks have rows under them, %2$s in all. Move those up a level, or delete the whole branches?</string>
+    <string name="delete_branch_message">%1$s sit directly under this task, and its branch holds %2$s in all. Deleting only this task hands the rows under it to whatever holds this one now. Deleting the branch retires every row in it.</string>
+    <string name="delete_branch_message_batch">%1$d of the selected tasks have rows directly under them, and this delete would take %2$s in all. Deleting only the chosen tasks hands each one\'s rows to its former parent. Deleting the branches retires every row in them.</string>
     <plurals name="delete_branch_children">
         <item quantity="one">%1$d subtask</item>
         <item quantity="other">%1$d subtasks</item>
@@ -118,8 +121,11 @@
         <item quantity="one">%1$d row</item>
         <item quantity="other">%1$d rows</item>
     </plurals>
-    <string name="delete_policy_promote">Move them up</string>
-    <string name="delete_policy_subtree">Delete the branch</string>
+    <!-- The two sentences §4 names, verbatim, as the buttons that mean them: the first retires one row and moves its
+         children up, the second retires the block. The old labels («Move them up», «Delete the branch») described the
+         mechanics but were not the two choices the roadmap asked to be put under a reader's thumb. -->
+    <string name="delete_policy_promote">Delete only this task</string>
+    <string name="delete_policy_subtree">Delete this task and its entire branch</string>
     <string name="delete_blocked_running">Stop the timer before deleting this task</string>
     <string name="delete_row_missing">This task is no longer in your list</string>
     <!-- Stage 16 §7: the card's fold control. The resting description is what the layout carries before a row is

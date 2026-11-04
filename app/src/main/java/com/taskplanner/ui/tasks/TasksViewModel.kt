@@ -32,6 +32,8 @@ import com.taskplanner.data.tracking.TrackingPhase
 import com.taskplanner.data.repository.TrackingOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -227,6 +229,22 @@ class TasksViewModel @Inject constructor(
     /** Set when Start was refused because another task holds the profile's single timer. */
     private val _workConflict = MutableStateFlow<WorkConflict?>(null)
     val workConflict: StateFlow<WorkConflict?> = _workConflict.asStateFlow()
+
+    /**
+     * The delete questions this screen has been asked and has not yet answered.
+     *
+     * A channel of capacity one rather than a `StateFlow`, and the difference is the whole point under §4. A state
+     * holder re-delivers its current value to whoever starts collecting — so a view that stops and restarts (a
+     * rotation, a tab returning from the background) would be shown the same delete window a second time for a press
+     * that happened once, and a window the reader already answered would come back. A channel element is *removed* by
+     * the receive that reads it: one press, one request, one window, and a recreate that finds nothing queued. The
+     * capacity is the number of unanswered questions the app keeps, which is one: a second press while a window is
+     * open is dropped by [offerDelete] rather than stacked behind it, so no part of a set can go while the reader is
+     * still being asked about another. What it holds is a row id and three integers — no context, no view — so
+     * nothing here can outlive the screen that was handed it.
+     */
+    private val _deleteRequests = Channel<DeleteRequest>(capacity = 1)
+    val deleteRequests: ReceiveChannel<DeleteRequest> get() = _deleteRequests
 
     /** The tracking block of the task open in the editor, re-measured while a stretch runs. */
     private val _taskWork = MutableStateFlow<WorkStatisticsRepository.TaskWorkView>(
@@ -644,6 +662,77 @@ class TasksViewModel @Inject constructor(
     }
 
     val selectedIds: Set<Long> get() = selectionFlow.value.first
+
+    /**
+     * A delete press, from a card or from the selection bar: read the domain, then ask the reader once.
+     *
+     * Nothing here chooses. [DeleteRequest] is built from
+     * [com.taskplanner.data.repository.TaskHierarchyRepository.deleteBatchSummary], which answers "what would this set
+     * take" over the stored tree rather than over the rows a filter let through, and which is a read — no row is
+     * touched between the press and the answer. The request goes on [deleteRequests] and the screen's collector puts
+     * up the window [DeleteDialog.show] picks from it: one window for a row with nothing under it, the branch choice
+     * for a row with something under it, and never a confirmation that leads to a second question.
+     *
+     * [fromSelection] only says whether a completed answer should close selection mode; the batch itself is evaluated
+     * as one set by [deleteRows], which is what stops the first half of a selection being deleted while the second
+     * half is still unasked.
+     */
+    fun requestDelete(ids: List<Long>, fromSelection: Boolean = false) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val summary = hierarchyRepository.deleteBatchSummary(ids)
+                offerDelete(
+                    DeleteRequest(
+                        ids = ids,
+                        branchRows = summary.branchRows,
+                        children = summary.children,
+                        affectedRows = summary.affectedRows,
+                        fromSelection = fromSelection
+                    )
+                )
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
+    /**
+     * The reader's answer to [requestDelete]'s window, and the only door a delete window can open.
+     *
+     * [policy] is `null` when the window was the plain confirmation — a set the domain says has nothing under it, so
+     * there is no second operation to choose — and one of the two branch operations when the window asked. Either
+     * way the write goes through [deleteRows], the single correct path on this screen, and it is asked again rather
+     * than answered: if a row gained a child between the read and this call, `deleteRows` re-reads the set and a
+     * branch request comes back out of [deleteRequests], because the question §4 asks is about the tree as it is when
+     * the pen moves, not as it was when the reader first pointed.
+     *
+     * A cancel never reaches this function at all: [DeleteDialog] calls nothing on the way out.
+     */
+    fun resolveDelete(request: DeleteRequest, policy: HierarchyDeletePolicy?) {
+        viewModelScope.launch {
+            try {
+                val went = deleteRows(request.ids, policy) { branchRows, children, subtree ->
+                    offerDelete(request.copy(branchRows = branchRows, children = children, affectedRows = subtree))
+                }
+                if (went && request.fromSelection) exitSelection()
+            } catch (e: Exception) {
+                setError(e)
+            }
+        }
+    }
+
+    /**
+     * Hands the screen one question.
+     *
+     * `trySend` on a channel of capacity one is the whole policy: an unanswered request already holds the reader's
+     * window, so a second press is dropped rather than stacked behind it — no write, and the same press can be taken
+     * again the moment the first question is answered. A request already received is gone from the channel, which is
+     * why a recreate cannot show it twice.
+     */
+    private fun offerDelete(request: DeleteRequest) {
+        _deleteRequests.trySend(request)
+    }
 
     fun deleteSelected(
         onDone: () -> Unit = {},

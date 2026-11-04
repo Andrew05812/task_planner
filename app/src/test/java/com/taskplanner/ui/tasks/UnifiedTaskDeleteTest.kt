@@ -1,0 +1,784 @@
+package com.taskplanner.ui.tasks
+
+import android.app.AlarmManager
+import android.content.Context
+import android.content.DialogInterface
+import android.app.Dialog
+import android.os.Handler
+import android.os.Looper
+import android.view.View
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.test.core.app.ApplicationProvider
+import com.taskplanner.R
+import com.taskplanner.data.model.SyncState
+import com.taskplanner.data.model.Task
+import com.taskplanner.data.model.TaskGroup
+import com.taskplanner.data.model.TrackingSession
+import com.taskplanner.data.model.TrackingState
+import com.taskplanner.testing.AppFixture
+import java.util.Date
+import java.util.concurrent.Executor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowAlarmManager
+import org.robolectric.shadows.ShadowDialog
+
+/**
+ * Stage 16 §4: one delete press, one window, and the branch's fate named *inside* that window.
+ *
+ * A row with rows under it has two deletes — hand the children up to whatever held the head, or retire the whole
+ * branch — and §9's repository refuses to pick one for the reader (`HierarchyDeleteResult.Confirm`, returned by
+ * `TaskHierarchyRepository.deleteTask`). §4 is about where the reader meets that refusal, and until now the tasks
+ * screen met it in two windows: the card's delete opened the generic confirmation, that window's own button called
+ * the command, and only the command's answer — "this row holds a branch" — put up a second window carrying the two
+ * real choices. A reader who confirmed the first had agreed to a delete before knowing which delete they had agreed
+ * to, which is the sentence the roadmap's §4 exists to make false: what happens to the children has to be legible
+ * before the first change to the data, not after it.
+ *
+ * **What this file measures is a number of windows.** Content alone cannot pin §4 — the old second window was
+ * already a correct branch dialog, so every "does the message name the count" assertion passed with the flow still
+ * in two steps. [press] therefore marks the list of shown dialogs before the press and reads it after, and
+ * [theOneWindow] asserts the count before it lets a test look at a word. The counter's non-vacuity is proven by
+ * mutation, in the task's report: putting the pre-confirmation back makes the branch cases fail at
+ * `expected:<1> but was:<2>` while the rest of the file stays green.
+ *
+ * **The domain supplies the shape, the screen only draws it.** No number here comes from a walk this file or the
+ * screen performs: the request the dialog is built from is `deleteBatchSummary(ids)`, the same read the write path
+ * consults, so a row whose children a filter hid is still a branch and still gets the branch window. Nothing in
+ * `TasksFragment` counts children any more, and this file never asks a Fragment to be that authority.
+ *
+ * **Nothing is written before the reader answers.** Every case that stops at a window compares [shape] — which rows
+ * are live, in what order, under which parent, in which topic — against the same value taken before the press, so a
+ * cancel is shown to be a cancel rather than a delete that reported success.
+ *
+ * **The harness is production.** [DeleteDialog.bind] is the function `TasksFragment.setupObservers` calls, with the
+ * real one-shot channel, the real dialog object and a real `LifecycleRegistry` driving the same
+ * `repeatOnLifecycle(STARTED)` the fragment runs under; the rotation cases stop, recreate and press through it.
+ * What the harness cannot reach is *which card control* calls `viewModel.requestDelete` — `TasksFragment` is an
+ * `@AndroidEntryPoint` fragment and this module's unit-test classpath carries no Hilt test component, so that one
+ * line is read rather than run, and the report says so.
+ *
+ * Robolectric gives the resource set of the test's own qualifiers, so every string is compared to
+ * `getString(...)`/`getQuantityString(...)` and to no English word — the rule `EnglishLiteralAssertionTest` holds
+ * over this package — and every geometric claim is box arithmetic, never a guess about glyph widths.
+ */
+@RunWith(RobolectricTestRunner::class)
+class UnifiedTaskDeleteTest {
+
+    private lateinit var fixture: AppFixture
+    private lateinit var app: Context
+    private lateinit var viewModel: TasksViewModel
+    private lateinit var screen: TestScreen
+    private var userId: Long = 0
+
+    private companion object {
+        const val STAMP = 1_700_000_000_000L
+
+        /** The narrowest width the app is designed against — the one the card budget was photographed at. */
+        const val NARROW_DP = 320
+    }
+
+    /**
+     * The screen side of a press: a lifecycle the test drives, and the collector the screen installs.
+     *
+     * A `LifecycleRegistry` rather than a hosted fragment, because what §4 needs from the lifecycle is the honest
+     * `STARTED`/`CREATED` transition `repeatOnLifecycle` reacts to. A fragment would need a Hilt component this
+     * classpath does not have and would add no fact the registry does not already pin.
+     */
+    private inner class TestScreen : LifecycleOwner {
+        private val registry = LifecycleRegistry.createUnsafe(this)
+        override val lifecycle: Lifecycle get() = registry
+        val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+        fun moveTo(state: Lifecycle.State) {
+            when (state) {
+                Lifecycle.State.CREATED -> registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+                Lifecycle.State.STARTED -> registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                Lifecycle.State.RESUMED -> registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+                else -> registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+            }
+        }
+    }
+
+    @Before
+    fun setUp() {
+        app = ApplicationProvider.getApplicationContext()
+        fixture = AppFixture(app)
+        // §4's press is a read followed by a window, and the read is a Room query. A coroutine that resumes after a
+        // suspending call is dispatched on the continuation's own dispatcher — here `Dispatchers.Main` — so the
+        // collector that puts the window up wakes on Main, wherever the storage thread happened to finish. An inline
+        // main executor (the shape the rest of the suite uses) would run that wake-up *on the fixture's transaction
+        // thread*, and a `Dialog` cannot even be constructed off a looper: the first draft of this class proved it,
+        // `Can't create handler inside thread Thread[fixture-transaction-thread …] that has not called
+        // Looper.prepare()` swallowed by the collector, and every test then reporting zero windows. So Main posts to
+        // the real main looper here, and `pump()` is what drains it: the window is built on the thread the app builds
+        // windows on, and nothing in this class races a background resume.
+        val toMain = Handler(Looper.getMainLooper())
+        Dispatchers.setMain(Executor { command -> toMain.post(command) }.asCoroutineDispatcher())
+        userId = runBlocking { fixture.signIn(email = "unified-delete@example.com").id }
+        viewModel = TasksViewModel(
+            fixture.taskRepository,
+            fixture.categoryRepository,
+            fixture.groupRepository,
+            fixture.recurrenceRepository,
+            fixture.reminderRepository,
+            fixture.sessionRepository,
+            fixture.workTrackingRepository,
+            fixture.workStatisticsRepository,
+            fixture.taskHierarchyRepository
+        )
+        bindScreen()
+    }
+
+    @After
+    fun tearDown() {
+        screen.scope.cancel()
+        runBlocking { fixture.awaitIdle() }
+        fixture.close()
+        Dispatchers.resetMain()
+    }
+
+    // ── the screen, the press, and the windows it opened ─────────────────────────────────────────────────────
+
+    /** The same five arguments `TasksFragment` passes, into the same production function. */
+    private fun bindScreen() {
+        screen = TestScreen()
+        DeleteDialog.bind(
+            owner = screen,
+            scope = screen.scope,
+            requests = viewModel.deleteRequests,
+            context = { themed() },
+            onAnswer = { request, policy -> viewModel.resolveDelete(request, policy) }
+        )
+        screen.moveTo(Lifecycle.State.RESUMED)
+        pump()
+    }
+
+    private fun themed(): Context = android.view.ContextThemeWrapper(app, R.style.Theme_TaskPlanner)
+
+    /**
+     * Settles the two halves of a press: the main looper, then the storage threads it handed its next step to.
+     *
+     * The two must be driven in that alternating order, and the looper must get the last word. A coroutine that wakes
+     * from a Room read posts its *next* suspending call back through Main — so draining storage first and the looper
+     * last would read a tree where the second delete of a batch had been written and the third had not even started.
+     * The repetition is the convergence: each pass lets one more link of the chain run, and the bound makes a cycle
+     * that never settles fail as a wrong assertion rather than hang.
+     */
+    private fun pump() {
+        val looper = shadowOf(Looper.getMainLooper())
+        // A batch is a chain, not a step: three rows means three transactions, each with its reminder and series
+        // follow-up in between, and every link wakes on Main and suspends on storage again. So the two are driven
+        // until the looper reports nothing left to run rather than a fixed number of times — and the bound stays, so
+        // a loop that never settles surfaces as a failed assertion instead of a hung build.
+        repeat(30) {
+            looper.idle()
+            runBlocking { fixture.awaitIdle() }
+            if (looper.isIdle) return
+        }
+    }
+
+    /** Every window shown since the mark, in the order the screen put them up. */
+    private fun windowsSince(mark: Int): List<Dialog> = ShadowDialog.getShownDialogs().drop(mark)
+
+    /**
+     * The window one press owes.
+     *
+     * The count is asserted before any content is read, so a flow that opens a plain confirmation and then a branch
+     * dialog fails here instead of passing on the second window's wording.
+     */
+    private fun theOneWindow(mark: Int): AlertDialog {
+        val shown = windowsSince(mark)
+        assertEquals("one press puts exactly one window on the screen", 1, shown.size)
+        return shown.single() as AlertDialog
+    }
+
+    /** A press of one card's delete control: the command that control now runs, and nothing else. */
+    private fun press(row: Task): Int {
+        val mark = ShadowDialog.getShownDialogs().size
+        viewModel.requestDelete(listOf(row.id))
+        pump()
+        return mark
+    }
+
+    /** A press of the selection bar's delete button, over the ids the reader ticked. */
+    private fun pressSelection(ids: List<Long>): Int {
+        val mark = ShadowDialog.getShownDialogs().size
+        viewModel.requestDelete(ids, fromSelection = true)
+        pump()
+        return mark
+    }
+
+    private fun titleOf(window: AlertDialog): String =
+        window.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)?.text?.toString().orEmpty()
+
+    private fun messageOf(window: AlertDialog): String =
+        window.findViewById<TextView>(android.R.id.message)?.text?.toString().orEmpty()
+
+    private fun buttonOf(window: AlertDialog, which: Int): String? = window.getButton(which)?.text?.toString()
+
+    private fun click(window: AlertDialog, which: Int) {
+        window.getButton(which).performClick()
+        pump()
+    }
+
+    // ── the rows ────────────────────────────────────────────────────────────────────────────────────────────
+
+    /** Topics get their own `sort_order`: left at the default they tie, and the query planner picks. */
+    private var nextSortOrder = 0
+
+    private fun group(name: String): TaskGroup = runBlocking {
+        val group = TaskGroup(
+            uuid = name, userId = userId, name = name, sortOrder = nextSortOrder++,
+            syncState = SyncState.SYNCED, createdAt = STAMP, updatedAt = STAMP
+        )
+        fixture.groupDao.upsertGroup(group)
+        fixture.groupDao.getGroupByUuid(name)!!
+    }
+
+    private fun row(
+        title: String,
+        parent: String? = null,
+        position: Int,
+        groupId: String? = null,
+        uuid: String = title
+    ): Task = runBlocking {
+        val id = fixture.taskDao.insertTask(
+            Task(
+                title = title, description = "", uuid = uuid, userId = userId, groupId = groupId,
+                parentUuid = parent, order = position, syncState = SyncState.SYNCED,
+                createdAt = STAMP, updatedAt = STAMP
+            )
+        )
+        fixture.taskDao.getTaskById(id)!!
+    }
+
+    private fun stored(): List<Task> = runBlocking { fixture.taskDao.getRowsInStoredOrder(userId) }
+
+    private fun allRows(): List<Task> = runBlocking { fixture.taskDao.getAllRowsOnce(userId) }
+
+    /** Everything a delete could change, in one comparable value: which rows, in what order, hanging where. */
+    private fun shape(): List<List<Any?>> = stored().map {
+        listOf(it.uuid, it.parentUuid, it.groupId, it.order, it.status)
+    }
+
+    private fun retired(): List<String> = allRows().filter { it.isDeleted }.map { it.uuid }.sorted()
+
+    // ── §4: one window, and which window ─────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun a_row_with_no_children_raises_one_dialog_and_it_is_the_plain_confirmation() {
+        val quiet = row("water the ferns", position = 0)
+
+        val mark = press(quiet)
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "a row with nothing under it has one delete, so the window is the confirmation",
+            app.getString(R.string.dialog_delete_task_title),
+            titleOf(window)
+        )
+        assertEquals(
+            "and it says what it asks",
+            app.getString(R.string.dialog_delete_task_message),
+            messageOf(window)
+        )
+        assertEquals(
+            "the confirm button is the write",
+            app.getString(R.string.delete),
+            buttonOf(window, DialogInterface.BUTTON_POSITIVE)
+        )
+        assertEquals(
+            "and cancelling is on the same window, not behind another one",
+            app.getString(R.string.cancel),
+            buttonOf(window, DialogInterface.BUTTON_NEGATIVE)
+        )
+        assertEquals(
+            "nothing is gone before the answer",
+            listOf("water the ferns"),
+            stored().map { it.uuid }
+        )
+    }
+
+    @Test
+    fun a_row_with_children_raises_one_dialog_and_it_is_the_branch_choice() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        row("week two", parent = "field notes", position = 2)
+
+        val mark = press(head)
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "the one window is the branch question, not a confirmation that leads to it",
+            app.getString(R.string.delete_branch_title),
+            titleOf(window)
+        )
+    }
+
+    @Test
+    fun the_branch_dialog_states_the_immediate_children_count_and_the_subtree_size() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        row("week two", parent = "field notes", position = 2)
+        row("draft", parent = "week one", position = 3)
+
+        val window = theOneWindow(press(head))
+
+        val children = app.resources.getQuantityString(R.plurals.delete_branch_children, 2, 2)
+        val rows = app.resources.getQuantityString(R.plurals.delete_branch_rows, 4, 4)
+        assertTrue(
+            "the message is the branch sentence built from the domain's two figures",
+            messageOf(window) == app.getString(R.string.delete_branch_message, children, rows)
+        )
+        assertTrue(
+            "and it names the immediate children (${children})",
+            messageOf(window).contains(children)
+        )
+        assertTrue(
+            "the size of the whole branch (${rows})",
+            messageOf(window).contains(rows)
+        )
+    }
+
+    @Test
+    fun the_branch_dialog_offers_the_two_fates_and_a_cancel() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+
+        val window = theOneWindow(press(head))
+
+        assertEquals(
+            "the first choice is the brief's: only this task, with its children handed up",
+            app.getString(R.string.delete_policy_promote),
+            buttonOf(window, DialogInterface.BUTTON_POSITIVE)
+        )
+        assertEquals(
+            "the second is the branch going with it",
+            app.getString(R.string.delete_policy_subtree),
+            buttonOf(window, DialogInterface.BUTTON_NEGATIVE)
+        )
+        assertEquals(
+            "and the third is the way out that writes nothing",
+            app.getString(R.string.cancel),
+            buttonOf(window, DialogInterface.BUTTON_NEUTRAL)
+        )
+    }
+
+    @Test
+    fun the_three_actions_of_the_branch_window_clear_the_touch_floor() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+
+        val window = theOneWindow(press(head))
+        val decor = window.window!!.decorView
+        val width = (NARROW_DP * decor.resources.displayMetrics.density).toInt()
+        decor.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
+        val floor = app.resources.getDimensionPixelSize(R.dimen.touch_target_min)
+
+        val actions = listOf(
+            DialogInterface.BUTTON_POSITIVE to "hand the children up",
+            DialogInterface.BUTTON_NEGATIVE to "delete the branch",
+            DialogInterface.BUTTON_NEUTRAL to "cancel"
+        )
+        assertEquals("the window offers three actions", 3, actions.size)
+        actions.forEach { (which, name) ->
+            val button = window.getButton(which)
+            assertNotNull("$name is on the window", button)
+            assertTrue(
+                "$name measures ${button!!.height}px against the app's floor of ${floor}px",
+                button.height >= floor
+            )
+        }
+    }
+
+    // ── the answers, and what each one writes ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun choosing_only_this_task_promotes_the_direct_children_and_retires_only_the_head() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        row("week two", parent = "field notes", position = 2)
+        row("draft", parent = "week one", position = 3)
+
+        val window = theOneWindow(press(head))
+        click(window, DialogInterface.BUTTON_POSITIVE)
+
+        assertEquals(
+            "the head is gone and both its rows are live again",
+            listOf("week one", "week two", "draft"),
+            stored().map { it.uuid }
+        )
+        // The order a promoted branch leaves behind is the order it arrived in: §4 retires the head and lifts its
+        // children, and it does not re-sequence anybody. `getRowsInStoredOrder` is the raw sequence, so a row written
+        // after its parent's sibling stays written after it — the tree the reader sees is `canonicalSequence`'s
+        // business, and §9's tests are where that contiguity is pinned. Claimed here as it is, not as it might read.
+        assertNull(
+            "the promoted rows hang on nothing now",
+            allRows().first { it.uuid == "week one" }.parentUuid
+        )
+        assertEquals(
+            "and the shape below a promoted row is still its own",
+            "week one",
+            allRows().first { it.uuid == "draft" }.parentUuid
+        )
+        assertEquals("only the head is a tombstone", listOf("field notes"), retired())
+    }
+
+    @Test
+    fun choosing_the_branch_retires_the_whole_block_and_nothing_else() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        row("week two", parent = "field notes", position = 2)
+        row("draft", parent = "week one", position = 3)
+        row("errands", position = 4)
+
+        val window = theOneWindow(press(head))
+        click(window, DialogInterface.BUTTON_NEGATIVE)
+
+        assertEquals("the block went with its head", listOf("errands"), stored().map { it.uuid })
+        assertEquals(
+            "every row of it is retired, none removed",
+            listOf("draft", "field notes", "week one", "week two"),
+            retired()
+        )
+        assertEquals("and the neighbour is untouched", 5, allRows().size)
+    }
+
+    @Test
+    fun cancelling_writes_nothing_and_leaves_the_tree_exactly_as_it_was() {
+        group("notebook")
+        val head = row("field notes", position = 0, groupId = "notebook")
+        row("week one", parent = "field notes", position = 1, groupId = "notebook")
+        row("draft", parent = "week one", position = 2, groupId = "notebook")
+        val before = shape()
+
+        val window = theOneWindow(press(head))
+        click(window, DialogInterface.BUTTON_NEUTRAL)
+
+        assertEquals(
+            "a cancel is not a delete that reported success",
+            before,
+            shape()
+        )
+        assertEquals("nothing is a tombstone", emptyList<String>(), retired())
+        assertEquals(
+            "and no row was queued for a push either",
+            emptyList<String>(),
+            allRows().filter { it.syncState != SyncState.SYNCED }.map { it.uuid }
+        )
+        assertNull("the screen says nothing, because nothing happened", viewModel.state.value.error)
+    }
+
+    // ── a batch is one question about the whole set ──────────────────────────────────────────────────────────
+
+    @Test
+    fun a_selection_holding_a_parent_and_its_own_child_asks_once_and_counts_that_row_once() {
+        val head = row("field notes", position = 0)
+        val child = row("week one", parent = "field notes", position = 1)
+        row("draft", parent = "week one", position = 2)
+
+        val mark = pressSelection(listOf(head.id, child.id))
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "one question for the whole set, even though two of its rows are branches",
+            app.getString(R.string.delete_branch_title),
+            titleOf(window)
+        )
+        val rows = app.resources.getQuantityString(R.plurals.delete_branch_rows, 3, 3)
+        assertTrue(
+            "the set takes three rows and the sentence counts each once, not the parent twice",
+            messageOf(window).contains(rows)
+        )
+        click(window, DialogInterface.BUTTON_NEGATIVE)
+        assertEquals(
+            "and the answer retires the block once",
+            listOf("draft", "field notes", "week one"),
+            retired()
+        )
+    }
+
+    @Test
+    fun a_bulk_selection_whose_branch_rows_are_in_the_second_half_writes_nothing_before_the_choice() {
+        val first = row("buy stamps", position = 0)
+        val second = row("post them", position = 1)
+        val head = row("field notes", position = 2)
+        row("week one", parent = "field notes", position = 3)
+        val before = shape()
+
+        val mark = pressSelection(listOf(first.id, second.id, head.id))
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "the set is asked about as one, and the branch in its second half is part of the question",
+            app.getString(R.string.delete_branch_title),
+            titleOf(window)
+        )
+        assertEquals(
+            "the rows of the first half are still there, in order",
+            before,
+            shape()
+        )
+
+        click(window, DialogInterface.BUTTON_POSITIVE)
+        assertEquals("one answer, then the whole set goes", listOf("week one"), stored().map { it.uuid })
+        assertEquals(
+            "every row the press named is retired",
+            listOf("buy stamps", "field notes", "post them"),
+            retired()
+        )
+    }
+
+    @Test
+    fun a_plain_batch_of_rows_without_children_raises_one_confirmation_naming_the_count() {
+        val first = row("buy stamps", position = 0)
+        val second = row("post them", position = 1)
+
+        val mark = pressSelection(listOf(first.id, second.id))
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "a batch with no branch in it is the confirmation, not the branch question",
+            app.getString(R.string.confirm_delete_selected_title),
+            titleOf(window)
+        )
+        assertEquals(
+            "and it says how many rows it means",
+            app.getString(R.string.confirm_delete_selected_message, 2),
+            messageOf(window)
+        )
+        click(window, DialogInterface.BUTTON_POSITIVE)
+        assertEquals("both are gone", emptyList<String>(), stored().map { it.uuid })
+    }
+
+    @Test
+    fun a_cancelled_batch_leaves_the_selection_the_reader_was_building() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        viewModel.toggleSelection(head.id)
+        pump()
+        assertEquals(
+            "the press came from the selection bar",
+            setOf(head.id),
+            viewModel.selectedIds
+        )
+
+        val window = theOneWindow(pressSelection(listOf(head.id)))
+        click(window, DialogInterface.BUTTON_NEUTRAL)
+
+        assertEquals("a cancel keeps the batch the reader ticked", setOf(head.id), viewModel.selectedIds)
+    }
+
+    // ── the domain's refusals still reach the reader ─────────────────────────────────────────────────────────
+
+    @Test
+    fun a_running_measurement_is_refused_names_its_reason_and_leaves_the_tree_untouched() {
+        val timed = row("stretch the hamstrings", position = 0)
+        row("notes", parent = "stretch the hamstrings", position = 1)
+        runBlocking {
+            fixture.trackingSessionDao.insert(
+                TrackingSession(
+                    uuid = "open-unified-session",
+                    userId = userId,
+                    taskId = timed.id,
+                    taskUuid = timed.uuid,
+                    taskTitle = timed.title,
+                    state = TrackingState.RUNNING,
+                    startedAt = fixture.timeBase.wall,
+                    runningMarker = userId.toString()
+                )
+            )
+        }
+        val before = shape()
+
+        val window = theOneWindow(press(timed))
+        click(window, DialogInterface.BUTTON_NEGATIVE)
+
+        assertEquals(
+            "the refusal is the named sentence the state carries, not a silent nothing",
+            R.string.delete_blocked_running,
+            viewModel.state.value.error
+        )
+        assertEquals("and the tree is exactly what it was", before, shape())
+        assertEquals("no second window appeared to explain it", 1, ShadowDialog.getShownDialogs().size)
+    }
+
+    // ── the follow-ups that are not database state ───────────────────────────────────────────────────────────
+
+    @Test
+    fun promoting_the_children_cancels_the_head_s_reminder_and_keeps_the_children_s_alarms() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        val head = row("field notes", position = 0)
+        val child = row("week one", parent = "field notes", position = 1)
+        val due = fixture.timeBase.wall + 86_400_000L
+        runBlocking {
+            fixture.reminderRepository.applyReminders(head.copy(dueDate = due), listOf(30))
+            fixture.reminderRepository.applyReminders(child.copy(dueDate = due), listOf(15))
+        }
+        pump()
+        assertEquals("two rows armed, two alarms on the clock", 2, alarms().size)
+
+        val window = theOneWindow(press(head))
+        click(window, DialogInterface.BUTTON_POSITIVE)
+
+        assertEquals(
+            "the retired row keeps no reminder row",
+            emptyList<String>(),
+            runBlocking { fixture.reminderDao.getLiveForTask(head.uuid) }.map { it.taskUuid }
+        )
+        assertEquals(
+            "the row that survived keeps its own",
+            1,
+            runBlocking { fixture.reminderDao.getLiveForTask(child.uuid) }.size
+        )
+        assertEquals("and only the head's wakeup came off the clock", 1, alarms().size)
+    }
+
+    @Test
+    fun deleting_a_series_instance_with_its_branch_still_owes_the_next_instance() {
+        val instance = saveRepeating("ride the route")
+        row("packing list", parent = instance.uuid, position = 1)
+        val series = instance.seriesUuid!!
+
+        val window = theOneWindow(press(instance))
+        click(window, DialogInterface.BUTTON_NEGATIVE)
+
+        assertEquals(
+            "the instance and its branch are retired together",
+            listOf("packing list", instance.uuid).sorted(),
+            retired()
+        )
+        val replacement = stored().firstOrNull { it.seriesUuid == series }
+        assertNotNull("the series still owes the reader its next task", replacement)
+        assertTrue(
+            "which is a row of its own, not the tombstone this press made",
+            replacement!!.uuid != instance.uuid
+        )
+    }
+
+    @Test
+    fun promoting_the_children_of_a_series_instance_still_owes_the_next_instance() {
+        val instance = saveRepeating("ride the route")
+        row("packing list", parent = instance.uuid, position = 1)
+        val series = instance.seriesUuid!!
+
+        val window = theOneWindow(press(instance))
+        click(window, DialogInterface.BUTTON_POSITIVE)
+
+        assertEquals("only the instance was retired", listOf(instance.uuid), retired())
+        assertNotNull(
+            "and the follow-up the old single delete performed still runs on this path",
+            stored().firstOrNull { it.seriesUuid == series && it.uuid != instance.uuid }
+        )
+    }
+
+    // ── rotation: the pre-read is async, so the window must be summoned once ────────────────────────────────
+
+    @Test
+    fun a_recreate_does_not_summon_the_dialog_a_second_time() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+
+        val mark = press(head)
+        theOneWindow(mark)
+
+        // The view goes away and a new one attaches to the same view model — a rotation.
+        screen.scope.cancel()
+        bindScreen()
+
+        assertEquals(
+            "the question that was already on screen is not asked again",
+            emptyList<Dialog>(),
+            windowsSince(mark + 1)
+        )
+        assertEquals("and it was shown once in total", 1, windowsSince(mark).size)
+    }
+
+    @Test
+    fun a_press_arriving_while_the_screen_is_stopped_raises_one_dialog_when_it_returns() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        screen.moveTo(Lifecycle.State.CREATED)
+        pump()
+
+        val mark = press(head)
+        assertEquals(
+            "nothing is put up while the screen is away",
+            emptyList<Dialog>(),
+            windowsSince(mark)
+        )
+
+        screen.moveTo(Lifecycle.State.STARTED)
+        pump()
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "and the one window it returns with is the branch question",
+            app.getString(R.string.delete_branch_title),
+            titleOf(window)
+        )
+    }
+
+    @Test
+    fun a_second_press_while_a_question_is_open_adds_no_window_and_writes_nothing() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        val before = shape()
+
+        press(head)
+        val mark = ShadowDialog.getShownDialogs().size
+        viewModel.requestDelete(listOf(head.id))
+        pump()
+
+        assertEquals(
+            "a question the reader has not answered is not stacked under a second one",
+            emptyList<Dialog>(),
+            windowsSince(mark)
+        )
+        assertEquals("and the tree is still the one they were asked about", before, shape())
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    private fun alarms() = shadowOf(
+        fixture.context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    ).scheduledAlarms
+
+    /** A repeating task saved the way the editor saves one, returned as the row it wrote. */
+    private fun saveRepeating(title: String): Task {
+        viewModel.saveTask(
+            taskId = 0L,
+            title = title,
+            description = "",
+            dueDate = Date(fixture.timeBase.wall),
+            repeat = RepeatPlan(preset = RepeatPreset.EVERY_N_DAYS, interval = 3)
+        )
+        pump()
+        return stored().first { it.title == title }
+    }
+}
