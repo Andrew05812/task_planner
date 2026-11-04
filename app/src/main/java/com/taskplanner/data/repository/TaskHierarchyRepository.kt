@@ -387,13 +387,12 @@ class TaskHierarchyRepository @Inject constructor(
                 // The block's own depth, which `destinationsFor` asks the same way from the same facts: a sheet that
                 // measured the travelling branch differently would offer a place the write then refuses.
                 height = TaskHierarchyPolicy.heightOf(stored, head),
-                // The set the door above already consulted. `facts.ambiguous` is the same set, and that is the one
-                // [TaskHierarchyPolicy.moveRefusal] reads — kept here because §5's shape of this snapshot is what the
-                // transaction is documented by, not because a second copy of the answer is wanted.
-                ambiguous = ambiguous,
                 // The same shape §6's menu reads its answers from, built once per transaction rather than once per
                 // question, so the rule the reader is shown and the rule that decides the write are literally the
-                // same function over the same data.
+                // same function over the same data. This is where the ambiguity set now lives for the rule:
+                // [TaskHierarchyPolicy.moveRefusal] reads `facts.ambiguous`, which is the same answer the door above
+                // reached for with [TaskHierarchyPolicy.blockIsKnowable] — the door is asked about the block rather
+                // than about the tree, so it takes the set as an argument instead of reading it back from here.
                 facts = TaskHierarchyPolicy.factsOf(stored),
                 // One instant per edit: an operation that writes the head, the block's topic and the crossed
                 // positions must not stamp them minutes apart, or a device comparing two rows of one tree would
@@ -411,7 +410,6 @@ class TaskHierarchyRepository @Inject constructor(
         val block: List<Task>,
         val blockIds: Set<Long>,
         val height: Int,
-        val ambiguous: Set<String>,
         val facts: TaskHierarchyPolicy.TreeFacts,
         val now: Long
     )

@@ -12,6 +12,7 @@ import com.taskplanner.testing.AppFixture
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -32,7 +33,9 @@ import org.robolectric.RobolectricTestRunner
  *    then refuses is a control that does not work, and the reader has learned that about the app before.
  *  * **Everything the repository refuses is absent from the list.** Not greyed out — absent. The exclusions §3 names
  *    are the moved row itself, its descendants, another profile's rows, a topic the notebook does not hold, a parent
- *    with no identity or with two, and a move past the third level.
+ *    with no identity or with two, and a move past the third level — plus the one the transaction answers before it
+ *    reaches the rule at all: a head whose own block holds a doubled identity, which is refused whatever destination
+ *    is asked for, and so has no destinations to draw.
  *
  * Both hold *by construction* rather than by two copies agreeing: [TaskHierarchyRepository.moveSubtreeUnder] now
  * consults [TaskHierarchyPolicy.moveRefusal], the same function [TaskHierarchyPolicy.destinationsFor] filters with —
@@ -205,7 +208,7 @@ class HierarchyDestinationTest {
             }
             accepted(outcome)
         }
-        assertEquals("eight presses' worth of writes, and the tree is the one the list was built from",
+        assertEquals("six presses' worth of writes, and the tree is the one the list was built from",
             before, shape())
     }
 
@@ -438,6 +441,54 @@ class HierarchyDestinationTest {
             hierarchy.moveSubtreeUnder(head.id, twinTwo.id, office.uuid)
         }
         assertEquals("and neither write left a link that could be read two ways", before, shape())
+    }
+
+    /**
+     * A head whose *own branch* hides a doubled identity cannot be moved at all, so it has no destinations either.
+     *
+     * The two halves ask different questions here. [TaskHierarchyPolicy.moveRefusal] asks about the destination;
+     * `TaskHierarchyRepository.edit` asks about the block, at its door, before any destination is measured
+     * ([TaskHierarchyPolicy.blockIsKnowable]) — because "everything under this row" has two answers once a row inside
+     * the branch claims an identity twice. A destination can therefore be one the rule passes and the write refuses,
+     * and a list built from the rule alone draws exactly that: a sheet row that can only ever die on press, which is
+     * the failure §6.3 exists to prevent («не показывай недопустимые варианты как кликабельные»). So the builder now
+     * asks the door's question first, the way [TaskHierarchyPolicy.hierarchyOffers] asks it before drawing a control,
+     * and answers the empty list.
+     */
+    @Test
+    fun `a head whose own block carries a doubled identity offers no destination`() {
+        val office = group("office-block")
+        val head = row("draft", position = 0, group = office.uuid)
+        row("figures", parent = "draft", position = 1, group = office.uuid)
+        // The doubled identity sits two levels below the head, inside the branch any press would carry.
+        row("notes", parent = "figures", position = 2, group = office.uuid, uuid = "twin")
+        row("receipts", position = 3, group = office.uuid, uuid = "twin")
+        val clean = row("planning", position = 4, group = office.uuid)
+        val before = shape()
+
+        // (b) A move the rule passes and the write refuses — the refusal named, not merely "some refusal".
+        assertNull(
+            "the rule alone would let this press through: the block's own identities are not one of its questions",
+            refusalTheRuleGives(head.id, newParentId = null, destinationGroupUuid = office.uuid)
+        )
+        refusedByDomain(HierarchyMoveRefusal.AMBIGUOUS_PARENT) {
+            hierarchy.moveSubtreeUnder(head.id, newParentId = null, destinationGroupUuid = office.uuid)
+        }
+
+        // (c) The destination list answers that door rather than the rule alone: no row left to press.
+        assertEquals("nothing is offered for a block that cannot be named",
+            emptyList<MoveDestination>(), destinations(head))
+
+        // The positive control on the same snapshot, the same read and the same topic: one head whose block *is*
+        // nameable. Without it the case above would be satisfied by an empty fixture.
+        val cleanList = destinations(clean)
+        assertEquals("a head of one clean row keeps its root destinations, so the assertion above is a refusal and " +
+            "not an empty list: $cleanList",
+            listOf(office.uuid, null), cleanList.filter { it.parent == null }.map { it.topic?.uuid })
+        accepted(withRestoredProfile {
+            runBlocking { hierarchy.moveSubtreeUnder(clean.id, newParentId = null, destinationGroupUuid = office.uuid) }
+        })
+        assertEquals("neither the refusal nor the restored press left the tree changed", before, shape())
     }
 
     @Test

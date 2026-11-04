@@ -89,11 +89,21 @@ object TaskHierarchyPolicy {
      *
      * The one arithmetic behind every "can this block go there" question — [indentRefusal]'s depth test,
      * [destinationsFor]'s candidates and `TaskHierarchyRepository`'s own transaction all read it here, so the depth a
-     * menu offers and the depth a write refuses are the same number. Bounded by the contract rather than by the
-     * branch: [TreeFacts.heights] is computed in [MAX_TASK_LEVELS] passes, and §10 records that a pull or a restored
-     * backup can leave the notebook deeper than the contract draws it. That is the safe direction — a too-tall block
-     * is refused a level early, never written — and it is the same number [heightOf] has always given, because
-     * [levelsByUuid] stops counting at the same bound.
+     * menu offers and the depth a write refuses are the same number.
+     *
+     * It is **not** the number [heightOf] gave before this helper existed, and the difference is a branch deeper than
+     * the contract. [levelsByUuid] counts a row's ancestry and breaks at [MAX_TASK_LEVELS], so it reported such a
+     * branch as exactly [MAX_TASK_LEVELS]; [TreeFacts.heights] — what this reads — is propagated in
+     * [MAX_TASK_LEVELS] passes over the rows and so names the truth one level further: a four-row branch gives 4 here
+     * and 3 there. The divergence cannot change any answer. [levelOf] is at least 1 for every row, so [fitsUnder]'s
+     * `parentLevel + blockHeight <= MAX_TASK_LEVELS` is unsatisfiable at either value, and every move such a branch
+     * could make is refused by both readings — refused a level early rather than written, which is the safe direction,
+     * since §10 records that a pull or a restored backup can leave the notebook deeper than the contract draws it.
+     *
+     * The propagation is also row-order-sensitive below the contract bound — that is, for a branch deeper than
+     * [MAX_TASK_LEVELS], which one pass settles when the rows arrive leaf-first and three when they arrive
+     * root-first — so the number past the bound is an artefact of the sequence, not a fact about the tree. Harmless
+     * while every reading still refuses, and the reason it must never be shown to a reader.
      */
     fun blockHeight(facts: TreeFacts, head: Task): Int = facts.heights[head.uuid] ?: 1
 
@@ -349,9 +359,15 @@ object TaskHierarchyPolicy {
      * The order is the caller's sequence, not a map's: topics in the order the snapshot lists them, each topic's own
      * root first and then its rows in stored order, and the standalone tree last. [MoveDestination]s therefore come
      * out the same way for the same rows every time, which is what a list view diffing them between two renders needs.
-     * One [subtreeOf] pass for the block, one pass over [facts]' rows for the candidates, and one bounded ancestor
+     * One [subtreeOf] pass for the block, one grouping of [facts]' rows for the candidates, and one bounded ancestor
      * walk per offered row — never a `subtreeOf` or a `factsOf` per row, which is the arithmetic §14's 10k benchmark
      * exists to catch.
+     *
+     * A head whose own block cannot be named gets no list at all. [blockIsKnowable] is the predicate
+     * `TaskHierarchyRepository.edit` refuses every move of such a block on — including the destination-root rows
+     * [moveRefusal] answers `null` for, because the block's own identities are not one of that function's questions —
+     * so answering them here would draw a sheet in which every press dies. [hierarchyOffers] treats an unknowable row
+     * the same way, and for the same reason.
      */
     fun destinationsFor(
         head: Task,
@@ -360,9 +376,19 @@ object TaskHierarchyPolicy {
         facts: TreeFacts
     ): List<MoveDestination> {
         val block = subtreeOf(facts.rows, head)
+        // The door before the rule: the same call the transaction makes, over the same two sets, so a head the write
+        // will not name is a head this list offers no destination for — not one, not one pressable row.
+        if (!blockIsKnowable(head, block, facts.ambiguous)) return emptyList()
         val blockIds = block.map { it.id }.toSet()
         val blockHeight = blockHeight(facts, head)
         val destinations = ArrayList<MoveDestination>()
+
+        // One pass over the rows for every candidate parent, each filed under the topic that holds it — [rootOf], so
+        // the rows of the standalone tree land under the `null` key and are a group rather than a special case. The
+        // rows arrive in the caller's stored sequence and `groupBy` keeps that order inside each group, which is what
+        // lets the loops below draw exactly the list a per-topic re-scan of `facts.rows` drew, for one pass instead
+        // of one per topic.
+        val candidatesByTopic = facts.rows.groupBy { rootOf(it) }
 
         // One candidate, asked the same question the write will ask it — admitted only on a `null` answer, so a row
         // the sheet can be pressed on is a row the repository takes.
@@ -408,16 +434,12 @@ object TaskHierarchyPolicy {
             // transaction does not make.
             if (topic.uuid.isBlank() || topic.uuid !in profileTopicUuids) return@forEach
             offer(topic, parent = null)
-            facts.rows.forEach { row ->
-                if (rootOf(row) == topic.uuid) offer(topic, parent = row)
-            }
+            candidatesByTopic[topic.uuid]?.forEach { row -> offer(topic, parent = row) }
         }
         // The standalone tree, last: no topic owns it, so no ownership question is asked, and its roots are the rows
         // `rootOf` answers `null` for.
         offer(null, parent = null)
-        facts.rows.forEach { row ->
-            if (rootOf(row) == null) offer(null, parent = row)
-        }
+        candidatesByTopic[null]?.forEach { row -> offer(null, parent = row) }
         return destinations
     }
 
