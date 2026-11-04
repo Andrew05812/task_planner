@@ -12,9 +12,11 @@
   `focusable` here rather than on one of the text views — so a keyboard or switch-access user reaches the choice
   itself, and the whole row lights up under `selectableItemBackground` the way the other rows of this app do.
 
-  The three text views are taken out of the accessibility tree because the row speaks for them: `MoveToDialog` sets
-  one `contentDescription` on this view carrying the title, the path, the level and the travelling count, assembled
-  out of resources, so TalkBack reads the whole choice in one breath instead of making the reader walk three stops.
+  The three text views are taken out of the accessibility tree because the row speaks for them:
+  `MoveDestinationAdapter.bind` sets one `contentDescription` on this view — the sentence itself is assembled out of
+  resources by `MoveToDialog.rowDescription`, which the adapter calls per row, so the copy has one author and the
+  binding has another — and it carries the title, the path, the level and the travelling count, so TalkBack reads the
+  whole choice in one breath instead of making the reader walk three stops.
   Hiding them is only honest while that description covers everything they say — which is what
   `HierarchyMoveSheetTest`'s screen-reader case holds it to. No colour carries a decision here: an admissible
   destination is a row that is drawn, and an inadmissible one is not drawn at all.

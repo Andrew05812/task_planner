@@ -66,6 +66,10 @@ import org.robolectric.shadows.ShadowDialog
  *    the domain refuses, no row moves and no line on the editor claims one did.
  *  * **An empty list is no control at all.** [TaskHierarchyPolicy.destinationsFor] can answer `emptyList()`; a
  *    dialog with nothing in it is a dead button, so the editor does not draw the button either.
+ *  * **The sheet names where the block sits before it offers anywhere to move it.** `dialog_move_to.xml` puts a
+ *    header — the head's own title and the app's «Now …» sentence — above the list, and [MoveToDialog.open] is the
+ *    only writer of those two views, so this file reads both sentences off the panel and measures that the header is
+ *    the thing the reader reaches first. A destination list with no «from» over it is half the question §6.3 asks.
  *
  * The rows are built by [MoveDestinationAdapter] from `item_move_destination.xml`, on the editor's own published
  * snapshot ([TasksViewModel.hierarchyContext]) — [TaskHierarchyPolicy.factsOf] over `stored`, the whole profile,
@@ -77,12 +81,14 @@ import org.robolectric.shadows.ShadowDialog
  *
  * **1B turned the panel into a list, and the walking follows.** The sheet now inflates `dialog_move_to.xml` and hands
  * its destinations to a `ListAdapter` over a `RecyclerView`, so a row is one of the recycler's *bound children* rather
- * than one of a stack this file walked: [rowsOf] measures and lays the panel out at the narrow width, then reads the
- * children the list bound. The layout is asked for here because Robolectric gives a dialog no window to inherit a
- * measure spec from — the height the sheet gets from a handset is a §11 frame — and [MoveToDialog.open] submits its
- * list synchronously, so nothing in this file races a background diff. Every test name §6.3 wrote is still below with
- * the assertions it wrote, and the cases under «the sheet as a list» are 1B's own; only the way a row is reached
- * changed.
+ * than one of a stack this file walked: [rowsOf] lays the sheet's **list** out — the narrow width and
+ * [FULL_SHEET_HEIGHT_PX], as [sheetList] describes — and reads the children that layout bound. It does not touch the
+ * panel: only the touch case measures and lays the whole `dialog_move_to.xml` container out, because only it asks what
+ * the container's own inset leaves the list. The layout is asked for here because Robolectric gives a dialog no window
+ * to inherit a measure spec from — the height the sheet gets from a handset is a §11 frame — and
+ * [MoveToDialog.open] submits its list synchronously, so nothing in this file races a background diff. Every test name
+ * §6.3 wrote is still below with the assertions it wrote, and the cases under «the sheet as a list» are 1B's own; only
+ * the way a row is reached changed.
  */
 @RunWith(RobolectricTestRunner::class)
 class HierarchyMoveSheetTest {
@@ -274,6 +280,19 @@ class HierarchyMoveSheetTest {
      * fixtures admit fits inside it, which is what lets the row-by-row claims below compare a list against a list.
      * The height the *recycling* claim needs is the opposite one, and `the sheet holds its destinations in the
      * adapter and binds only the rows that fit` measures it on its own.
+     *
+     * **[FULL_SHEET_HEIGHT_PX] is a fixture bound, and a growing fixture has to check it.** The rows read back from
+     * this layout are a viewport's output, so every equality that compares them to a whole list is viewport-coupled:
+     * `move to offers every destination the policy admits` asks `admitted.size == rows.size` ("one row per admitted
+     * destination, and not one more"), and the last two claims of `the sheet reads the whole stored profile, not the
+     * filtered screen` ask the drawn rows to equal the policy's list row for row. A destination list that outgrew the
+     * constant would fail those as a *short sheet*, not as a dropped row — the same shape the recycling case is
+     * written to expect from a deliberately small viewport. The floor is arithmetic rather than taste: a row measures
+     * at least `touch_target_min`, which `a row is at least the touch floor and the panel survives 320dp` checks, so
+     * the constant can never bind more than `FULL_SHEET_HEIGHT_PX / touch_target_min` rows. It is left as the constant
+     * rather than derived per fixture from `admitted.size * touch_target_min` on purpose: a named number in the
+     * companion is one a reader of a failure sees, while a derived height would quietly move the bound into a formula
+     * and let any fixture enlarge the sheet without anyone deciding to.
      *
      * Nothing here waits on a diff: [MoveToDialog.open] submits its list synchronously, so the adapter already holds
      * the destinations by the time the press returns, and the children walked below are the rows the reader is shown.
@@ -776,9 +795,11 @@ class HierarchyMoveSheetTest {
      * copy of it. Identity is the pair of uuids (topic, parent) rather than the whole value precisely so that such a
      * re-read is not a rebuild: an adapter that already holds the place keeps its row where it is, and a reader is
      * not left watching a sheet they are aiming at jump. The submission today's dialog makes is one insert into an
-     * empty adapter, so this is the callback's contract, held to its letter here rather than inferred from the panel. `(no topic, no parent)` — the unfiled tree's own root — is a place
-     * like any other, and a `null` on one side must not match a topic on the other, or the standalone root and a
-     * topic's root would become one row wearing two different names.
+     * empty adapter, so this is the callback's contract, held to its letter here rather than inferred from the panel.
+     *
+     * `(no topic, no parent)` — the unfiled tree's own root — is a place like any other, and a `null` on one side
+     * must not match a topic on the other, or the standalone root and a topic's root would become one row wearing
+     * two different names.
      */
     @Test
     fun `the list knows one place in the tree from another`() {
@@ -1144,6 +1165,14 @@ class HierarchyMoveSheetTest {
      * still has room — no child measured to zero width, which is the failure Stage 15 photographed on a weighted
      * sibling. What is *not* checkable here is whether the words fit: LEGACY graphics gives real boxes and no glyph
      * widths, so a Russian path at 320dp with the font at 1.3 stays with §11's device frames.
+     *
+     * **This is also the case that reads the sheet's header, because it is the case that lays the panel out.** The
+     * header is 1B's new user-visible content — the block being moved and the path it sits on now, above the list —
+     * and `open()` is the only writer of those two views, so a deleted write, a swapped pair or a header pushed under
+     * the RecyclerView was a change to what a reader is told that no assertion in the repository could see. The two
+     * sentences are compared to `getString(R.string.move_current_path_format, …)` assembled from the same resources
+     * production reads, and the order is measured off the laid-out panel (`bottom <= top`) rather than read out of the
+     * XML, because the claim a reader can disprove is the one about where the header is drawn.
      */
     @Test
     fun `a row is at least the touch floor and the panel survives 320dp`() {
@@ -1175,6 +1204,31 @@ class HierarchyMoveSheetTest {
             panel.width - margin, list.right)
         assertEquals("which leaves the rows the panel less both insets at ${NARROW_DP}dp: ${list.width}px",
             panel.width - 2 * margin, list.width)
+
+        // The header the same panel puts above that list — 1B's new user-visible content, and the case that reaches it
+        // is this one because the panel is already laid out here. `open()` writes the two lines and nothing outside
+        // that file reads either view, so before these five assertions a deleted write, a swapped pair or a header
+        // pushed below the list were all changes no test in the repository could see.
+        val headTitle = panel.findViewById<TextView>(R.id.moveSheetHeadTitle)
+        val headPath = panel.findViewById<TextView>(R.id.moveSheetCurrentPath)
+        assertEquals("the sheet says which block it is moving, in that block's own title",
+            head.title, words(headTitle))
+        assertEquals("and where it hangs now, in the app's own «Now …» sentence over the path the dialog assembles — " +
+            "the topic leg from the resource, the row from the tree, joined by the arrow from the resource",
+            app.getString(
+                R.string.move_current_path_format,
+                pathOf(app.getString(R.string.move_topic_none), head.title)
+            ),
+            words(headPath))
+        assertTrue("the head line takes room of its own in the laid-out panel, rather than being an invisible view " +
+            "the writes happen to have filled: ${headTitle.height}px", headTitle.height > 0)
+        // Above the list, measured on the laid-out panel and not read out of the XML order: a header that arrives
+        // after every destination has been passed is not an answer to «откуда».
+        assertTrue("the head line sits above the destination list: ${headTitle.bottom}px bottom against " +
+            "${list.top}px top", headTitle.bottom <= list.top)
+        assertTrue("and the current-path line is between it and the list: ${headPath.top}px .. " +
+            "${headPath.bottom}px against ${list.top}px",
+            headPath.top >= headTitle.bottom && headPath.bottom <= list.top)
 
         val density = app.resources.displayMetrics.density
         val width = (NARROW_DP * density).toInt()

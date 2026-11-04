@@ -72,8 +72,15 @@ class MoveDestinationAdapter(
          * rebuilt. `(null, null)` — the unfiled tree's own root — is a place like any other, so both halves are
          * compared as nullable uuids and one `null` never matches a topic.
          *
-         * Two destinations on one pair cannot reach here: `TaskHierarchyPolicy.destinationsFor` offers each
-         * (topic, parent) at most once, and refuses an ambiguous parent's identity before it is offered at all.
+         * A pair carrying two destinations is not something `TaskHierarchyPolicy.destinationsFor` offers by design:
+         * its loop asks each topic of the caller's list once — `offer(topic, null)` and then one `offer` per row
+         * filed under that uuid — and a parent whose *task* identity is doubled is refused before it is offered at
+         * all. The assumption under that answer is worth naming, because nothing here checks it:
+         * [TaskHierarchyPolicy.ambiguousUuids] is built from `Task` uuids and never from `TaskGroup` ones, so a
+         * snapshot holding two groups under one uuid would put two destinations on this pair and `areItemsTheSame`
+         * would answer "one row" — the merge would be silent. No fixture in `HierarchyMoveSheetTest` or
+         * `HierarchyDestinationTest` seeds two groups with one uuid, which is why this is recorded as the contract's
+         * precondition rather than as a case the list is proven to survive.
          * `internal` because `HierarchyMoveSheetTest` asks these two questions of the callback the list runs on,
          * rather than of a copy of them.
          */

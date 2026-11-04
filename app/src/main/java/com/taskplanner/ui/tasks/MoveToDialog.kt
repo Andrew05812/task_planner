@@ -202,9 +202,16 @@ object MoveToDialog {
     /**
      * The row's name: the task the block would hang on, the topic it would join, or the standalone tree.
      *
-     * `internal`, with [pathLegs], [pathOf], [detailsOf] and [rowDescription] below it, because
-     * [MoveDestinationAdapter] binds them and [confirm] prints them: one copy of what a destination states, written
-     * once, and the adapter owns only which row a press chose.
+     * `internal`, with [pathLegs], [pathOf], [detailsOf] and [rowDescription] below it, for exactly one reason:
+     * [MoveDestinationAdapter] is a class of its own and binds these sentences per row, so one copy of what a
+     * destination states stays written here and the adapter owns only which row a press chose. [confirm] and
+     * [preview] print two of them too, but from inside this object, where `private` would have reached — so the
+     * visibility is the adapter's need and not a test affordance. It is worth stating plainly that no test calls
+     * these five: `HierarchyMoveSheetTest` assembles the same sentences out of the same resources itself and
+     * compares them to the text a bound row carries, which is the shape a UI test has to take anyway
+     * (`EnglishLiteralAssertionTest` forbids it from naming the English words) and the stronger choice here, because
+     * a row the test read off the screen being compared against a helper the test also calls would prove only that
+     * Kotlin agrees with itself. Drop the five back to `private` the day the adapter stops binding them.
      */
     internal fun titleOf(context: Context, destination: MoveDestination): String =
         destination.parent?.title ?: destination.topic?.name ?: context.getString(R.string.move_to_standalone)

@@ -10,12 +10,16 @@
   them, and a reader who opens the sheet to move one task should not pay for the nine thousand they will never see.
   The list view is the app's own answer to that, with `MoveDestinationAdapter` diffing the rows.
 
-  **The padding belongs here, not in code.** The panel AppCompat hands a custom view (`@id/customPanel`) carries
-  no padding of its own: the dialog's title and message get theirs from the layouts that live beside them. The
-  code-built panel this file replaces therefore drew its rows flush against the dialog's edge — the finding 1B was
-  written to close — so the horizontal inset is the house's `screen_margin`, the same token every list row on every
-  fragment uses, and the vertical inset is the scale's own `spacing_small`/`spacing_normal`. No literal, because
-  `dimens.xml` says the scale exists so that no layout needs one again.
+  **The padding belongs here, not in code.** The panel that holds a custom view carries none of its own, and under
+  this app's theme that panel is Material's, not AppCompat's: `Theme.TaskPlanner` extends `Theme.Material3.*`, so
+  `MaterialAlertDialogBuilder` inflates `m3_alert_dialog.xml` (material 1.11.0), whose `@id/customPanel` — and the
+  `@id/custom` frame inside it — are plain `FrameLayout`s with no padding attribute, while the message right above
+  them takes `?attr/dialogPreferredPadding` from that same file. AppCompat's `abc_alert_dialog_material.xml` is the
+  ancestor with the same two ids and the same absence, which is why naming it here read plausibly and was still the
+  wrong owner. The code-built panel this file replaces therefore drew its rows flush against the dialog's edge — the
+  finding 1B was written to close — so the horizontal inset is the house's `screen_margin`, the same token every list
+  row on every fragment uses, and the vertical inset is the scale's own `spacing_small`/`spacing_normal`. No literal,
+  because `dimens.xml` says the scale exists so that no layout needs one again.
 
   **`wrap_content` on the list is what makes the recycling real, not what defeats it.** The dialog measures this
   panel against the window's own height, so the list is bounded by what is left of the screen and
