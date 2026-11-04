@@ -35,8 +35,9 @@ import kotlinx.coroutines.launch
  *
  * **§6.3's third verb is the domain's list, not this screen's opinion.** Where the block could go is
  * [TaskHierarchyPolicy.destinationsFor], read over the published snapshot's whole stored profile through
- * [MoveToDialog.destinations]; the editor measures it once per emission, keeps it as the answer the button was drawn
- * from, and hands it to the sheet when the button is pressed. An empty answer draws no button at all — the same rule
+ * [MoveToDialog.destinations] — with the [TaskHierarchyPolicy.TreeFacts] this emission already built, so one snapshot
+ * costs one tree rather than one per question. The editor keeps that list as the answer the button was drawn from and
+ * hands it to the sheet when the button is pressed. An empty answer draws no button at all — the same rule
  * §6.1 applies to a row whose moves are unexplainable, and for the same reason: a control that can only ever open a
  * list of nothing, or die on press, is a control the reader is right to stop trusting.
  *
@@ -155,12 +156,15 @@ class HierarchyEditor(
             return
         }
 
+        // The one tree this emission reads: the menu's two offers, the destination list, the level line and the
+        // parent row are all measured against this `TreeFacts`, so a snapshot costs one build of it rather than one
+        // per question — which is the shape §14's render benchmark is held to.
         val facts = TaskHierarchyPolicy.factsOf(screen.stored)
         val candidate = TaskHierarchyPolicy.previousSibling(current, facts)
         val measured = offerAt(current, candidate, facts)
         shown = current
         offer = measured
-        destinations = MoveToDialog.destinations(current, screen)
+        destinations = MoveToDialog.destinations(current, screen, facts)
 
         // A topic the snapshot has no header for is read the same way the list reads it — filed under nothing — so
         // the two screens cannot name two different topics for one row.
@@ -196,12 +200,15 @@ class HierarchyEditor(
      * `emptyList()` for gets none. There is no disabled-but-drawn case here because the refusal is not a sentence the
      * screen owns — the list *is* the answer to "where could this go", and a control that opens nothing is the dead
      * button §6.1 already refuses, on the same grounds and with the same remedy.
+     *
+     * Visibility is the whole of it, and no enabled state is written along with it: the guard that decides whether a
+     * press opens a sheet is the emptiness check in the click handler, because `View#performClick` reaches a listener
+     * whatever `isEnabled` says (the note at the top of this class), and no screen or test reads the flag on this
+     * button. A write nothing observes is a second state a later reader has to keep in step by hand.
      */
     private fun writeMoveAction() {
-        val available = destinations.isNotEmpty()
-        val wanted = if (available) View.VISIBLE else View.GONE
+        val wanted = if (destinations.isNotEmpty()) View.VISIBLE else View.GONE
         if (moveButton.visibility != wanted) moveButton.visibility = wanted
-        if (moveButton.isEnabled != available) moveButton.isEnabled = available
     }
 
     /**

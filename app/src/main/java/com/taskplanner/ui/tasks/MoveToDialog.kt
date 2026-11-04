@@ -64,14 +64,33 @@ object MoveToDialog {
      * The topic set is the same snapshot's `topics`, which is what the render drew its headers from and what the
      * repository's `ownsTopic` agrees with: a destination the list wears a name for has to be one the write files
      * under.
+     *
+     * [facts] is the tree read from `screen.stored`, asked for rather than rebuilt: the editor that opens this sheet has
+     * already measured that same tree once for the emission being drawn, and a [TaskHierarchyPolicy.TreeFacts] indexes
+     * the whole profile — its uuid map, its levels, its heights and its ambiguity sets — so building it twice inside one
+     * emission is the per-question rebuild §14's render benchmark exists to catch. The profile is still what is read;
+     * only the ownership of the build moves.
+     */
+    fun destinations(
+        head: Task,
+        screen: TasksViewModel.HierarchyScreen,
+        facts: TaskHierarchyPolicy.TreeFacts
+    ): List<MoveDestination> = TaskHierarchyPolicy.destinationsFor(
+        head = head,
+        topics = screen.topics,
+        profileTopicUuids = screen.topics.map { it.uuid }.toSet(),
+        facts = facts
+    )
+
+    /**
+     * The same answer for a caller that holds no facts yet: they are read here, once, from `screen.stored`.
+     *
+     * A caller that already measured the tree hands its [TaskHierarchyPolicy.TreeFacts] to the overload above; this
+     * one exists so a caller with nothing but the snapshot still builds exactly one, over the profile rather than the
+     * screen.
      */
     fun destinations(head: Task, screen: TasksViewModel.HierarchyScreen): List<MoveDestination> =
-        TaskHierarchyPolicy.destinationsFor(
-            head = head,
-            topics = screen.topics,
-            profileTopicUuids = screen.topics.map { it.uuid }.toSet(),
-            facts = TaskHierarchyPolicy.factsOf(screen.stored)
-        )
+        destinations(head, screen, TaskHierarchyPolicy.factsOf(screen.stored))
 
     /**
      * The head's own position, walked through the policy: the topic it is filed under (or the words that say it is

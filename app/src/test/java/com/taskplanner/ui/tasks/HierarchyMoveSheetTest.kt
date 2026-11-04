@@ -459,6 +459,10 @@ class HierarchyMoveSheetTest {
         val head = row("planning", position = 0, group = office.uuid)
         row("draft", position = 1)
         row("notes", parent = "draft", position = 2)
+        // A second row of the same topic, for the last claim below: the head sits on the topic's own root, which the
+        // policy no longer hands over as a destination (it is where the block already is), so the topic's rows are what
+        // proves the sheet has not merged the two trees into one list.
+        row("figures", position = 3, group = office.uuid)
         val model = drawn()
         val list = admitted(head, model.hierarchyContext!!)
 
@@ -528,6 +532,10 @@ class HierarchyMoveSheetTest {
     @Test
     fun `each row states how many tasks travel, in a plural that matches the number`() {
         val office = group("office-block")
+        // A second topic, so the three-tall branch has somewhere to be offered that is not its own position: its head
+        // sits on the office root, the block is too tall to fit under any row of any topic, and the destination that
+        // used to make the sheet's row count reachable was the very row the policy now withholds.
+        group("errand-block")
         val branch = row("planning", position = 0, group = office.uuid)
         row("notes", parent = "planning", position = 1, group = office.uuid)
         row("figures", parent = "notes", position = 2, group = office.uuid)
@@ -570,9 +578,14 @@ class HierarchyMoveSheetTest {
     fun `the head and its own descendants are not on the sheet`() {
         val office = group("office-block")
         val errand = group("errand-block")
-        val head = row("planning", position = 0, group = office.uuid)
-        val child = row("notes", parent = "planning", position = 1, group = office.uuid)
-        val outside = row("receipts", position = 2, group = errand.uuid)
+        // The head hangs on a row of its topic rather than sitting on the topic's root: for a head already at a
+        // topic's root that root is its own position, which the policy no longer hands the sheet over, and the claim
+        // below about *both topics' own roots* would then be a claim about one of them. Seating the head one level
+        // down keeps the claim whole and adds a row the sheet has to leave alone as well.
+        row("figures", position = 0, group = office.uuid)
+        val head = row("planning", parent = "figures", position = 1, group = office.uuid)
+        val child = row("notes", parent = "planning", position = 2, group = office.uuid)
+        val outside = row("receipts", position = 3, group = errand.uuid)
         val model = drawn()
 
         val carried = listOf(head.title, child.title)

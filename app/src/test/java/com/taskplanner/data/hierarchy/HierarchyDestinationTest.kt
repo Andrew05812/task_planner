@@ -177,17 +177,25 @@ class HierarchyDestinationTest {
      * The head carries a child, so this is the block that runs out of depth two levels up as well: three roots, three
      * admissible parents, and exactly one row left out for the depth — `loose`, already at the second level, where the
      * branch's own grandchild would land on a fourth.
+     *
+     * The head hangs on `draft` rather than sitting on the topic's root, which is what lets the office topic's own root
+     * stay on the list at all: a block already at a topic's root is offered that root as its own position, and
+     * [TaskHierarchyPolicy.destinationsFor] takes it off — the rule `the position the block already sits at is not
+     * offered` pins. With the head one level down, `draft` is the row the count is measured against — six destinations,
+     * and six presses the repository takes.
      */
     @Test
     fun `every destination the policy offers is accepted by the repository`() {
         val office = group("office-block")
         val errand = group("errand-block")
         row("planning", position = 0, group = office.uuid)
-        val head = row("draft", position = 1, group = office.uuid)
-        row("figures", parent = "draft", position = 2, group = office.uuid)
-        row("notes", position = 3, group = errand.uuid)
-        row("receipts", position = 4)
-        row("loose", parent = "receipts", position = 5)
+        row("draft", position = 1, group = office.uuid)
+        val head = row("figures", parent = "draft", position = 2, group = office.uuid)
+        // The head keeps carrying a row, so the block is two tall and the depth bound still has something to refuse.
+        row("carried", parent = "figures", position = 3, group = office.uuid)
+        row("notes", position = 4, group = errand.uuid)
+        row("receipts", position = 5)
+        row("loose", parent = "receipts", position = 6)
         val before = shape()
 
         val list = destinations(head)
@@ -274,17 +282,76 @@ class HierarchyDestinationTest {
             offeredParents(list).contains(sibling.id))
     }
 
+    /**
+     * The place the block already sits at is not a place to move it to.
+     *
+     * [TaskHierarchyPolicy.moveRefusal] has no branch for it — re-hanging a row on its own parent inside its own topic
+     * is a write the transaction takes — and [TaskHierarchyRepository.moveSubtreeUnder] anchors the block *after* the
+     * destination's subtree, so that press is not a no-op: it sends the row to the tail of its own sibling set, or to
+     * the tail of the topic's root list. The sheet the press comes from would show «Now … · After …» with both halves
+     * identical and then reorder the reader's notebook underneath them, and §6.3 requires the reader to see the new
+     * path, the new level and the topic *before* confirming. A destination whose preview cannot say anything new is
+     * therefore not a destination, and the exclusion belongs to this list rather than to the dialog, which draws what
+     * it is handed.
+     *
+     * Both halves of the position have to match. Same topic with another parent above the block, and the same
+     * parentless position under another topic, both stay on the list — which is what makes the rule "where it already
+     * is" rather than "where it came from". The write itself is untouched: a caller that asks the repository for that
+     * position directly still gets it, because this is a statement about what a sheet may offer.
+     */
+    @Test
+    fun `the position the block already sits at is not offered`() {
+        val office = group("office-block")
+        val errand = group("errand-block")
+        // A topic root with a child, a sibling row of the same topic, a row of the other topic, and the standalone tree.
+        val head = row("planning", position = 0, group = office.uuid)
+        val sibling = row("receipts", position = 1, group = office.uuid)
+        row("notes", position = 2, group = errand.uuid)
+        row("draft", position = 3)
+        val underAParent = row("figures", parent = "planning", position = 4, group = office.uuid)
+
+        // (1) The head sits on the office topic's root: the destination (office, no parent) is where it already is.
+        val list = destinations(head)
+        assertEquals("the topic root the block already sits on is not offered",
+            false, list.any { it.topic?.uuid == office.uuid && it.parent == null })
+        assertTrue("while the same topic with another row above the block is: $list",
+            list.any { it.topic?.uuid == office.uuid && it.parent?.id == sibling.id })
+        assertTrue("and the same parentless position under the other topic is: $list",
+            list.any { it.topic?.uuid == errand.uuid && it.parent == null })
+        assertTrue("and the same parentless position with no topic at all is: $list",
+            list.any { it.topic == null && it.parent == null })
+        assertEquals("five places left to go, one taken off the list rather than the list being shorter for a reason " +
+            "nobody decided", 5, list.size)
+
+        // (2) A head that hangs on a row rather than on a topic: the exclusion is the pair (its topic, its parent), so
+        // the topic's own root — same topic, different parent — has to survive it.
+        val belowList = destinations(underAParent)
+        assertEquals("the row it hangs on, inside the topic it is filed in, is not offered",
+            false, belowList.any { it.topic?.uuid == office.uuid && it.parent?.id == head.id })
+        assertTrue("while that topic's own root, which is a different parent, is: $belowList",
+            belowList.any { it.topic?.uuid == office.uuid && it.parent == null })
+
+        // (3) The rule is about the sheet, not about the write: the repository still takes that exact position when a
+        // caller asks for it, and the tree comes back unchanged for the assertions above to still hold.
+        accepted(withRestoredProfile {
+            runBlocking { hierarchy.moveSubtreeUnder(head.id, newParentId = null, destinationGroupUuid = office.uuid) }
+        })
+    }
+
     @Test
     fun `a descendant is not a destination at any depth`() {
         val office = group("office-block")
         val errand = group("errand-block")
-        val head = row("planning", position = 0, group = office.uuid)
-        val child = row("draft", parent = "planning", position = 1, group = office.uuid)
-        val grandchild = row("figures", parent = "draft", position = 2, group = office.uuid)
+        // The head hangs on a row of its topic rather than sitting on the topic's root, so the root stays a real
+        // destination and the positive control below measures an exclusion rather than the head's own position.
+        row("carried", position = 0, group = office.uuid)
+        val head = row("planning", parent = "carried", position = 1, group = office.uuid)
+        val child = row("draft", parent = "planning", position = 2, group = office.uuid)
+        val grandchild = row("figures", parent = "draft", position = 3, group = office.uuid)
         // Deeper than the contract draws, and deeper than the bounded walk in `hangsUnder` can reach: the block is
         // named by ids rather than by a walk, so a row four levels down is refused as the loop it is, not measured.
-        val beyondTheWalk = row("receipts", parent = "figures", position = 3, group = office.uuid)
-        row("notes", position = 4, group = errand.uuid)
+        val beyondTheWalk = row("receipts", parent = "figures", position = 4, group = office.uuid)
+        row("notes", position = 5, group = errand.uuid)
 
         val list = destinations(head)
         listOf(child, grandchild, beyondTheWalk).forEach { descendant ->
@@ -350,7 +417,10 @@ class HierarchyDestinationTest {
         val doomed = group("errand-block")
         row("planning", position = 0, group = office.uuid)
         val inDoomed = row("draft", position = 1, group = doomed.uuid)
-        val head = row("notes", position = 2)
+        // The head hangs on a row of the standalone tree instead of sitting on its root, so the unfiled root — the one
+        // destination the write would still make below — is a destination rather than the head's own position.
+        row("carried", position = 2)
+        val head = row("notes", parent = "carried", position = 3)
         runBlocking { fixture.groupDao.softDelete(doomed.uuid) }
 
         // A reader's own topic, deleted: `getGroupsOnce` no longer lists it and `ownsTopic` answers false for it, so
@@ -463,7 +533,11 @@ class HierarchyDestinationTest {
         // The doubled identity sits two levels below the head, inside the branch any press would carry.
         row("notes", parent = "figures", position = 2, group = office.uuid, uuid = "twin")
         row("receipts", position = 3, group = office.uuid, uuid = "twin")
-        val clean = row("planning", position = 4, group = office.uuid)
+        // The control's head hangs on a clean row of the same topic rather than on the topic's root, so the control
+        // below — which roots the policy still offers it — measures the refusal above rather than a list that lost the
+        // head's own position to it.
+        row("carried", position = 4, group = office.uuid)
+        val clean = row("planning", parent = "carried", position = 5, group = office.uuid)
         val before = shape()
 
         // (b) A move the rule passes and the write refuses — the refusal named, not merely "some refusal".
@@ -542,7 +616,10 @@ class HierarchyDestinationTest {
         val errand = group("errand-block")
         row("planning", position = 0, group = office.uuid)
         row("draft", position = 1, group = errand.uuid)
-        val head = row("notes", position = 2)
+        // The head hangs on a row of the standalone tree, so that tree's own root is a destination here rather than
+        // the position the head already sits at.
+        row("carried", position = 2)
+        val head = row("notes", parent = "carried", position = 3)
 
         val roots = destinations(head).filter { it.parent == null }
         assertEquals("one per topic, in the order the caller's snapshot lists them, and the standalone tree last",
@@ -603,7 +680,11 @@ class HierarchyDestinationTest {
         val office = group("office-block")
         val first = row("planning", position = 0, group = office.uuid)
         val second = row("draft", parent = "planning", position = 1, group = office.uuid)
-        val head = row("figures", position = 2, group = office.uuid)
+        // A third root of the same topic, which the head hangs on: the topic's own root and its two deeper rows stay
+        // on the list, while the position the head already occupies — this row, this topic — is the one place the
+        // sheet is not handed. The map below is the whole list, so the exclusion is measured rather than assumed.
+        row("carried", position = 2, group = office.uuid)
+        val head = row("figures", parent = "carried", position = 3, group = office.uuid)
 
         val list = destinations(head)
         assertEquals("the topic's own child is level one, its child is two, and the deepest the contract holds is three",
@@ -630,10 +711,14 @@ class HierarchyDestinationTest {
     @Test
     fun `the destination counts every task that travels with the branch`() {
         val office = group("office-block")
-        val head = row("planning", position = 0, group = office.uuid)
-        row("draft", parent = "planning", position = 1, group = office.uuid)
-        row("figures", parent = "draft", position = 2, group = office.uuid)
-        val leaf = row("notes", position = 3, group = office.uuid)
+        // The head hangs on a row of its topic instead of sitting on the topic's root, because the press measured
+        // below is the topic's own root destination: for a head already at it, that row is the head's own position and
+        // the list does not carry it. The block itself is unchanged — head, child, grandchild, three tall.
+        row("carried", position = 0, group = office.uuid)
+        val head = row("planning", parent = "carried", position = 1, group = office.uuid)
+        row("draft", parent = "planning", position = 2, group = office.uuid)
+        row("figures", parent = "draft", position = 3, group = office.uuid)
+        val leaf = row("notes", position = 4, group = office.uuid)
 
         val branch = destinations(head)
         assertTrue("a row with a child and a grandchild moves three tasks, the head included",

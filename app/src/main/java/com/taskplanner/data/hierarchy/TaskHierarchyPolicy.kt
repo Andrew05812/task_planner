@@ -342,6 +342,15 @@ object TaskHierarchyPolicy {
     /**
      * Where a "Move to" sheet may put [head]'s block, in one list the sheet only has to render.
      *
+     * The question this answers is *"where could this block go that it is not already sitting"*, which is one place
+     * narrower than "what would the write take". A destination whose topic is the head's own topic and whose parent is
+     * the head's own parent is not on the list: [moveRefusal] accepts it, `moveSubtreeUnder` anchors the block after
+     * the destination's subtree, and so that press re-orders the sibling set while the sheet's «Now … · After …»
+     * preview shows nothing moving — a row the reader confirms on a promise the preview cannot make. Moving a block
+     * within its own siblings is the drag's job ([planSiblingDrag]), and a caller that wants this exact write can
+     * still ask the repository for it: the exclusion is about what a sheet may offer, not about what the domain can
+     * do.
+     *
      * The exclusions §3 demands — the row itself, anything under it, another user's rows, a topic the profile does
      * not hold, a parent with no identity or with two, a move past the third level — are not re-decided here. Each
      * candidate is handed to [moveRefusal], the function the repository consults inside its own transaction, and a
@@ -382,6 +391,11 @@ object TaskHierarchyPolicy {
         val blockIds = block.map { it.id }.toSet()
         val blockHeight = blockHeight(facts, head)
         val destinations = ArrayList<MoveDestination>()
+        // The position the head already occupies, in the same two parts a destination carries: its topic's identity
+        // ([rootOf], so a blank `group_id` and the standalone tree are one case) and its parent's identity (a blank
+        // link and no link are one case, because a blank `parent_uuid` reads back as "a topic's own child").
+        val ownTopicUuid = rootOf(head)
+        val ownParentUuid = head.parentUuid?.takeIf { it.isNotBlank() }
 
         // One pass over the rows for every candidate parent, each filed under the topic that holds it — [rootOf], so
         // the rows of the standalone tree land under the `null` key and are a group rather than a special case. The
@@ -399,6 +413,15 @@ object TaskHierarchyPolicy {
         // does not own never reaches here at all — the loop below only asks about topics it holds.
         fun offer(topic: TaskGroup?, parent: Task?) {
             if (parent != null && parent.id in blockIds) return
+            // The head's own position leaves here, before the rule is asked. [moveRefusal] has no branch for it —
+            // re-hanging a block on the parent it already hangs on, in the topic it is already filed in, is a write
+            // the transaction takes — and `TaskHierarchyRepository.moveSubtreeUnder` anchors the block *after* the
+            // destination's subtree, so that press is not a no-op: it moves the row to the tail of its own sibling
+            // set (or to the tail of the topic's root list) while the sheet's preview shows nothing changing. §6.3
+            // asks the reader to see the new path, the new level and the topic before confirming, so a destination
+            // that cannot say anything new is not one this list hands over. Re-ordering inside the current sibling set
+            // belongs to the drag, and the repository still accepts the write when a caller asks for it directly.
+            if (topic?.uuid == ownTopicUuid && parent?.uuid == ownParentUuid) return
             if (moveRefusal(
                     head = head,
                     blockIds = blockIds,
