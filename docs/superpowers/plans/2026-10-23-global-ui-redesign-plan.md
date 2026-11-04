@@ -6908,3 +6908,71 @@ relaxed); `lintDebug` 0 errors / **150** warnings, unchanged since §8; `assembl
 `scripts/check-localization.py` **pass** — 1008 EN strings / 1003 RU / 57 plurals, 0 missing, 0 quantity gaps, 0
 placeholder mismatches (ten new strings, each with its Russian, no plural added because no row of this menu carries a
 count).
+
+## 20χ — Stage 16 §6.2: the editor learns to name the tree around a task
+
+§6.2 asks the task editor for a hierarchy block — *Topic*, *Parent*, *Level*, and the three actions — and forbids the
+two obvious ways of faking it: deriving a parent from a title or a row's position, and re-implementing the domain's
+rules in the Fragment. `HierarchyEditor.kt` is the answer: it owns no rule, reads the saved row and the published
+`HierarchyScreen`, and writes six views. The block lives in `fragment_task_detail.xml` as `hierarchy_section` with 48dp
+controls, and `HierarchyEditorTest` (17 tests) pins what it shows and what it refuses to show.
+
+Two findings worth keeping in the record, because both were found by review rather than by a test:
+
+| finding | verdict | what the code does now |
+|---|---|---|
+| the editor's Indent label read «Make it a subtask of the row above», which is false on a screen with no rows above, and describes a *drawn* neighbour while the editor's own candidate is the nearest **stored** sibling | **true** | the brief's rule was kept (editor Indent = nearest stored sibling, newly exposed as `TaskHierarchyPolicy.previousSibling`) and the copy was fixed: `hierarchy_indent_action` names the actual candidate («Сделать подзадачей «%1$s»»). A label that names the parent satisfies both of the brief's sentences without touching depth or sibling semantics |
+| `HierarchyMenu.offer(row, drawn, stored)` was being called by the editor with a **fabricated two-row block**, and rebuilt `TreeFacts` on every emission | **true** | `offer(row, candidate, facts)` is now the real signature; the screen passes the candidate it measured and the facts the render already built. The positional coupling was the fragility, not the length of the call |
+
+A third change came out of the same review and is the one a reader would feel: **Save could undo a move**. The editor
+based its write on the row it had on screen when the form opened, so a move made in the hierarchy block — or by a drag
+behind the editor — was overwritten by the next Save. `saveTask` now bases its write on the row read back from Room, and
+`TasksOrderingTest.a_task_moved_while_the_editor_holds_it_is_not_put_back_by_the_save` holds the promise.
+
+Gates after the block, measured on the committed tree: 151 classes / **1977** tests / 0 / 0 / 0, `lintDebug` 0 errors,
+localization pass (1016 EN / 1011 RU / 57 plurals); CI run 86 **completed/success** on `9ceb3b3`.
+
+## 20ψ — Stage 16 §6.3: «Move to» draws the domain's answer, and refuses to offer a place already occupied
+
+§6.3 asks for a destination picker that shows the path, the resulting level and how many tasks travel, offers nothing
+the domain would refuse, and confirms in words before writing. It was built in three pieces, each reviewed.
+
+**The list is a policy answer, not a UI loop.** `MoveDestination(topic, parent, resultingLevel, travellingCount,
+pathTitles)` and `TaskHierarchyPolicy.destinationsFor(head, topics, profileTopicUuids, facts)`;
+`TaskHierarchyRepository.moveSubtreeUnder` delegates its refusal chain to the same `moveRefusal`, so the sheet and the
+transaction cannot disagree, and `HierarchyDestinationTest` (19 → 21 tests) tests both the candidates and the write's
+refusal of what is not offered. Two rules the reviews earned:
+
+- a head whose own block is not knowable gets `emptyList()` — a sheet row that dies on press is the exact failure this
+  task exists to prevent, because the repository refuses such a move unconditionally at its door;
+- **the sheet never offers the place the block already sits**. Pressing the identity row is not a no-op:
+  `moveSubtreeUnder` anchors the moved block *after* the destination's subtree, so that press silently re-orders the
+  sibling set while the preview shows nothing changing — which breaks the requirement to see the new path before
+  confirming, in effect. Ordering by press is the drag's verb; the repository still takes such a write when a caller
+  asks for it directly. This reverses an earlier ruling on the same task, for a reason the earlier ruling did not know,
+  and the filter lives in the policy — the dialog keeps drawing exactly what it is handed.
+
+**The sheet is a list.** It began as a code-built panel inflating one four-view row per destination on the main thread;
+a review called it (rightly) something the §14 10k profile cannot survive, since every other list in this app already
+goes through `RecyclerView`/`ListAdapter`. It is now `dialog_move_to.xml` — header above a `RecyclerView`, the container
+inset the code-built panel lacked — with `MoveDestinationAdapter` and a `DiffUtil` callback keyed on the
+`(topic.uuid, parent.uuid)` pair, null-safe so the unfiled tree's own root is a place like any other. All fourteen of
+the sheet's original test names and assertions survived the rewrite; only how a row is *reached* changed.
+
+**Evidence discipline, the hard way.** Two claims in this block were written down as proven when they had only been
+derived. The report asserted a refused-drag redraw was «pinned by §3/§6's drag tests» — it is not pinned at all:
+`TasksState` is a data class and `render` republishes a structurally equal state, so `StateFlow` emits nothing and the
+fragment never re-submits; that is a production defect in §3/§6.1's own promise, tracked separately as **T3b**. And a
+fix round's report claimed mutation runs its implementer never executed. Both were struck, the mutations were actually
+run, and one produced a correction rather than a confirmation: the no-topic half of the identity-position rule fails
+exactly one test method, because JUnit stops a method at its first error and both topic-less shapes live in one method —
+the second independent failure had to come from the sheet class instead. The header's five assertions were then pinned
+with three mutations (delete a write, swap the pair, move the header under the list), each caught by exactly one of the
+sheet's seventeen tests.
+
+Gates after the last measured round (`086c0db`): 153 classes / **2015** tests / 0 / 0 / 0 forced with
+`cleanTestDebugUnitTest` and `--no-build-cache`; `lintDebug` 0 errors / 151 warnings (the 151st is a pre-existing
+`Overdraw` on `item_move_destination.xml`); localization pass (1029 EN / 1024 RU / 58 plurals); clean `assembleDebug`
+APK **14,580,715** bytes. **CI has not been dispatched for the §6.3 commits yet** — runs 85 (`27ccac9`) and 86
+(`9ceb3b3`) were green, and the branch has moved since; the final pass must be measured on the published SHA, not
+assumed from those two.
