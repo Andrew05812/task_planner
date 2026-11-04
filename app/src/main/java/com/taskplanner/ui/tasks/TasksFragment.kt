@@ -41,7 +41,6 @@ class TasksFragment : Fragment() {
     private val viewModel: TasksViewModel by viewModels()
     private lateinit var tasksAdapter: TasksAdapter
     private lateinit var itemTouchHelper: ItemTouchHelper
-    private var lastState: TasksState = TasksState()
 
     /**
      * The move the gesture in progress has last been allowed to make, kept until the finger lifts.
@@ -285,7 +284,8 @@ class TasksFragment : Fragment() {
             scope = viewLifecycleOwner.lifecycleScope,
             requests = viewModel.deleteRequests,
             context = { requireContext() },
-            onAnswer = { request, policy -> viewModel.resolveDelete(request, policy) }
+            onAnswer = { request, policy -> viewModel.resolveDelete(request, policy) },
+            onBusy = { viewModel.reportDeleteBusy() }
         )
     }
 
@@ -301,7 +301,6 @@ class TasksFragment : Fragment() {
     }
 
     private fun render(state: TasksState) {
-        lastState = state
         // The count is the account's open tasks, not the rows currently on screen: spec §4.1 names
         // `activeTaskCount` for this slot, and a line that changed under a filter would stop answering the
         // question the header is asked ("how much is still open") to answer one the list already shows.
@@ -441,11 +440,16 @@ class TasksFragment : Fragment() {
      * The set is evaluated before any of it is written — `deleteBatchSummary` counts a parent and its own selected
      * descendant once each, and [TasksViewModel.deleteRows] refuses to start on the first half while the second half
      * still has a question open — so bulk never regresses into "delete, then discover".
+     *
+     * What the press is about is the view model's live selection, so the screen says only that its bar was pressed
+     * ([TasksViewModel.requestDeleteSelection]) rather than handing back `lastState.selectedIds`, the set the *last
+     * render* drew. The two can differ by a tick: a tick lands in the selection at once, while the drawn state
+     * catches up when the render collector runs, and a press taken from the snapshot asks about the rows the reader
+     * was looking at a moment ago — measured as one row and its singular sentence where the bar counted two. The
+     * snapshot is a copy of a copy of the selection; the selection is the authority.
      */
     private fun confirmDeleteSelected() {
-        val ids = lastState.selectedIds.toList()
-        if (ids.isEmpty()) return
-        viewModel.requestDelete(ids, fromSelection = true)
+        viewModel.requestDeleteSelection()
     }
 
     private fun promptCreateGroup() {

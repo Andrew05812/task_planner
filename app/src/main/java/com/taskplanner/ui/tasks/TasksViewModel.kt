@@ -239,9 +239,12 @@ class TasksViewModel @Inject constructor(
      * that happened once, and a window the reader already answered would come back. A channel element is *removed* by
      * the receive that reads it: one press, one request, one window, and a recreate that finds nothing queued. The
      * capacity is the number of unanswered questions the app keeps, which is one: a second press while a window is
-     * open is dropped by [offerDelete] rather than stacked behind it, so no part of a set can go while the reader is
-     * still being asked about another. What it holds is a row id and three integers — no context, no view — so
-     * nothing here can outlive the screen that was handed it.
+     * open is refused — by [offerDelete] when this channel is still holding the first, and by
+     * [DeleteDialog.bind] when the first has already been drawn — rather than stacked behind it, so no part of a set
+     * can go while the reader is still being asked about another, and neither refusal is silent: both name the reason
+     * through [reportDeleteBusy]. What the channel holds is a row id and three integers — no context, no view — so no
+     * *request* can outlive the screen that was handed it; the window a request drew is taken down by the collector
+     * when the view stops, which is [DeleteDialog.bind]'s half of the same promise.
      */
     private val _deleteRequests = Channel<DeleteRequest>(capacity = 1)
     val deleteRequests: ReceiveChannel<DeleteRequest> get() = _deleteRequests
@@ -698,6 +701,23 @@ class TasksViewModel @Inject constructor(
     }
 
     /**
+     * The selection bar's delete: the set the reader is holding, asked about as one.
+     *
+     * The set comes from [selectedIds], the live authority the ticks write, and not from the last rendered state. The
+     * screen used to hand its own snapshot over, and the two are not the same object at the same moment: a tick lands
+     * in the selection immediately, while `state.value.selectedIds` only catches up when the render collector has run
+     * — so a reader who ticked a second row and pressed Delete before that render finished was asked about the rows
+     * the *previous* draw had, with the previous draw's sentence. Measured, not theorised: with the snapshot as the
+     * source, two ticks and a press opened «Are you sure you want to delete this task?» — one row, singular — while the
+     * bar counted two, and the confirmation the reader then gave was not the set they had built. Keeping the read here
+     * also keeps the rule where §4 put it: the screen says that the bar was pressed, and the view model says what that
+     * press means.
+     */
+    fun requestDeleteSelection() {
+        requestDelete(selectedIds.toList(), fromSelection = true)
+    }
+
+    /**
      * The reader's answer to [requestDelete]'s window, and the only door a delete window can open.
      *
      * [policy] is `null` when the window was the plain confirmation — a set the domain says has nothing under it, so
@@ -725,13 +745,18 @@ class TasksViewModel @Inject constructor(
     /**
      * Hands the screen one question.
      *
-     * `trySend` on a channel of capacity one is the whole policy: an unanswered request already holds the reader's
-     * window, so a second press is dropped rather than stacked behind it — no write, and the same press can be taken
-     * again the moment the first question is answered. A request already received is gone from the channel, which is
-     * why a recreate cannot show it twice.
+     * `trySend` on a channel of capacity one is the whole policy, and its result is not ignored: an unanswered request
+     * already holds the reader's window — either in the channel, because the view is stopped and nobody has read it
+     * yet, or on the screen, already received — so a second press is refused rather than stacked behind it. No write
+     * happens, and the same press can be taken again the moment the first question is answered. What a press may not
+     * do is vanish: a reader who tapped Delete on the confirmation and got neither a delete nor a window would have
+     * no way to tell a refusal from a broken control, so the refusal is named in the state the screen renders, the
+     * way [reportDeleteRefusal] names a domain's refusal. A request already received is gone from the channel, which
+     * is why a recreate cannot show it twice; the drop of a *received* second request is [DeleteDialog.bind]'s half of
+     * the same rule, and it reports through [reportDeleteBusy] too.
      */
     private fun offerDelete(request: DeleteRequest) {
-        _deleteRequests.trySend(request)
+        if (_deleteRequests.trySend(request).isFailure) reportDeleteBusy()
     }
 
     fun deleteSelected(
@@ -814,6 +839,19 @@ class TasksViewModel @Inject constructor(
             HierarchyDeleteRefusal.AMBIGUOUS_IDENTITY -> R.string.delete_row_missing
         }
         _state.update { it.copy(error = message) }
+    }
+
+    /**
+     * Says out loud that a delete press was refused a window of its own.
+     *
+     * Two callers, one sentence: [offerDelete] when the channel's single slot is already taken, and
+     * [DeleteDialog.bind] through the screen's `onBusy` when the request was read but a window is still on screen.
+     * Both are correct refusals — the app keeps one delete question at a time — and both leave the data alone, which
+     * is exactly why they have to be said: a press that opens nothing and writes nothing is indistinguishable from a
+     * dead control until the screen names the question that is holding it.
+     */
+    fun reportDeleteBusy() {
+        _state.update { it.copy(error = R.string.delete_one_question_at_a_time) }
     }
 
     // ---------------------------------------------------------------- lifecycle

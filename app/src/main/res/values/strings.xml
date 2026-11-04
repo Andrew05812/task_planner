@@ -111,8 +111,13 @@
          message has to carry both figures and both consequences on its own — there is no earlier confirmation behind
          it that the reader has already answered. -->
     <string name="delete_branch_title">Tasks with subtasks</string>
-    <string name="delete_branch_message">%1$s sit directly under this task, and its branch holds %2$s in all. Deleting only this task hands the rows under it to whatever holds this one now. Deleting the branch retires every row in it.</string>
-    <string name="delete_branch_message_batch">%1$d of the selected tasks have rows directly under them, and this delete would take %2$s in all. Deleting only the chosen tasks hands each one\'s rows to its former parent. Deleting the branches retires every row in them.</string>
+    <!-- The count clauses are verb-free on purpose. The first shape used to read "%1$s sit directly under this
+         task", which is a plural verb glued to a sentence the window shows for one child — "1 subtask sit directly
+         under this task" — and the same sentence then went out over a four-row selection whose single branch row was
+         addressed as «this task». A label with no verb agrees with any number the domain returns, so the figure
+         carries the count and the two consequences carry the choice, in both languages. -->
+    <string name="delete_branch_message">Directly under this task: %1$s, and its branch holds %2$s in all. Deleting only this task hands the rows under it to whatever holds this one now. Deleting the branch retires every row in it.</string>
+    <string name="delete_branch_message_batch">Selected tasks with rows directly under them: %1$d. This delete would take %2$s in all. Deleting each chosen task hands its rows to their former parent. Deleting the branches retires every row in them.</string>
     <plurals name="delete_branch_children">
         <item quantity="one">%1$d subtask</item>
         <item quantity="other">%1$d subtasks</item>
@@ -128,6 +133,12 @@
     <string name="delete_policy_subtree">Delete this task and its entire branch</string>
     <string name="delete_blocked_running">Stop the timer before deleting this task</string>
     <string name="delete_row_missing">This task is no longer in your list</string>
+    <!-- §4 follow-up: a press can be refused without a window. The app keeps one delete question at a time, so a
+         second press while the first is still on the screen — or a press the screen cannot even queue — writes
+         nothing and shows nothing. That has to be said out loud: a control that does nothing reads as a dead
+         control, and a reader who pressed Delete on the confirmation and got neither a delete nor a window would
+         have no way to know the app was still holding the first question. -->
+    <string name="delete_one_question_at_a_time">Answer the delete question already on the screen first</string>
     <!-- Stage 16 §7: the card's fold control. The resting description is what the layout carries before a row is
          bound; `branch_collapse` and `branch_expand` replace it per state, and each names BOTH the state the row is
          in and what the press does, because "Свернуть" and "Развернуть" differ by one unstressed prefix and a screen

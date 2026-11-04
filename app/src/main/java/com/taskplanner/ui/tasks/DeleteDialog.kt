@@ -77,7 +77,10 @@ data class DeleteRequest(
  *
  * **One press, one window, once.** [bind] is the screen-side half: it collects the view model's one-shot channel
  * inside `repeatOnLifecycle(STARTED)`, so the window appears while the view is alive and a press that lands while it
- * is stopped waits instead of stacking. The channel is the reason a rotation cannot double it — see [bind].
+ * is stopped waits instead of stacking. The channel is the reason a rotation cannot double it — see [bind]. Two
+ * follow-ups ride on the same collector, because both are about the window rather than the request: a press the app
+ * refuses gets its reason said out loud instead of disappearing, and a window the reader never got to answer is
+ * dismissed when the view stops, so it neither leaks nor comes back as a question nobody was asked.
  *
  * **Every sentence is a resource, in both languages**, and the counts are plurals: Russian declines a number three
  * ways where English has two forms, and `StringFormatContractTest`, `PluralsContractTest` and
@@ -154,15 +157,20 @@ object DeleteDialog {
     /**
      * The branch sentence, with the two figures the reader is being asked to weigh.
      *
-     * One head gets the sentence that names its own children and its own branch; more than one gets the batch
-     * sentence, which speaks the number of branch rows and the size of the set as a whole. Both are built from the
-     * same request so a dialog cannot state one number in its title's language and another in its message's.
+     * The switch is the size of the *press*, not the number of branch rows: [DeleteRequest.rows] is how many heads the
+     * reader pointed at, and only one of them lets the sentence say «this task» and mean the head's own children. Keying
+     * it on `branchRows` instead made a four-row selection whose single branch row was addressed as a lone task — the
+     * window put "…directly under this task…" over two rows the reader had ticked that hold nothing, and offered the
+     * one head's child count as the figure for a delete that covered the whole set. A set, however many of its rows hold
+     * something, gets the batch sentence, which speaks the number of branch rows and the size of the set as a whole.
+     * Both are built from the same request so a dialog cannot state one number in its title's language and another in
+     * its message's.
      */
     fun branchMessage(context: Context, request: DeleteRequest): String {
         val rows = context.resources.getQuantityString(
             R.plurals.delete_branch_rows, request.affectedRows, request.affectedRows
         )
-        return if (request.branchRows == 1) {
+        return if (request.rows == 1) {
             context.getString(
                 R.string.delete_branch_message,
                 context.resources.getQuantityString(
@@ -176,8 +184,8 @@ object DeleteDialog {
     }
 
     /**
-     * Installs one screen's delete windows: collects [requests] while [owner]'s view is at least `STARTED` and shows
-     * exactly one dialog per request.
+     * Installs one screen's delete windows: collects [requests] while [owner]'s view is at least `STARTED`, shows
+     * exactly one dialog per request, and takes that dialog down with the view that drew it.
      *
      * **Why this shape cannot re-deliver a window.** The requests arrive on a `Channel` of capacity one, and a
      * channel element is removed by the `receive` that reads it — unlike a `StateFlow` or a replaying `SharedFlow`,
@@ -185,32 +193,59 @@ object DeleteDialog {
      * reader is not asked twice about a question they were already shown. The second mechanism is the one a reader can
      * reach: the collector keeps the window it drew as the only one it will draw, so a request arriving while a window
      * is on screen is dropped — a second question stacked behind a modal one is either unreachable or a surprise the
-     * moment the first closes, and the flag clears on dismissal, whichever button ended it.
+     * moment the first closes — and the drop is *named* through [onBusy], because a press that produces neither a
+     * window nor a word reads as a dead control. The flag clears on dismissal, whichever button ended it.
      * `repeatOnLifecycle` cancels the collector
      * when the view stops, so a press that lands while the screen is away is held (one, not two: capacity is the
-     * number of unanswered questions the app keeps) and delivered when the view comes back. What the holder keeps is
-     * a row id and three integers — no `Context`, no `View`, no fragment — so nothing outlives the view that could
-     * leak it, and answering is a fresh press's business rather than a saved one's.
+     * number of unanswered questions the app keeps) and delivered when the view comes back; [TasksViewModel.offerDelete]
+     * reports the same reason when even that one slot is taken.
+     *
+     * **What the holder keeps, and what used to outlive it.** The request is a row id and three integers — no
+     * `Context`, no `View`, no fragment — so *the request* cannot leak the screen. The window could, and did: until
+     * this round the collector cancelled with the view and left the `AlertDialog` it had shown up, so a rotation took
+     * the question away from the reader and handed Android a `WindowLeaked` complaint about a dialog whose owner was
+     * gone. Dismissal therefore belongs to the collector, not to the caller: it happens in the `finally` that the
+     * cancellation of the `repeatOnLifecycle` body unwinds through, which is the one place that runs on every way the
+     * started state ends — stop, recreate, or the scope being cancelled — and travels with [bind] to whatever screen
+     * takes it next (Task 5's category screen gets the leak for free if this stays the fragment's job). Dismissing is
+     * not answering: no policy goes to [onAnswer] on that path, so the reader's next press is a fresh one.
      *
      * [context] is asked for per event rather than captured, because the fragment that supplies it can lose its view
      * between the emit and the collect; the collector is dead by then, so the lambda is never called against a
      * detached fragment.
+     *
+     * **The thread this runs on is a precondition, not a detail.** A `Dialog` can only be constructed on a thread with
+     * a looper, and [show] is called straight from the collector. Production is safe because the scope callers pass is
+     * `lifecycleScope`, whose dispatcher is `Dispatchers.Main.immediate`; a caller that handed this function a
+     * background or a non-looper scope would crash on the first window rather than on the first tap — and the crash
+     * would be one dispatcher swap away for whoever calls this next. `UnifiedTaskDeleteTest` had to learn that the
+     * hard way: an inline `Main` that runs a resume on the Room transaction thread produced exactly that exception,
+     * swallowed by the collector, and every test then saw zero windows. No `withContext(Dispatchers.Main)` is added
+     * here, because nothing can test the swap except by being a different caller — which is a caller's bug, stated.
      */
     fun bind(
         owner: LifecycleOwner,
         scope: CoroutineScope,
         requests: ReceiveChannel<DeleteRequest>,
         context: () -> Context,
-        onAnswer: (DeleteRequest, HierarchyDeletePolicy?) -> Unit
+        onAnswer: (DeleteRequest, HierarchyDeletePolicy?) -> Unit,
+        onBusy: () -> Unit
     ) {
         scope.launch {
             owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 var open: AlertDialog? = null
-                for (request in requests) {
-                    if (open?.isShowing == true) continue
-                    val window = show(context(), request) { policy -> onAnswer(request, policy) }
-                    window.setOnDismissListener { open = null }
-                    open = window
+                try {
+                    for (request in requests) {
+                        if (open?.isShowing == true) {
+                            onBusy()
+                            continue
+                        }
+                        val window = show(context(), request) { policy -> onAnswer(request, policy) }
+                        window.setOnDismissListener { open = null }
+                        open = window
+                    }
+                } finally {
+                    open?.takeIf { it.isShowing }?.dismiss()
                 }
             }
         }
