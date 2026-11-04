@@ -3,7 +3,6 @@ package com.taskplanner.ui.tasks
 import android.content.Context
 import android.view.View
 import android.widget.TextView
-import androidx.annotation.StringRes
 import com.google.android.material.button.MaterialButton
 import com.taskplanner.R
 import com.taskplanner.data.hierarchy.HierarchyMoveRefusal
@@ -25,12 +24,20 @@ import kotlinx.coroutines.launch
  * («не выводить родителя из названия или порядка строки»), and what a reader would experience as the app inventing a
  * tree they did not write.
  *
- * **The rule is not re-implemented here either.** What a press would do is [HierarchyMenu]'s answer, the same offer
- * the card's menu builds and the same two policy functions that answer under [com.taskplanner.data.repository.TaskHierarchyRepository]'s
- * transaction; the titles come from [HierarchyMenu.indentLabel] and [HierarchyMenu.outdentLabel], and an action the
- * app has no sentence for is hidden by the same [HierarchyMenu.isSilent] the list hides it with. A second opinion in
- * the editor is how a button ends up offering what the domain then refuses, and the reader who presses it has learned
+ * **The rule is not re-implemented here either.** What a press would do is [HierarchyMenu]'s answer, asked from the
+ * candidate [TaskHierarchyPolicy.previousSibling] names and the facts this class already built — the same offer the
+ * card's menu builds and the same two policy functions that answer under
+ * [com.taskplanner.data.repository.TaskHierarchyRepository]'s transaction; every refusal is titled by
+ * [HierarchyMenu.indentLabel] and [HierarchyMenu.outdentLabel], the list's own sentences, and an action the app has
+ * no sentence for is hidden by the same [HierarchyMenu.isSilent] the list hides it with. A second opinion in the
+ * editor is how a button ends up offering what the domain then refuses, and the reader who presses it has learned
  * that the tree is not safe here.
+ *
+ * **One copy is the editor's own, on purpose.** An offered Indent names the task it would hang the row on
+ * (`hierarchy_indent_action`) rather than borrowing `row_indent`, whose «the row above» is a fact about the block the
+ * Tasks list draws: this screen shows no rows, and the stored sibling the press actually writes is not always the
+ * task the list would have named. A refusal needs no such split — the domain's reason does not care which screen
+ * read it out — and so only the refusal sentences are shared verbatim.
  *
  * **It owns six views and nothing else.** The topic, parent and level lines, the two buttons and the block that holds
  * them: those are the only views this class touches, which is what lets a hierarchy press leave the title the reader
@@ -141,32 +148,52 @@ class HierarchyEditor(
             TaskHierarchyPolicy.levelOf(facts, current)
         ))
         writeAction(
-            indentButton, measured.indentReason,
-            HierarchyMenu.indentLabel(measured.indentReason), measured.canIndent
+            indentButton, measured.indentReason, indentWords(measured), measured.canIndent
         )
         writeAction(
             outdentButton, measured.outdentReason,
-            HierarchyMenu.outdentLabel(measured.outdentReason), measured.canOutdent
+            context.getString(HierarchyMenu.outdentLabel(measured.outdentReason)), measured.canOutdent
         )
         section.visibility = View.VISIBLE
     }
 
     /**
-     * The offer the card's menu would build for this row, over the two rows the editor is standing on: the stored
-     * sibling the policy named, then the task itself.
+     * The words on the indent button.
      *
-     * [HierarchyMenu.offer] reads the candidate off the row above the one it is asked about, and that is exactly the
-     * pair [previousSibling] and the editor agree on. Going through the menu rather than calling
-     * [TaskHierarchyPolicy.indentRefusal] and [TaskHierarchyPolicy.outdentRefusal] by hand is what carries the third
-     * answer too — the block that cannot be named because an identity inside it is doubled — which the list hides and
-     * a hand-written pair of calls would have had to duplicate. The refusal sentences, the enabled state and the hide
-     * rule are then one computation, shared by both screens by construction.
+     * A refusal keeps [HierarchyMenu.indentLabel]'s sentence — the domain's reason is the same words on both screens,
+     * and a silent one is hidden further down, exactly as the list hides it. An *offered* indent cannot borrow the
+     * list's title, because `row_indent` says "the row above": a fact about the block the Tasks list draws, which
+     * this screen has never shown and which [TaskHierarchyPolicy.previousSibling] does not always agree with. What
+     * the reader is offered here is a named task, so the button names it — the same row the press hands to
+     * [TasksViewModel.indentTask].
+     */
+    private fun indentWords(measured: HierarchyMenu.Offer): String {
+        val candidate = measured.indentCandidate
+        return if (measured.canIndent && candidate != null) {
+            context.getString(R.string.hierarchy_indent_action, candidate.title)
+        } else {
+            context.getString(HierarchyMenu.indentLabel(measured.indentReason))
+        }
+    }
+
+    /**
+     * The offer the card's menu would build for this row, from the two inputs the editor already holds: the candidate
+     * [TaskHierarchyPolicy.previousSibling] named and the [TaskHierarchyPolicy.TreeFacts] the three values were
+     * measured against.
+     *
+     * Going through the menu rather than calling [TaskHierarchyPolicy.indentRefusal] and
+     * [TaskHierarchyPolicy.outdentRefusal] by hand is what carries the third answer too — the block that cannot be
+     * named because an identity inside it is doubled — which the list hides and a hand-written pair of calls would
+     * have had to duplicate. The refusal sentences, the enabled state and the hide rule are then one computation,
+     * shared by both screens by construction. What the editor does *not* do is hand the menu a two-row list standing
+     * in for a block it does not have: the candidate is passed as itself, and the facts are passed rather than
+     * rebuilt, so one emission costs one measurement.
      */
     private fun offerAt(
         row: Task,
         candidate: Task?,
         facts: TaskHierarchyPolicy.TreeFacts
-    ): HierarchyMenu.Offer = HierarchyMenu.offer(row, listOfNotNull(candidate) + row, facts.rows)
+    ): HierarchyMenu.Offer = HierarchyMenu.offer(row, candidate, facts)
 
     private fun write(row: TextView, value: String) {
         // Only written when it moved: a render lands here once a second while a measurement runs, and re-setting the
@@ -177,7 +204,7 @@ class HierarchyEditor(
     private fun writeAction(
         button: MaterialButton,
         reason: HierarchyMoveRefusal?,
-        @StringRes label: Int,
+        words: String,
         enabled: Boolean
     ) {
         val silent = HierarchyMenu.isSilent(reason)
@@ -186,7 +213,6 @@ class HierarchyEditor(
         val wanted = if (silent) View.GONE else View.VISIBLE
         if (button.visibility != wanted) button.visibility = wanted
         if (button.isEnabled != enabled) button.isEnabled = enabled
-        val words = context.getString(label)
         if (button.text.toString() != words) button.text = words
     }
 }

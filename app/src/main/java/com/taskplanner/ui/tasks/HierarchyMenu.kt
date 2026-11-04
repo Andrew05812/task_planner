@@ -52,8 +52,10 @@ object HierarchyMenu {
      * into a title it disables.
      */
     data class Offer(
-        /** The row an indent would hang the head on — the one *drawn* above it, which a filter can make not the one
-         * the stored sequence holds there. */
+        /** The row an indent would hang the head on. The list's overload names the one *drawn* above it — which a
+         * filter can make not the one the stored sequence holds there — while §6.2's editor names the nearest row
+         * the profile keeps in the same sibling set. Either way it is the row a press writes, so each screen has to
+         * say its own answer out loud rather than borrow the other's words: see `hierarchy_indent_action`. */
         val indentCandidate: Task?,
         val indentReason: HierarchyMoveRefusal?,
         val outdentReason: HierarchyMoveRefusal?
@@ -77,10 +79,27 @@ object HierarchyMenu {
         return if (at <= 0) null else drawn[at - 1]
     }
 
-    /** Both questions the menu can answer, asked once over the same rows. */
-    fun offer(row: Task, drawn: List<Task>, stored: List<Task>): Offer {
-        val candidate = indentCandidate(row, drawn)
-        val facts = TaskHierarchyPolicy.factsOf(stored)
+    /**
+     * Both questions the menu can answer, asked over the rows the screen drew and the rows the profile holds.
+     *
+     * The candidate is read off [drawn] — see [indentCandidate] — and the facts rebuilt from [stored]; a screen that
+     * already holds both asks [offer] the other overload instead, so neither the row it hangs a task on nor the tree
+     * it measures against is computed twice for one emission.
+     */
+    fun offer(row: Task, drawn: List<Task>, stored: List<Task>): Offer =
+        offer(row, indentCandidate(row, drawn), TaskHierarchyPolicy.factsOf(stored))
+
+    /**
+     * The same answer from the candidate and the facts a caller has already chosen and built.
+     *
+     * §6.2's editor names its candidate through [TaskHierarchyPolicy.previousSibling] — the nearest row the profile
+     * stores in the same sibling set, which is what its Indent press actually writes — and builds one
+     * [TaskHierarchyPolicy.TreeFacts] per emission for the three values it prints. Handing those in, rather than
+     * pretending the editor has a block of rows above the task, is what lets the two screens share one offer without
+     * the editor inventing a screen it does not have; the candidate itself is the only input that differs, so the
+     * refusal, the enabled state and the hide rule cannot drift from the list's.
+     */
+    fun offer(row: Task, candidate: Task?, facts: TaskHierarchyPolicy.TreeFacts): Offer {
         // A block that cannot be named — the head's own identity doubled, or one inside it — makes either direction
         // unsafe, so it is answered before either rule is consulted rather than by whichever one happens to look
         // first. The repository refuses the same thing at the door of its transaction.

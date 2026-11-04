@@ -17,7 +17,12 @@
 
     Every id is the id it was, including `repeat_preset`, `repeat_interval_layout` and `repeat_interval`
     (PR #21's crash, tested through the real fragment) and the plan and work fields the view model writes
-    back. Nothing here changes what a field saves: the editor writes the same task it wrote before.
+    back. The hierarchy block is the one part of this screen that writes by itself: its two buttons go through
+    the list's own indent and outdent commands, into the repository's transaction, and neither of them waits for
+    Save. Save still writes the fields the widgets hold — but since 2f921a8 the row it copies onto is the one
+    storage holds *now* rather than the one this screen loaded, because `updateTask` rewrites every column and a
+    copy of the loaded row would hand back the `parent_uuid` a move made here had just changed. A move made on
+    this screen therefore survives Save; before that change the screen's own Save quietly undid it.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"

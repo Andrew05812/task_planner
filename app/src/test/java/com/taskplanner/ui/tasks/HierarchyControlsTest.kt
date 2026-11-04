@@ -26,6 +26,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -185,6 +186,51 @@ class HierarchyControlsTest {
                 TaskHierarchyPolicy.hierarchyOffers(listOf(rows), TaskHierarchyPolicy.factsOf(rows))[task.id]
             )
         }
+    }
+
+    /**
+     * The two ways of asking for an offer, answered over one fixture.
+     *
+     * §6.2 hands the editor its own candidate — [TaskHierarchyPolicy.previousSibling], the nearest row the profile
+     * stores in the same sibling set — and the [TaskHierarchyPolicy.TreeFacts] it has already built, so the menu has
+     * to answer from those rather than from a two-row list invented to look like a card's block. The list's overload
+     * is then the same computation seen from the other side: its candidate is the row drawn above the one asked
+     * about, which is exactly what [HierarchyMenu.indentCandidate] returns, and everything else — both refusals, and
+     * the guard for a block that cannot be named because an identity inside it is doubled — is shared by
+     * construction, not copied.
+     */
+    @Test
+    fun `the candidate the editor names and the block the list draws answer one offer`() {
+        val topic = group("office-block")
+        val planning = row("planning", position = 0, group = topic.uuid)
+        row("notes", position = 1, group = topic.uuid)
+        val nested = row("draft", parent = "planning", position = 2, group = topic.uuid)
+        // One identity claimed by two live rows, so the equality below is asked about a block neither screen can
+        // name as well as about ordinary ones: hiding a control nobody can explain is the menu's rule, not a rule
+        // each screen is free to re-decide for itself.
+        row("receipts", position = 3, group = topic.uuid, uuid = planning.uuid)
+        val rows = stored()
+        val facts = TaskHierarchyPolicy.factsOf(rows)
+
+        rows.forEach { task ->
+            assertEquals("both readings of ${task.uuid} give the same answer",
+                HierarchyMenu.offer(task, rows, rows),
+                HierarchyMenu.offer(task, HierarchyMenu.indentCandidate(task, rows), facts))
+        }
+
+        // Where the two candidates legitimately part, and why the copy had to follow: `draft` is second in the drawn
+        // sequence, so the list would hang it on `notes`, while its own sibling set — same profile, same topic, same
+        // parent — holds nothing above it. The editor keeps the stored rule, so the row it names has to be the row it
+        // would actually write; "the row above" is a fact about a screen the editor is not on.
+        assertNotNull("the list's candidate is the row drawn above it",
+            HierarchyMenu.indentCandidate(nested, rows))
+        assertNull("while the policy finds no sibling in the row's own set",
+            TaskHierarchyPolicy.previousSibling(nested, facts))
+        assertEquals("so the editor's offer is refused where the list's is not",
+            HierarchyMoveRefusal.NO_ROW_ABOVE,
+            HierarchyMenu.offer(nested, TaskHierarchyPolicy.previousSibling(nested, facts), facts).indentReason)
+        assertNull("one row, two screens, two answers about what a press would write",
+            HierarchyMenu.offer(nested, rows, rows).indentReason)
     }
 
     @Test

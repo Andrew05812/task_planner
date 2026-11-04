@@ -1087,6 +1087,8 @@ class TasksViewModel @Inject constructor(
                     // DONE means "completed and filed in the archive"; keeping the editor
                     // and the card button consistent avoids a COMPLETED row in active list.
                     if (status == TaskStatus.COMPLETED) taskRepository.completeAndArchive(resultId)
+                    // Deliberately the deadline the screen loaded, not the stored row's the write above copied onto:
+                    // moving a task in the tree does not reschedule its series, and repeat semantics are unchanged.
                     val conflict = applyRepeat(resultId, existing?.dueDate, repeat)
                     _seriesRule.value = seriesOf(resultId)
                     _reminderOffsets.value = saved?.let { reminderRepository.offsetsFor(it.uuid) }

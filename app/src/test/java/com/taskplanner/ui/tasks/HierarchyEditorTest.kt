@@ -303,8 +303,10 @@ class HierarchyEditorTest {
         val next = bound(model, second)
         assertTrue("a row with a stored sibling in its own set is offered the move",
             next.binding.hierarchyIndentButton.isEnabled)
-        assertEquals("titled by the action rather than by a reason",
-            app.getString(R.string.row_indent), next.binding.hierarchyIndentButton.text.toString())
+        assertEquals("titled by the row it would actually hang the task on — this screen draws no rows, so " +
+                "«the row above» would name a place the reader cannot see",
+            app.getString(R.string.hierarchy_indent_action, "planning"),
+            next.binding.hierarchyIndentButton.text.toString())
 
         // Two rows of the profile sit above this one and neither is its sibling: the candidate is read out of the
         // row's own set, which is what makes an indent in the editor name the move the domain would write.
@@ -313,6 +315,44 @@ class HierarchyEditorTest {
             nested.binding.hierarchyIndentButton.isEnabled)
         assertEquals(app.getString(R.string.indent_no_row_above),
             nested.binding.hierarchyIndentButton.text.toString())
+    }
+
+    /**
+     * A stored sibling the profile cannot name is a refusal with no sentence, and so an action the editor hides.
+     *
+     * `tasks.uuid` defaults to the empty string and a pull, a restored backup or a legacy row can leave it there, so
+     * the nearest sibling is a real row the reader sees nothing wrong with — and yet nothing can hang on it, because
+     * every parent link is resolved by uuid. [HierarchyMoveRefusal.PARENT_UNNAMED] is one of the two refusals the app
+     * has no sentence for, and §6.1's rule is that such an action is drawn nowhere rather than titled with the
+     * action's own name; the editor is bound by the same rule, because a disabled button whose reason the app cannot
+     * say is a button a reader learns to stop trusting.
+     */
+    @Test
+    fun `a stored sibling the profile cannot name hides the indent rather than leaving a dead button`() {
+        val topic = group("office-block")
+        val unnamed = row("planning", position = 0, group = topic.uuid, uuid = "")
+        val second = row("notes", position = 1, group = topic.uuid)
+        val model = drawn()
+        val facts = TaskHierarchyPolicy.factsOf(stored())
+
+        assertEquals("the row's nearest stored sibling is the unnamed one", unnamed.id,
+            TaskHierarchyPolicy.previousSibling(second, facts)?.id)
+        assertEquals("and the domain refuses a press that would write a link to no identity",
+            HierarchyMoveRefusal.PARENT_UNNAMED,
+            TaskHierarchyPolicy.indentRefusal(second, unnamed, facts))
+        assertTrue("which is a refusal the app has no sentence for: a broken notebook, not a choice",
+            HierarchyMenu.isSilent(HierarchyMoveRefusal.PARENT_UNNAMED))
+
+        val shown = bound(model, second)
+        assertFalse("so the editor takes the action off the screen",
+            shown.binding.hierarchyIndentButton.isVisible)
+        assertFalse("rather than showing it disabled where a keyboard or switch-access still reaches it",
+            drawn(shown.binding.hierarchyIndentButton))
+        assertTrue("while the three values the reader can check stay on the screen",
+            shown.binding.hierarchySection.isVisible)
+        assertEquals("and the lift, which does have a sentence of its own, stays put and explains itself",
+            app.getString(R.string.outdent_at_topic_root),
+            shown.binding.hierarchyOutdentButton.text.toString())
     }
 
     @Test
@@ -361,6 +401,18 @@ class HierarchyEditorTest {
             "planning", stored().first { it.uuid == "draft" }.parentUuid)
     }
 
+    /**
+     * The two screens asked the same question about the same row.
+     *
+     * What they must agree about is the *refusal*: the domain's reason does not care which screen read it out, and a
+     * reader who opens the card's menu and then the editor would otherwise be told two different things about one
+     * move. Their titles deliberately differ where the move is allowed, and that is not drift — it is §6.2's ruling
+     * on the copy. The list hangs a row on the neighbour drawn above it and says "the row above", which is a fact
+     * about its own screen; the editor has no rows on screen at all, so it hangs the row on the nearest stored
+     * sibling [TaskHierarchyPolicy.previousSibling] names — which under a filter, or for a row that is first in its
+     * own set, is not the same task the list would name. A button on the editor therefore says the name of the task
+     * it would write (`hierarchy_indent_action`), and the availability both screens offer stays one computation.
+     */
     @Test
     fun `the editor and the list menu name the same refusal for the same row`() {
         val topic = group("office-block")
@@ -373,10 +425,10 @@ class HierarchyEditorTest {
         val screen = model.hierarchyContext!!
 
         // These rows are asked the same question by both screens: the row above them in the block the list draws is
-        // also their nearest stored sibling. That is the case the two must never disagree about, because a reader who
-        // opens the card's menu and then the editor would be told two different things about one move. Where the two
-        // legitimately part — a drawn neighbour that is not a sibling at all, which is `draft` here — is §6.2's own
-        // rule, held by `indent is offered only with a stored sibling to hang on`.
+        // also their nearest stored sibling. Where the two legitimately part — a drawn neighbour that is not a
+        // sibling at all, which `draft` is in this fixture — the editor keeps the stored rule, and that is held by
+        // `indent is offered only with a stored sibling to hang on` and by
+        // `the candidate the editor names and the block the list draws answer one offer`.
         val facts = TaskHierarchyPolicy.factsOf(screen.stored)
         listOf(stored().first { it.uuid == "planning" }, notes, sibling).forEach { task ->
             val block = screen.blockFor(task.id).orEmpty()
@@ -385,10 +437,20 @@ class HierarchyEditorTest {
 
             val offer = HierarchyMenu.offer(task, block, screen.stored)
             val shown = bound(model, task)
-            assertEquals("the editor titles indent exactly as the card's menu does for ${task.uuid}",
-                app.getString(HierarchyMenu.indentLabel(offer.indentReason)),
-                shown.binding.hierarchyIndentButton.text.toString())
-            assertEquals("and the lift with the same words",
+            val candidate = TaskHierarchyPolicy.previousSibling(task, facts)
+            if (offer.indentReason != null) {
+                assertEquals("a refused indent is named by the same sentence on both screens, for ${task.uuid}",
+                    app.getString(HierarchyMenu.indentLabel(offer.indentReason)),
+                    shown.binding.hierarchyIndentButton.text.toString())
+            } else {
+                assertEquals("and an allowed one is titled by the task this screen would hang it on: ${task.uuid}",
+                    app.getString(R.string.hierarchy_indent_action, candidate?.title),
+                    shown.binding.hierarchyIndentButton.text.toString())
+                assertNotEquals("which is deliberately not the list's words, whose «row above» this screen never drew",
+                    app.getString(HierarchyMenu.indentLabel(offer.indentReason)),
+                    shown.binding.hierarchyIndentButton.text.toString())
+            }
+            assertEquals("the lift needs no such distinction, so both screens name it alike",
                 app.getString(HierarchyMenu.outdentLabel(offer.outdentReason)),
                 shown.binding.hierarchyOutdentButton.text.toString())
             assertEquals("and the two agree about whether the indent can be pressed for ${task.uuid}",
@@ -449,6 +511,49 @@ class HierarchyEditorTest {
         shown.editor.bind(saved)
         assertTrue("and this editor does show the block the moment a saved row is on screen",
             shown.binding.hierarchySection.isVisible)
+    }
+
+    /**
+     * A row the published tree no longer holds stands the whole section down.
+     *
+     * The editor is open on a task and the reader finishes it from the card, or a sync archives it, or it is deleted:
+     * the row leaves [TasksViewModel.hierarchyContext] — which is the active list's snapshot — while the fragment is
+     * still holding the task it loaded. Every value the block could print then comes from a tree the task is no
+     * longer part of: the topic and the parent would be read out of rows that are still there, the level would be
+     * measured against them, and both actions would be refused by the same read the domain makes when the write
+     * arrives. Saying nothing is the only honest answer left, which is what §6.2's rule for a task with no row yet
+     * already decides for an unsaved task; this is the same branch reached from the other side.
+     */
+    @Test
+    fun `a row the published snapshot no longer holds stands the whole section down`() {
+        val topic = group("office-block")
+        row("planning", position = 0, group = topic.uuid)
+        val notes = row("notes", position = 1, group = topic.uuid)
+        val model = drawn()
+        val shown = bound(model, notes)
+        assertTrue("while the row is in the snapshot, the section speaks for it",
+            shown.binding.hierarchySection.isVisible)
+
+        runBlocking { fixture.taskRepository.completeAndArchive(notes.id) }
+        settle("the archive to leave the published snapshot") {
+            model.hierarchyContext!!.stored.none { it.id == notes.id }
+        }
+
+        assertFalse("the block stands down rather than printing a topic, a parent and a level it cannot check",
+            shown.binding.hierarchySection.isVisible)
+        assertFalse("and neither action is left where a reader could press it",
+            drawn(shown.binding.hierarchyIndentButton) || drawn(shown.binding.hierarchyOutdentButton))
+
+        // The row is found again by the same editor with nothing re-bound: `held` stayed as the fragment left it, so
+        // the next emission is enough — which is the difference between hiding a section and losing one.
+        runBlocking { fixture.taskRepository.restoreTask(notes.id) }
+        settle("the row to come back into the snapshot") {
+            model.hierarchyContext!!.stored.any { it.id == notes.id }
+        }
+        assertTrue("and the section speaks for the row again", shown.binding.hierarchySection.isVisible)
+        assertEquals("with the values the tree holds, not the ones it printed before the archive",
+            app.getString(R.string.hierarchy_parent_value, app.getString(R.string.hierarchy_topic_root)),
+            words(shown.binding.hierarchyParent))
     }
 
     @Test

@@ -41,10 +41,16 @@ import org.xmlpull.v1.XmlPullParser
  *  * the screen is that scrolling form *above* a footer that does not scroll, so Save and Cancel are on the
  *    window whether or not the reader has reached the bottom of the fields.
  *
- * What stays out of this file on purpose: any claim about what a field *saves*. The editor writes the same
- * task it wrote before the regrouping — that is the stage's rule, and [TaskEditorInstrumentedTest] and
- * `TasksRecurrenceTest` are where the saving is proved. What the hierarchy block *says* is not a layout
- * question either, and belongs to [HierarchyEditorTest].
+ * What stays out of this file on purpose: any claim about what a field *saves*, and any claim about what the
+ * hierarchy block *says* — the first is a write, the second is a measurement, and neither is a layout question.
+ * The writing is proved in [TaskEditorInstrumentedTest], `TasksRecurrenceTest` and, for the block's two buttons,
+ * [TasksOrderingTest]'s test that a move made while the editor holds the task is not put back by Save. That last
+ * claim is why this file no longer says the editor writes "the same task it wrote before": since 2f921a8
+ * `TasksViewModel.saveTask` copies the editor's fields onto the row **as storage holds it** rather than onto the
+ * row as the screen loaded it, because `updateTask` rewrites every column — `parent_uuid` among them — and a
+ * hierarchy move made on this screen would otherwise be undone by the same screen's own Save. The fields are the
+ * same fields; the base they are copied onto is not. What the block prints, and which press it offers, belongs to
+ * [HierarchyEditorTest].
  */
 @RunWith(RobolectricTestRunner::class)
 class TaskDetailLayoutTest {
@@ -95,7 +101,7 @@ class TaskDetailLayoutTest {
     ).toInt()
 
     /**
-     * The block the six sections are stacked in, found through a section rather than through an id of its
+     * The block the seven sections are stacked in, found through a section rather than through an id of its
      * own. The layout has no reason to name that container, and a test that made it add one would be
      * asserting that a name exists rather than that the form is grouped.
      */

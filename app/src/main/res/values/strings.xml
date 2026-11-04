@@ -166,9 +166,11 @@
          reader has opened. Each line is a label and the value the tree already holds — the topic the row is filed
          under, the task `parent_uuid` points at, the level the policy measures — and each of the three has a state
          of its own for the case with nothing behind it: «No topic» rather than a blank, «Root task of the topic»
-         and «Standalone task» rather than an empty parent. The two verbs reuse §6.1's strings: the same sentence
-         for the same move, and the same sentence for the same refusal, so the card's menu and the editor cannot
-         grow two vocabularies for one tree. -->
+         and «Standalone task» rather than an empty parent. The refusals reuse §6.1's sentences — the domain's reason
+         does not depend on which screen asked. An *offered* indent gets its own sentence instead: this screen draws
+         no rows, so «the row above» would name a place the reader cannot see, and the candidate the editor writes to
+         is the nearest earlier row of the same topic and the same parent, which is not always that row. The lift
+         needs no such distinction: it moves the task up one level wherever it sits. -->
     <string name="section_hierarchy">Hierarchy</string>
     <string name="hierarchy_topic_value">Topic: %1$s</string>
     <string name="hierarchy_parent_value">Parent: %1$s</string>
@@ -176,6 +178,7 @@
     <string name="hierarchy_no_topic">No topic</string>
     <string name="hierarchy_topic_root">Root task of the topic</string>
     <string name="hierarchy_standalone">Standalone task</string>
+    <string name="hierarchy_indent_action">Make it a subtask of %1$s</string>
     <string name="mark_topic_completed">Mark topic completed</string>
     <string name="mark_topic_open">Clear the topic’s completion</string>
     <plurals name="branch_collapse">
