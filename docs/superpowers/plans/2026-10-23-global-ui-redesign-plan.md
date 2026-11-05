@@ -7262,5 +7262,31 @@ reproduce, and every failure the method has ever had is inside a full-suite pass
 reproductions still owed — the full suite locally, and a forced pair — so it is carried as its own task rather than
 fixed by guessing, and nothing in it was relaxed, ignored, renamed or re-aimed.
 
+**The record commit itself then went red, and green on a rerun.** `4df3c25` — this paragraph's own commit — failed
+[42080192835](https://github.com/Andrew05812/task_planner/actions/runs/42080192835) at step 8 with `2085 tests
+completed, 1 failed`, the same method and the same `null` (steps 9, 10 and 13 reported `skipped`, which is what a failed
+job does to the steps behind it rather than three more findings), and then
+[42082104925](https://github.com/Andrew05812/task_planner/actions/runs/42082104925) on that identical SHA came back
+**`completed / success`** at 18:27:04Z. The day on one `app` tree is therefore: green `f650ce6`, red `019c1d6`, red then
+green `05967a6`, red then green `4df3c25` — the tip is green on the bytes it carries, and six verdicts — three red, three green — sit on one `app` tree that cannot
+be told apart between them.
+
+The first owed reproduction is now done, with a negative: a **full local suite pass with the diagnostic in place ran
+2085 tests / 0 failures / 0 errors / 0 skipped**. What the instrumentation bought instead of a reproduction is a look at
+the quiet path in a run that passed — a legitimate `assertNull` site printed the content view holding exactly one child,
+the fragment's own container, with no notice view anywhere in it. The class's own `@After` KDoc already names the
+mechanism it guards against: a notice left up when its activity dies keeps Material's process-wide manager holding it for
+the rest of the JVM, and every later notice queues behind one nobody can see or dismiss. So the obvious next probe was to
+build that state on purpose, and it was built — a throwaway spike, run once, then deleted with the tree verified clean —
+in two shapes: show a LENGTH_LONG notice, finish the activity 200 ms later while it is still up, then ask a second screen
+to speak; and the same but drained the way `dismissNotices()` drains it. **Both passed**, so the phantom-after-destroy
+shape does not reproduce from that construction, and the account that survives is narrower than the KDoc's: something
+about the *loaded* machine, not about the sequence. `app/build.gradle.kts` sets no `maxParallelForks` or `forkEvery`, so
+local and CI run one fork in the same order; what differs is the runner — Linux, two cores, `--console=plain`, no
+`--offline` cache, and a Gradle daemon-less start. The next experiment is therefore environmental rather than logical:
+run the full suite while the machine is deliberately busy, and see whether contention alone is enough to leave a notice
+mid-animation when the drain looks. Nothing in `WorkAdjustmentUiTest` was changed, weakened, ignored or renamed at any
+point in this search, and the tree is clean at the published SHA.
+
 
 
