@@ -400,6 +400,33 @@ and the refusal
 reaches the reader as a resource id (`delete_blocked_running`, `delete_row_missing`) rather than as a sentence frozen
 in the language the reader has just left.
 
+## One delete command, and every door that can reach a Task
+
+Stage 16 §5 moved that sequence — read the branch, ask when it holds one, write through the tree rules, then perform
+the follow-ups that are not database state — out of `TasksViewModel.deleteRows` and into
+`TaskDeleteCoordinator` (`data/hierarchy/TaskDeleteCoordinator.kt`), because a sequence that lives in a ViewModel is
+reachable by one screen. It answers with `DeleteOutcome(tombstones, refusal, asks)`: a record rather than a sum,
+because a batch really can retire two branches, refuse a third that is being measured, and meet a row that grew a
+child since the pre-read. It knows no strings, no dialogs and no view models — each screen maps its numbers to its own
+state — and both screens now answer through it, which is why the category screen shows the same window rather than a
+narrower one.
+
+The doors, each checked at its call site:
+
+| Door | Resolves the tree? | Evidence |
+| --- | --- | --- |
+| A task card's delete, and the selection bar's | yes — `requestDelete` → `DeleteDialog` → `resolveDelete` → the coordinator | `UnifiedTaskDeleteTest` (25), `HierarchyDeleteCommandTest` (12) |
+| A category row's long-press | yes, since §5. It used to call `taskRepository.deleteTask`, one tombstone with no question, and left children naming the row they hang from | `CategoryTaskDeleteTest` (9) |
+| The archive's "delete forever" | yes, since §5, through `hardDelete`: the branch is resolved first and the physical verb then takes the rows that are already retired. `parent_uuid` has no foreign key behind it, so the database would not have objected | `ArchiveHardDeleteTest` (4) |
+| Account merge (`AuthRepository`), series cancel (`RecurrenceRepository`), a tombstone applied by sync (`SyncAppliers`) | no — none of them is a reader's Task delete | named in Stage 16 §5's audit as open findings, not rewritten |
+| Notifications, `TaskRepository.deleteAllTasksForCurrentUser` | nothing to check: the reminder path issues no delete, and the "delete all mine" method has no caller in `app/src` at all | the greps are in the report |
+
+The two public bulk commands that used to sit next to `deleteRows` — `deleteSelected` and `deleteSelectedFor` — are
+deleted. They were unwired since §4 and reachable by any caller, which is the shape of a door: a public method that can
+write without asking, tested by twelve cases that pinned a route no reader could take. The suites call
+`com.taskplanner.testing.deleteThroughTheWindow` instead, which presses, takes the one request the channel holds and
+answers it the way the window's buttons do, so what is pinned now is reachable.
+
 ## Can a parent be ambiguous? measured, and what the write does about it
 
 `tasks.parent_uuid` names a parent by `tasks.uuid`, and nothing in the schema makes that name unique: `uuid` carries

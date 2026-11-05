@@ -12,11 +12,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import com.taskplanner.R
 import com.taskplanner.data.model.TaskWithCategory
 import com.taskplanner.databinding.FragmentCategoryTasksBinding
+import com.taskplanner.ui.tasks.DeleteDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -41,8 +40,28 @@ class CategoryTasksFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupRecyclerView()
+        bindDeleteDialog()
         observeViewModel()
         viewModel.loadCategoryTasks(args.categoryId)
+    }
+
+    /**
+     * The delete windows this screen can show, drawn by the one object that knows how both of them look.
+     *
+     * A row with something under it has two deletes and the reader owns the choice; a row with nothing under it has
+     * one and must not be made to answer a question with a single answer. §4 put that pair in
+     * [com.taskplanner.ui.tasks.DeleteDialog] rather than in the tasks screen, and this screen reads the same channel
+     * shape it was written for — so the category list cannot grow a second, narrower idea of what deleting means.
+     */
+    private fun bindDeleteDialog() {
+        DeleteDialog.bind(
+            owner = viewLifecycleOwner,
+            scope = viewLifecycleOwner.lifecycleScope,
+            requests = viewModel.deleteRequests,
+            context = { requireContext() },
+            onAnswer = { request, policy -> viewModel.resolveDelete(request, policy) },
+            onBusy = { viewModel.reportDeleteBusy() }
+        )
     }
 
     private fun setupRecyclerView() {
@@ -65,13 +84,16 @@ class CategoryTasksFragment : Fragment() {
         }
     }
 
+    /**
+     * The row's delete: one press, one window, whose shape the domain decides.
+     *
+     * What used to live here was a generic "Delete Task?" built by this screen, whose confirmation called
+     * `taskRepository.deleteTask` — a tombstone for the pressed row and no word to the rows under it. The question is
+     * now asked by the view model through the shared coordinator, and drawn by [DeleteDialog], which shows the plain
+     * confirmation only when the domain says the row has nothing under it.
+     */
     private fun confirmDelete(item: TaskWithCategory) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.dialog_delete_task_title)
-            .setMessage(R.string.dialog_delete_task_message)
-            .setPositiveButton(R.string.action_delete) { _, _ -> viewModel.deleteTask(item.task) }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
+        viewModel.requestDelete(item.task)
     }
 
     private fun observeViewModel() {

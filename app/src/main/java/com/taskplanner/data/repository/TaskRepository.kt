@@ -148,7 +148,15 @@ class TaskRepository @Inject constructor(
         reminderRepository.onTasksDeleted(rows)
     }
 
-    /** Physically dropping a row takes its reminders with it: nothing is left that could still ring. */
+    /**
+     * Physically dropping a row takes its reminders with it: nothing is left that could still ring.
+     *
+     * It takes no account of the tree, because it is the verb that removes rows and nothing else — a row deleted here
+     * can still be named by a live child, and `parent_uuid` has no foreign key to refuse it. The route a reader's
+     * "delete forever" takes is therefore [com.taskplanner.data.hierarchy.TaskDeleteCoordinator.hardDelete], which
+     * resolves the branch first and calls this on the rows that are already tombstones. Nothing in the app should
+     * reach for this one directly to delete a task.
+     */
     suspend fun hardDeleteTasks(ids: List<Long>) {
         val rows = taskDao.getByIds(ids)
         reminderRepository.retireTasks(rows.map { it.uuid })

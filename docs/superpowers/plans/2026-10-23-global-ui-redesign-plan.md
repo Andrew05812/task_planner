@@ -6976,3 +6976,86 @@ Gates after the last measured round (`086c0db`): 153 classes / **2015** tests / 
 APK **14,580,715** bytes. **CI has not been dispatched for the §6.3 commits yet** — runs 85 (`27ccac9`) and 86
 (`9ceb3b3`) were green, and the branch has moved since; the final pass must be measured on the published SHA, not
 assumed from those two.
+
+## 20α — Stage 16 §4b: a promoted branch keeps its place in the sequence as well as in the links
+
+Task 4's delete work surfaced this one by accident: the screen test that checked what a promote leaves in the
+database expected `week one, draft, week two`, and the code produced `week one, week two, draft`. The review that read
+my explanation of the difference said the explanation was false — `canonicalSequence` is a tie-breaking sort by
+(order, dueDate, id) and walks no tree — so the expectation was not wrong, the domain was.
+
+The defect: `deleteTask(…, PROMOTE_CHILDREN)` wrote each immediate child's parent link and the head's tombstone, and
+wrote **no position at all**. The screen takes the order it draws from the stored sequence and the indent from the
+parent links, so a grandchild that kept its number was read after its parent's sibling while being indented as though
+it hung below it. Every other hierarchy write moves a whole block for exactly that reason; `moveSubtreeUnder` anchors
+a moved block after the destination's subtree rather than at its head, which is the same promise stated the other way
+round.
+
+The fix is `TaskHierarchyPolicy.sequenceAfterPromote(stored, head, children)` beside `sequenceAfterMove`, and the
+write inside the same transaction as the re-hang and the tombstone, through the `writePositions` helper the moves
+already use. Two design points are worth keeping because both were argued:
+
+* the head stays in the answer at the place it held — the delete is a tombstone, the row is still the profile's, and
+  its keeping that number is what confines the re-arrangement to the block, so a branch whose child already sat with
+  its own rows moves nothing and writes no position;
+* confining the *re-arrangement* is not the same as confining the *write*. Positions are assigned by place, so a
+  profile whose numbers hold a gap — which is what any earlier delete leaves, since the query reads live rows only —
+  is densified by a promote exactly as the first drag of such a profile densifies it. That is what the review caught
+  when four sentences (in two KDocs, the result type and `docs/HIERARCHY.md`) claimed nothing outside the block is
+  touched, and it contradicted a paragraph of the same document that had stated the densifying rule for a drag all
+  along.
+
+RED at the domain first (`promoting_a_head_lifts_each_child_together_with_the_rows_under_it` reported
+expected `[first, under-first, second]` but was `[first, second, under-first]`), then three mutation rounds on the
+shipping tests: the arrangement computed and not written (3 of 65 failed, and `PromoteSequenceTest` stayed green
+because that class judges the policy, which was intact); the policy made a passthrough (7 of 66, four of them pure);
+and, in round 2, the blank-identity guard dropped — `expected:<[]> but was:<[2, 3]>`, two rows nobody named would have
+been re-hung, because `uuid = ''` is the column's default and `parent_uuid = ''` is what a pull writes for "no parent",
+so the delete was reading an empty string as a parent identity while the moves refused to. That last one became
+`TaskHierarchyPolicy.directChildrenOf`, one rule for the two delete readers, with `deleteBatchSummary` switched onto
+it so the number the dialog asks about and the set the write treats cannot drift apart.
+
+Only after the domain was green did the screen expectation flip to `week one, draft, week two`, and its comment stop
+describing today's behaviour. What is still not proven: a device frame of the drawn tree after a promote (§11/T10),
+and one profile-per-pass repair of a branch that was already split by an older build — a promote repairs only the block
+it moves.
+
+## 20β — Stage 16 §5: one delete command, and the two doors that bypassed it
+
+The orchestration — read the branch, ask when it holds one, write through the tree rules, then perform the follow-ups
+that are not database state — was inside `TasksViewModel.deleteRows`, which is to say inside one screen. Two
+consequences of that were real defects rather than tidiness:
+
+* `CategoryTasksViewModel.deleteTask` called `taskRepository.deleteTask(task)`: one tombstone, no question asked, and
+  the children left naming a row the database had retired. The task list treats a parent it cannot find as no parent,
+  so the child silently lost a level.
+* `ArchiveViewModel`'s "delete forever" called `taskRepository.hardDeleteTasks`, which removes rows from the table.
+  `tasks.parent_uuid` has no foreign key behind it — the entity's only key is `category_id` — so nothing objected, and
+  archiving is not a tree operation: `completeAndArchive` archives the one row it is given.
+
+`TaskDeleteCoordinator` (`data/hierarchy/`) now owns that sequence, answers with `DeleteOutcome(tombstones, refusal,
+asks, askedBeforeWriting)` — a record, not a sum, because a batch can retire two branches, refuse a third that is
+being measured and meet a row that grew a child since the pre-read, all in one call — and knows no strings, dialogs or
+view models. `summary`, `delete` and `hardDelete` are its whole surface; `hardDelete` resolves the tree first and
+hands the physical verb the rows that are already retired, because reversed the orphan is written before the repair
+can find it. The category screen shows Task 4's window rather than a narrower one it built itself; the archive screen
+goes through the same coordinator.
+
+Two public bulk commands, `deleteSelected` and `deleteSelectedFor`, were deleted. They had been unwired since §4 and
+were reachable by any caller — a public method that can write without asking is a second door, and twelve cases were
+pinning a route no reader can take. The suites now call
+`com.taskplanner.testing.deleteThroughTheWindow`, which presses, takes the one request the channel holds and answers
+it as a button would; every assertion in those cases is unchanged, which is also the proof that the lift of
+`deleteRows` was faithful rather than rewritten: 60 tests across the four tasks-screen suites passed with no edit to
+them at all.
+
+The route audit is in `task-5-report.md` §6, one row per door with its call site: the merge (`AuthRepository:637,644`),
+the series cancel (`RecurrenceRepository:165`) and the sync-applied tombstone (`SyncAppliers:83`) each reach a
+`deleteTask`-adjacent verb without consulting the tree, none of them is a reader's Task delete, and each is recorded
+as an open finding rather than rewritten. The reminder path issues no delete at all, and
+`TaskRepository.deleteAllTasksForCurrentUser` has no caller anywhere in `app/src` — a dead method, recorded rather
+than wired.
+
+Not proven: any device frame of the category window or the archive's tree after a "delete forever" (T10), the archive's
+refusal sentence — that screen's error channel carries a raw string rather than a resource id, so the case is named in
+the KDoc and left; and a batch of overlapping heads sequenced in one pass, which is still one transaction per head.
