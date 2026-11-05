@@ -108,7 +108,17 @@ class ArchiveDeleteRefusalTest {
         )
     }
 
-    /** Drains the fixture's two storage threads, repeatedly, until a chain of them has run to the end. */
+    /**
+     * Runs the fixture's storage threads quiet, ten times over.
+     *
+     * A drain, not a convergence check: `AppFixture.awaitIdle` returns after 2 s whether or not the queues emptied, so
+     * one call is not a proof that a chain finished. What the cases assert on is therefore either the table (read
+     * through a DAO, which is the point of the claim) or the list, and the list is waited for by [awaitListed], which
+     * converges or fails by name. The Main dispatcher this class installs runs commands inline rather than on a thread
+     * with a looper, so a continuation can resume on whichever fixture thread completed it — enough for state and rows,
+     * and the reason no `Dialog` is constructed in this file; the class that has to build windows
+     * (`CategoryTaskDeleteTest`) posts to the real main looper instead, and its comment says why.
+     */
     private fun settle() {
         repeat(10) { runBlocking { fixture.awaitIdle() } }
     }
@@ -171,6 +181,32 @@ class ArchiveDeleteRefusalTest {
             listOf("audited", "work"),
             runBlocking { fixture.taskDao.getRowsInStoredOrder(userId) }.map { it.title }
         )
+    }
+
+    @Test
+    fun a_refusal_outlives_the_next_reading_of_the_archive_s_own_list() {
+        val timed = row("audited", position = 0, archived = true)
+        startMeasuring(timed)
+        awaitListed(listOf("audited"))
+
+        viewModel.deleteForever(timed)
+        settle()
+        assertEquals("the refusal is on the state", R.string.delete_blocked_running, viewModel.state.value.refusalRes)
+
+        // The list is a live query, so the screen publishes a new state every time the table or a filter moves. The
+        // reader has still not been told about the refusal at that moment, and a re-publication that rebuilds the whole
+        // state rather than updating the rows drops the sentence on the floor — the row would refuse again on the next
+        // tap, which is a loop the reader cannot see their way out of.
+        viewModel.setSearch("aud")
+        settle()
+
+        assertEquals(
+            "a fresh reading of the list does not take the sentence the reader has not been shown yet",
+            R.string.delete_blocked_running,
+            viewModel.state.value.refusalRes
+        )
+        assertEquals("the refused row is still listed", listOf("audited"), titles())
+        assertEquals("and the filter the screen was given is the one it kept", "aud", viewModel.state.value.searchQuery)
     }
 
     @Test

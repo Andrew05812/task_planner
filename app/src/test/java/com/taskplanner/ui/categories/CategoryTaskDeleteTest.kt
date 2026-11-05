@@ -27,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -34,6 +35,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -123,6 +125,11 @@ class CategoryTaskDeleteTest {
         )
         screen.moveTo(Lifecycle.State.RESUMED)
         viewModel.loadCategoryTasks(category)
+        // A StateFlow hands a later collector only the value that is current when it starts, so a state that appears
+        // and is replaced between two pumps would never be seen by an assertion on `tasksState.value`. Collecting from
+        // the screen's own scope, from before any press, keeps the whole trail — which is what the case about a
+        // cancelled reader has to read, because the defect it measures is a state the screen shows for one moment only.
+        screen.scope.launch { viewModel.tasksState.collect { observedStates.add(it) } }
         pump()
     }
 
@@ -210,15 +217,22 @@ class CategoryTaskDeleteTest {
     }
 
     /**
-     * How many coroutines the view model is still holding open.
+     * How many coroutines the view model is still holding open, and which one is its reader.
      *
      * The screen's list is a live Room query, so its reader stays active for the life of the view model; every other
      * coroutine the screen launches finishes. A count that grows is therefore a query with more than one reader
      * attached to it, each writing the same state — the shape a reload leaves when it launches a second collector
      * instead of replacing the first. Read from the view model's own scope, which is the scope the collector lives in.
+     *
+     * The identity comes back as well, because a count alone is a weaker claim than the screen makes: a reload that
+     * did not happen at all would keep the count at one, so the case below compares the counts *and* asks that the one
+     * reader left standing be a different coroutine than the one that started.
      */
-    private fun liveReaders(): Int =
-        viewModel.viewModelScope.coroutineContext[Job]!!.children.count { it.isActive }
+    private fun activeChildren(): List<Job> =
+        viewModel.viewModelScope.coroutineContext[Job]!!.children.filter { it.isActive }.toList()
+
+    /** Every state the screen has published since the last clear — the record a transient error cannot hide from. */
+    private val observedStates = mutableListOf<CategoryTasksState>()
 
     private fun hasReminderFor(uuid: String): Boolean =
         runBlocking { fixture.reminderDao.getLiveForTask(uuid) }.isNotEmpty()
@@ -430,17 +444,45 @@ class CategoryTaskDeleteTest {
     @Test
     fun answering_a_delete_replaces_the_screen_s_reader_of_its_query_instead_of_adding_one() {
         val leaf = row("leaf", position = 0)
-        val readers = liveReaders()
+        val readersBefore = activeChildren()
 
         val window = theOneWindow(press(leaf))
         click(window, DialogInterface.BUTTON_POSITIVE)
+        val readersAfter = activeChildren()
 
         assertEquals(
-            "the reload the delete asked for attached no second reader: a screen that collects a live query in a " +
-                "launch it never cancels grows one observer per command it answers, all of them writing the same list",
-            readers,
-            liveReaders()
+            "exactly one live reader of the category query survives the reload — a screen that collects a live query " +
+                "in a launch it never cancels grows one observer per command it answers, all of them writing the same " +
+                "list",
+            1,
+            readersAfter.size
+        )
+        assertEquals("and the screen started with one", 1, readersBefore.size)
+        assertNotSame(
+            "the one that is left is the reload's own, not the row it replaced: a count that cannot move would also " +
+                "be satisfied by a reload that never happened",
+            readersBefore.single(),
+            readersAfter.single()
         )
         assertEquals("and the row really did go", emptyList<String>(), shownTitles())
+    }
+
+    @Test
+    fun replacing_the_screen_s_reader_does_not_tell_the_reader_the_list_failed_to_load() {
+        val leaf = row("leaf", position = 0)
+
+        val window = theOneWindow(press(leaf))
+        observedStates.clear()
+        click(window, DialogInterface.BUTTON_POSITIVE)
+
+        assertEquals(
+            "cancelling the collector a reload replaces is not a load that failed. A `catch (e: Exception)` around a " +
+                "`collect` swallows the `CancellationException` the cancel forces, and the screen answers a routine " +
+                "reload with «Couldn't load tasks» — transiently, so an assertion on the state at the end of the "
+                    + "pump would never see it, which is why this case reads the trail the collector recorded",
+            emptyList<CategoryTasksState.Error>(),
+            observedStates.filterIsInstance<CategoryTasksState.Error>()
+        )
+        assertEquals("and the list the reload asked for is what is on the screen", emptyList<String>(), shownTitles())
     }
 }

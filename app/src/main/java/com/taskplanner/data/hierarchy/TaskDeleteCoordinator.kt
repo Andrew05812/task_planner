@@ -102,9 +102,17 @@ class TaskDeleteCoordinator @Inject constructor(
      * starts below it — re-inserts the row the reader deleted for good. That is not new here: before §5 the archive
      * removed rows with no tombstone at all, so the cloud was never told either. What is new is that the two-step
      * became *the* domain verb for a final delete, which is the moment the hole stopped being a quirk of one screen.
-     * Closing it needs a purge, not a re-order: remove a retired row only once the sync queue no longer lists it, which
-     * is Stage 16 §11's work, and §11's brief now carries that requirement. Recorded in `docs/HIERARCHY.md` and in
-     * Stage 16 §5's report as an open finding, and deliberately not papered over with a network call from a view model.
+     * Closing it needs a purge, not a re-order: take the row out of the table once the cloud has been told it is
+     * retired, which is the moment its `sync_state` comes back to `SYNCED` — `SyncRepository.pushPending` is what moves
+     * a tombstone's state, over exactly the rows `getAllRowsOnce` lists with `syncState != SYNCED`. (Gating on
+     * `TaskDao.getPendingSyncTasks` instead would never fire: its SQL is `sync_state != 'SYNCED' OR is_deleted = 1`, so
+     * it names every tombstone forever, and nothing in production calls it.) And `SYNCED` is today a statement of
+     * *intent* rather than of confirmation — `SyncRepository.pushPending` sets it one line *before* `store.pushTask`
+     * returns, so a row whose push then failed is already marked as sent — which means §11 has to make the marking
+     * follow the confirmed write, or gate the purge on the push's own result; a purge built on the marking as it stands
+     * would inherit a second hole wearing the first hole's clothes. §11 owns that pass, and its KDoc,
+     * `docs/HIERARCHY.md` and roadmap §16.8 phase 6 all say the gate in those terms. What this block does not do is
+     * pretend the hole is shut: the sentence "safe for sync" appears nowhere near this verb.
      */
     suspend fun hardDelete(ids: List<Long>): DeleteOutcome {
         val resolved = delete(ids, HierarchyDeletePolicy.PROMOTE_CHILDREN)
@@ -130,9 +138,12 @@ class TaskDeleteCoordinator @Inject constructor(
      * old `deleteRows` handed each mid-loop ask to `onChoice` *while its loop still had rows to write*, and this method
      * collects them and lets the screen put them up once the loop is done. What the reader is asked, and the order the
      * asks come in among themselves, is the same; what changed is that no window appears until every row the command
-     * could write has been written. Nothing in the app observes that — the asks travel on a capacity-one channel a
-     * `STARTED` view drains, and two of them in one batch reach the same `reportDeleteBusy` either way — but a claim
-     * that a lift preserved the behaviour has to say which behaviour it did not.
+     * could write has been written. No test in the tree pins the instant — the asks travel on a capacity-one channel a
+     * `STARTED` view drains, and two of them in one batch reach the same `reportDeleteBusy` either way — but the change
+     * is not a nullity: the loop used to suspend on Room between its links, so the main thread was free to show that
+     * window and take an answer from it *while later rows of the same batch were still unwritten*. Collecting the asks
+     * closes that re-entrancy window, which is worth more than the ordering it changes. A claim that a lift preserved
+     * the behaviour has to say which behaviour it did not, and this one says it.
      */
     suspend fun delete(ids: List<Long>, policy: HierarchyDeletePolicy?): DeleteOutcome {
         if (policy == null) {

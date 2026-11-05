@@ -1203,7 +1203,12 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    the table in the same call, so the deletion is never pushed and the local evidence a pull needs in order not to
    resurrect the row is destroyed with it (`TaskDao.getAllRowsOnce` and `TaskDao.findTaskByUuid` both read tombstones on
    purpose, and say so in their comments). The requirement is a purge, not a re-order: a retired row may be physically
-   removed only once `TaskDao.getPendingSyncTasks` no longer names it. It predates §5 — the archive used to remove rows
+   removed only once its own `sync_state` has come back to `SYNCED` — the state `SyncRepository.pushPending` sets when it
+   has carried that row to the cloud. Not `TaskDao.getPendingSyncTasks`, which a first draft of this requirement named:
+   its SQL is `sync_state != 'SYNCED' OR is_deleted = 1`, so it lists every tombstone forever and the purge it gates
+   would never run. And because `SyncRepository.pushPending` marks a row `SYNCED` *before* it calls `store.pushTask`,
+   that state is intent rather than confirmation: §11 must first make the marking follow the confirmed write, or the
+   purge would delete tombstones that were never delivered and re-open the hole it closes. It predates §5 — the archive used to remove rows
    with no tombstone at all — and §5 made the two-step the domain verb, which is why it is stated here rather than left
    in a KDoc.
 7. **Device proof** at 320dp and at font scale 1.3, light and dark.

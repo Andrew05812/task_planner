@@ -7085,16 +7085,40 @@ RED first, because the brief's rule is that a claim is only evidence if a run pr
   exception channel beside it is left alone on purpose: Stage 14 §4 wrote that `ArchiveViewModel`'s `e.message` belongs
   to the error-handling stage, and §5 does not do another stage's work on the side.
 * The `DELETING`-then-physically-deleted question is true, older than this block, and not fixable here: closing it needs
-  a purge pass over the sync queue, which is §11's territory. §11 now carries the requirement — remove a retired row
-  only once `getPendingSyncTasks` no longer names it — `TaskDeleteCoordinator.hardDelete`'s KDoc states it where a
-  caller will read it, and `docs/HIERARCHY.md` has a section for it instead of a table cell.
+  a purge, which is §11's territory. §11 now carries the requirement — *remove a retired row only once its own
+  `sync_state` says the cloud has been told* — and `TaskDeleteCoordinator.hardDelete`'s KDoc states it where a
+  caller will read it, with `docs/HIERARCHY.md` holding the reasoning.
 
-The MINORs went the same way: the reminder/series assertion the brief asked the category regression test to carry is
-there now (`a_branch_deleted_here_retires_the_reminder_rows_of_every_row_in_it`), the two assertions that could not
+The MINORs of round 2 went the same way: the reminder/series assertion the brief asked the category regression test to
+carry is there now (`a_branch_deleted_here_retires_the_reminder_rows_of_every_row_in_it`), the two assertions that could not
 fail are gone, `ArchiveHardDeleteTest`'s first case asserts the child survives rather than only that nothing dangles,
 and the counts the report got wrong — sixteen hand-built view models where there are fifteen, twelve cases where there
 are fourteen — are counted off the tree in §5's report §8. Where a finding was wrong the report says so and quotes the
 fixture.
+
+**Round 3 — round 2's own diff was reviewed, and it had a bug in it.** The fix that closed the collector leak introduced
+another defect: `observeJob?.cancel()` makes the replaced collector resume with `CancellationException`, which is an
+`IllegalStateException`, so the `catch (e: Exception)` that was already around the `collect` took it and wrote
+«Couldn't load tasks» onto the screen for the moment between the cancel and the new list. A reader on a device sees a
+Snackbar that a test cannot see, because a test reads the state after the pump and the state has already moved on — which
+is the whole lesson for the next time this plan claims something was "measured": the new case collects *every* state the
+screen publishes, and it caught `expected:<[]> but was:<[Error(messageRes=2131886378)]>`. The fix is the rethrow clause six
+other classes in this app already have. Round 3 corrected three more claims of round 2's, each by going and reading the
+code it referenced: `ArchiveViewModel`'s collector rebuilt the whole state on every emission, so the refusal §5 had just
+given that screen could be wiped before the reader was shown it (measured after a filter moved:
+`expected:<2131886308> but was:<null>`; now the collector updates a copy, and the control's null-assertion means what it
+says); the purge gate §20β wrote for §11 named `TaskDao.getPendingSyncTasks`, whose `sync_state != 'SYNCED' OR
+is_deleted = 1` lists every tombstone forever and which no production code calls — and its replacement, the row's own
+`sync_state`, turned out on inspection to be set *before* the cloud write returns, i.e. intent rather than confirmation,
+so §11's requirement is now two parts (mark after a confirmed push, then purge) and both traps are written in
+roadmap §16.8 phase 6, `docs/HIERARCHY.md` and the coordinator; and "nothing in the app observes" the moved mid-loop ask
+was too strong — the old loop suspended on Room between its links, so a window really could be shown and answered while
+later rows were unwritten, and collecting the asks closes that re-entrancy window rather than merely re-ordering a
+dialog. Two test-strength findings went with them: the reader-count case now compares identities as well as counts, so it
+tests "replaced" and not "not increased", and the archive's two message channels are cleared separately so a shown
+refusal cannot silence a waiting exception. The reviewer also confirmed six of round 2's claims against the code, and the
+one round-2 refusal still stands.
+
 
 Not proven: any device frame of the category window or the archive's tree after a "delete forever" (T10); the archive's
 *exception* sentence, still an exception's own words for the reason just given; and a batch of overlapping heads

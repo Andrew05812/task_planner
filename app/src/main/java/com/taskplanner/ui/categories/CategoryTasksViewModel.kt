@@ -15,6 +15,7 @@ import com.taskplanner.R
 import com.taskplanner.data.repository.CategoryRepository
 import com.taskplanner.ui.tasks.DeleteRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.Job
@@ -93,6 +94,17 @@ class CategoryTasksViewModel @Inject constructor(
                             CategoryTasksState.Success(tasksWithCategory)
                         }
                     }
+            } catch (e: CancellationException) {
+                // The reload replaces this collector by cancelling it, and a cancel is not a load that failed. Swallowed
+                // by the catch below it would answer a routine command with «Couldn't load tasks» — transiently, on the
+                // way to the new list, so a reader on a device sees a Snackbar the length of a heartbeat and a test
+                // that reads the state at the end of a pump sees nothing. `CategoryTaskDeleteTest` collects every state
+                // the screen publishes, which is the only way that write can be caught: it measured
+                // `expected:<[]> but was:<[Error(messageRes=2131886378)]>` before this clause existed. The rethrow is
+                // the shape the rest of the app already uses — `ReportViewModel:800`, `SyncWorker:40`,
+                // `ReminderSweepWorker`, `RecurrenceRefreshWorker`, `SettingsViewModel` and `GoogleSignInTransport` all
+                // put this clause above a catch that would otherwise swallow it.
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "category tasks could not be loaded", e)
                 _tasksState.value = CategoryTasksState.Error(R.string.error_load_tasks)

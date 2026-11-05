@@ -444,11 +444,22 @@ did this before §5 too, and worse: it physically removed rows without making a 
 told. What §5 changed is that the two-step became *the* domain verb for a final delete, which is where a hole stops
 being one screen's quirk.
 
-The fix is a purge, not a re-ordering: take the row out of the table once the sync queue no longer lists it. That needs
-a pass over the queue, which is Stage 16 §11's territory, so §11 carries the requirement — *a retired row may be
-physically removed only when `getPendingSyncTasks` no longer names it* — and `TaskDeleteCoordinator.hardDelete`'s KDoc
-states the same thing where a caller will read it. What it does not do is pretend: the sentence "safe for sync" appears
-nowhere near this verb.
+The fix is a purge, not a re-ordering: take the row out of the table once the cloud has been told the row is retired,
+which is the moment the tombstone's own `sync_state` comes back to `SYNCED` — `SyncRepository.pushPending` walks
+`getAllRowsOnce(userId).filter { it.syncState != SYNCED }`, pushes each row, and sets that state. That pass is Stage 16
+§11's territory, so §11 carries the requirement — *a retired row may be physically removed only once its
+`sync_state` is `SYNCED`* — and `TaskDeleteCoordinator.hardDelete`'s KDoc states the same thing where a caller will
+read it. One gate that looks right and can never fire is worth naming, because a first draft of this paragraph wrote
+it: `TaskDao.getPendingSyncTasks` is `WHERE sync_state != 'SYNCED' OR is_deleted = 1`, so it names every tombstone for
+as long as the row exists, and no production code calls it.
+
+There is a second caveat, and it is the kind that turns a fixed gate into a new hole: `sync_state` is today a statement
+of *intent*, not of confirmation. `SyncRepository.pushPending` sets a row to `SYNCED` one line before it calls
+`store.pushTask`, so a push that fails after the marking leaves the row looking sent and the cloud still holding the old
+document. A purge gated on that marking would therefore destroy a tombstone that was never delivered, and the
+resurrection it was written to prevent would come back through a different door. So the requirement for §11 is in two
+parts: make the marking follow the confirmed write, and only then remove a retired row whose `sync_state` is `SYNCED`.
+What the code does not do is pretend — the sentence "safe for sync" appears nowhere near this verb.
 
 ### The one delete that can be refused, and what it says
 

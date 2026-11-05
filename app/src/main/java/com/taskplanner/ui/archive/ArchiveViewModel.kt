@@ -81,12 +81,19 @@ class ArchiveViewModel @Inject constructor(
                 }
                 visible.map { ArchivedItem(it, it.categoryId?.let { id -> categoryMap[id] }) }
             }.collect { items ->
-                _state.value = ArchiveState(
-                    items = items.map { ArchiveState.ArchivedTask(it.task, it.category) },
-                    isLoading = false,
-                    searchQuery = query.value,
-                    categoryFilter = category.value
-                )
+                // Updated, not rebuilt. A whole new `ArchiveState` here resets the fields the collector does not know
+                // about — which used to be only [ArchiveState.error], and since §5 is `refusalRes` too — so a refusal
+                // that had not reached the reader yet could be wiped by the next invalidation of the table or a filter
+                // change. `ArchiveDeleteRefusalTest.a_refusal_outlives_the_next_reading_of_the_archive_s_own_list`
+                // measured the wiping (`expected:<2131886308> but was:<null>` after a search moved) before this copy.
+                _state.update {
+                    it.copy(
+                        items = items.map { item -> ArchiveState.ArchivedTask(item.task, item.category) },
+                        isLoading = false,
+                        searchQuery = query.value,
+                        categoryFilter = category.value
+                    )
+                }
             }
         }
     }
@@ -155,8 +162,19 @@ class ArchiveViewModel @Inject constructor(
         }
     }
 
-    /** The screen has shown what it had to say; both channels go back to nothing together. */
+    /** The screen has shown the machine's sentence; only that channel goes back to nothing. */
     fun clearError() {
-        _state.value = _state.value.copy(error = null, refusalRes = null)
+        _state.value = _state.value.copy(error = null)
+    }
+
+    /**
+     * The screen has shown the refusal; only that channel goes back to nothing.
+     *
+     * Clearing both, as an earlier draft of this method did, makes the precedence in `ArchiveFragment` a message
+     * silencer: a refusal shown while an exception sentence was still waiting would retire the exception unsaid. The
+     * two channels are independent writes from independent commands, so the screen dismisses the one it read.
+     */
+    fun clearRefusal() {
+        _state.value = _state.value.copy(refusalRes = null)
     }
 }

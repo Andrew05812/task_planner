@@ -71,14 +71,20 @@ class ArchiveFragment : Fragment() {
                         if (state.isLoading) View.VISIBLE else View.GONE
                     binding.archiveEmpty.visibility =
                         if (!state.isLoading && state.items.isEmpty()) View.VISIBLE else View.GONE
-                    // Two channels, one at a time. [ArchiveState.refusalRes] is a sentence the app wrote into resources
-                    // and can therefore say in the reader's language; [ArchiveState.error] is an exception's own words,
-                    // which Stage 14 §4 named and left for the error-handling stage. The refusal is what a delete
-                    // produces, so it is resolved first.
-                    val refusal = state.refusalRes?.let { getString(it) }
-                    (refusal ?: state.error)?.let {
-                        Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
-                        viewModel.clearError()
+                    // Two channels, one at a time, and each dismissed only after it is the one that was read.
+                    // [ArchiveState.refusalRes] is a sentence the app wrote into resources and can therefore say in the
+                    // reader's language; [ArchiveState.error] is an exception's own words, which Stage 14 §4 named and
+                    // left for the error-handling stage. Clearing both whenever either appears would let a refusal
+                    // silence an exception that was still waiting to be shown.
+                    val refusal = state.refusalRes
+                    if (refusal != null) {
+                        Snackbar.make(binding.root, getString(refusal), Snackbar.LENGTH_LONG).show()
+                        viewModel.clearRefusal()
+                    } else {
+                        state.error?.let {
+                            Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
+                            viewModel.clearError()
+                        }
                     }
                 }
             }
