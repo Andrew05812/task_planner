@@ -7216,5 +7216,26 @@ push has carried it — is still unwritten, along with the rest of the hierarchy
 `parent_uuid` names a row this device does not have yet, two devices folding the same branch differently, and the
 collapse state of a row that arrives before its parent. That is T6b, and the wire is now ready for it.
 
+**Published, and what CI said about the published commit.** The pair went up as a fast-forward from `ce1c746`
+(`a3acab0` then `f650ce6`), no force, and the remote branch tip is `f650ce6f0071a710eb9987fc5a1112daaf844ac9` with
+`git rev-list --left-right --count origin/feat/global-ui-redesign...HEAD` reading `0 0`. `workflow_dispatch` answered
+HTTP 204, which is acceptance of a request and not a verdict; the verdict is run
+[42072595832](https://github.com/Andrew05812/task_planner/actions/runs/42072595832) on `f650ce6`, attempt 1,
+**`completed / success`**, one job, 16 of 16 steps success, 17:14:12Z to 17:23:19Z.
+
+CI's three uploaded artifacts were downloaded and read rather than trusted. Its unit-test report is the same shape as
+the local one and agrees with it exactly: `index.html` counts **2085 tests, 0 failures, 0 ignored**, over **159** class
+pages — which includes `WorkAdjustmentUiTest`, green on the published commit. Its lint report opens
+**`Lint Report: 177 warnings`** with no error section, against 0 errors / 151 warnings on this machine; the gap is not
+reconciled and is not smoothed over — CI's own overview table attributes 35 rows to `GradleDependency` where this
+machine's warm dependency catalogue yields 9, and that table's per-id sum (175) does not even match its own header, so
+the attribution is approximate and nothing rests on it. The gate both runs are held to is 0 errors, and both report it.
+Its `app-debug.apk` is 14 596 867 bytes, sha256 `708e8d3625de70361c043a522aed4282ad253766a6dc3ed9d38675ca83eac8b3`,
+against the local 14 970 155 bytes / `f177a9c245b6d45f5da837cf39bc54e96943a8f3595744341f664ad4b5070191`; the two builds
+of identical source differing in size and hash is the packaging non-reproducibility recorded at Stage 7, not a program
+difference, and no device claim is made for either binary because step 10 only *compiles* the instrumented tests.
+What CI has no way to reach stays unreachable: no device, no Firebase project, so no document has travelled to Firestore
+on the strength of this run. T6a is closed on the confirmed CI conclusion at the published SHA.
+
 
 
