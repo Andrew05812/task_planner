@@ -100,6 +100,14 @@ class ArchiveHardDeleteTest {
             emptyList<String>(),
             dangling()
         )
+        // The orphan property alone is not the promise: a verb that took the child as well would leave nothing
+        // dangling and still be wrong. The rows under a deleted one are kept, and re-hung.
+        assertEquals(
+            "and the child is still on the list, which the dangling check cannot see on its own",
+            listOf("live child"),
+            live().map { it.title }
+        )
+        assertEquals("re-hung on what its parent hung on, which was nothing", null, live().single().parentUuid)
     }
 
     @Test

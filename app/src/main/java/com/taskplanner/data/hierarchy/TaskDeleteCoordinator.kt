@@ -83,12 +83,28 @@ class TaskDeleteCoordinator @Inject constructor(
      *
      * So the rows are resolved the way every other delete resolves them: [delete] with
      * [HierarchyDeletePolicy.PROMOTE_CHILDREN] re-hangs each child onto what held its parent, re-numbers the block it
-     * lifted, retires the head and performs the reminders' follow-ups, all inside the hierarchy repository's
-     * transaction. Only then does the physical verb take the rows that are already tombstones. The order is the point:
-     * reversed, the orphan is written before the repair can find the row it hangs from.
+     * lifted and retires the head — that part is one transaction in [TaskHierarchyRepository] — and then performs the
+     * follow-ups that are not database state, which [TaskRepository.finishDelete] does *outside* it, because cancelling
+     * an alarm and materialising a series' next instance are not things a row write can be made to wait for. Only after
+     * all of that does the physical verb take the rows that are already tombstones. The order is the point: reversed,
+     * the orphan is written before the repair can find the row it hangs from.
      *
      * The answer is the promote's, so the caller can say which rows went and which it would not touch; a refusal
-     * leaves those rows in the archive rather than removing them under it.
+     * leaves those rows in the archive rather than removing them under it, and the screen is expected to name the
+     * refusal — `ArchiveViewModel` maps it to `R.string.delete_blocked_running`.
+     *
+     * **What this is not safe against, and who has to fix it.** A tombstone is how a deletion reaches the cloud:
+     * `TaskDao.getAllRowsOnce` includes retired rows with the comment "the sync queue has to push deletions too", and
+     * `TaskDao.findTaskByUuid` deliberately reads tombstones with the comment "otherwise a deleted row could be
+     * re-inserted". This verb destroys both guards at the moment it is called. A "delete forever" on a row whose
+     * deletion has not been pushed yet therefore leaves the cloud holding a live document that this device will never
+     * tell otherwise, and any pull that later sees that document — another device editing it, or a watermark that
+     * starts below it — re-inserts the row the reader deleted for good. That is not new here: before §5 the archive
+     * removed rows with no tombstone at all, so the cloud was never told either. What is new is that the two-step
+     * became *the* domain verb for a final delete, which is the moment the hole stopped being a quirk of one screen.
+     * Closing it needs a purge, not a re-order: remove a retired row only once the sync queue no longer lists it, which
+     * is Stage 16 §11's work, and §11's brief now carries that requirement. Recorded in `docs/HIERARCHY.md` and in
+     * Stage 16 §5's report as an open finding, and deliberately not papered over with a network call from a view model.
      */
     suspend fun hardDelete(ids: List<Long>): DeleteOutcome {
         val resolved = delete(ids, HierarchyDeletePolicy.PROMOTE_CHILDREN)
@@ -109,6 +125,14 @@ class TaskDeleteCoordinator @Inject constructor(
      * Each row that goes has its follow-ups performed here, in the same call, so no screen can half-do them. A
      * refusal does not stop the rows that went, and a mid-loop ask does not undo one either — both are reported in the
      * answer, because both are facts the reader has to be told.
+     *
+     * **The one difference from the ViewModel this came out of**, named because sixty passing tests cannot see it: the
+     * old `deleteRows` handed each mid-loop ask to `onChoice` *while its loop still had rows to write*, and this method
+     * collects them and lets the screen put them up once the loop is done. What the reader is asked, and the order the
+     * asks come in among themselves, is the same; what changed is that no window appears until every row the command
+     * could write has been written. Nothing in the app observes that — the asks travel on a capacity-one channel a
+     * `STARTED` view drains, and two of them in one batch reach the same `reportDeleteBusy` either way — but a claim
+     * that a lift preserved the behaviour has to say which behaviour it did not.
      */
     suspend fun delete(ids: List<Long>, policy: HierarchyDeletePolicy?): DeleteOutcome {
         if (policy == null) {

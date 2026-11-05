@@ -1,7 +1,10 @@
 package com.taskplanner.ui.archive
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.taskplanner.R
+import com.taskplanner.data.hierarchy.HierarchyDeleteRefusal
 import com.taskplanner.data.hierarchy.TaskDeleteCoordinator
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Task
@@ -12,13 +15,31 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ArchiveState(
     val items: List<ArchivedTask> = emptyList(),
     val isLoading: Boolean = true,
+    /**
+     * A command that threw. The exception's own sentence, which is why it stays a `String`.
+     *
+     * Stage 14 §4 counted this screen among the three where a machine's words can still reach a Snackbar and wrote that
+     * the fix — a resource for the reader, the log for the cause — belongs to the error-handling stage. §5 has no
+     * business doing that stage's work quietly, so the field is left as it was and the sentence the app *does* own, its
+     * refusal, goes beside it in [refusalRes].
+     */
     val error: String? = null,
+    /**
+     * The domain's refusal to delete the row the reader pointed at, as a resource id — §14's rule that a sentence the
+     * reader reads lives in resources.
+     *
+     * It is here because [deleteForever] used to answer a refusal by doing nothing at all: the outcome came back, and
+     * the screen dropped it. `ArchiveDeleteRefusalTest` measured that (`expected:<2131886308> but was:<null>`) before
+     * this field existed, and the row staying in the archive is exactly what a reader cannot explain to themselves.
+     */
+    @StringRes val refusalRes: Int? = null,
     val searchQuery: String = "",
     val categoryFilter: Long? = null
 ) {
@@ -99,23 +120,43 @@ class ArchiveViewModel @Inject constructor(
      * the branch first — the children go to what held their parent, and the block is re-numbered — and then takes the
      * rows that are already retired.
      *
-     * What this screen still cannot say is *why* it would refuse one of these: a refusal surfaces as the row staying
-     * on the list, because [ArchiveState.error] carries a raw string rather than a resource id and §14's rule is that
-     * a sentence the reader reads lives in resources. An archived row whose timer is still running is the case, and
-     * `completeAndArchive` stops the timer on the way in, so it is a state the app does not build. Recorded as an open
-     * finding in Stage 16 §5's report rather than fixed with a hardcoded word.
+     * **The refusal is reachable, and this is where that comes from.** `completeAndArchive` stops the timer on the way
+     * in, so this device cannot *archive* a row it is measuring; what can put one here is a pull. `SyncAppliers` writes
+     * `archived = remote.archived` into the local row (`SyncAppliers.applyRemoteTask`) and never touches this device's
+     * `TrackingSession` rows, so a task started here and archived on another phone arrives in the archive still
+     * running — and `TaskHierarchyRepository.deleteTask` refuses a row that is being measured. A first version of this
+     * method called that state "one the app does not build", which was wrong in exactly the way that matters: the
+     * reader taps, nothing happens, and the screen has no word for it. `ArchiveDeleteRefusalTest` drives that pair.
+     *
+     * So [ArchiveState.refusalRes] carries which refusal it was, in the reader's language, and the rows it names stay
+     * exactly where they were. What the screen still cannot do is say *how* to unblock the row beyond §4's sentence,
+     * and the exception path beside this one still shows a machine's own words — that half is named in
+     * [ArchiveState.error] and belongs to the error-handling stage, as Stage 14 §4 wrote.
      */
     fun deleteForever(task: Task) {
         viewModelScope.launch {
             try {
-                deleteCoordinator.hardDelete(listOf(task.id))
+                val outcome = deleteCoordinator.hardDelete(listOf(task.id))
+                outcome.refusal?.let { reason ->
+                    _state.update {
+                        it.copy(
+                            refusalRes = when (reason) {
+                                HierarchyDeleteRefusal.MEASUREMENT_RUNNING -> R.string.delete_blocked_running
+                                HierarchyDeleteRefusal.ROW_MISSING,
+                                HierarchyDeleteRefusal.NO_PROFILE,
+                                HierarchyDeleteRefusal.AMBIGUOUS_IDENTITY -> R.string.delete_row_missing
+                            }
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message)
             }
         }
     }
 
+    /** The screen has shown what it had to say; both channels go back to nothing together. */
     fun clearError() {
-        _state.value = _state.value.copy(error = null)
+        _state.value = _state.value.copy(error = null, refusalRes = null)
     }
 }

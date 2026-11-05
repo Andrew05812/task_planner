@@ -17,6 +17,7 @@ import com.taskplanner.ui.tasks.DeleteRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -47,9 +48,26 @@ class CategoryTasksViewModel @Inject constructor(
 
     private var currentCategoryId: Long? = null
 
+    /**
+     * The screen's live reader of its category query, or none.
+     *
+     * The list is a Room flow, so a collector outlives the call that started it. [loadCategoryTasks] is how every
+     * command that changes the list says so — start, pause, resume, complete, and since Stage 16 §5 the delete's reload
+     * — and each of those used to launch a fresh collector without cancelling the one already running, so the view model
+     * held one live observer of the same query per command it had answered, every one of them writing the same state,
+     * until `onCleared` took the scope down. Measured rather than argued: the case
+     * `CategoryTaskDeleteTest.answering_a_delete_replaces_the_screen_s_reader_of_its_query_instead_of_adding_one`
+     * failed with `expected:<1> but was:<2>` against that shape. A reload now replaces the reader.
+     *
+     * The reload is not folded into a single long-lived collector on purpose: the screen still wants its `Loading`
+     * state and its per-call error mapping, which a `flatMapLatest` over a category id would have to rebuild elsewhere.
+     */
+    private var observeJob: Job? = null
+
     fun loadCategoryTasks(categoryId: Long) {
         currentCategoryId = categoryId
-        viewModelScope.launch {
+        observeJob?.cancel()
+        observeJob = viewModelScope.launch {
             _tasksState.value = CategoryTasksState.Loading
             try {
                 val category = categoryRepository.getCategoryById(categoryId)
@@ -114,6 +132,12 @@ class CategoryTasksViewModel @Inject constructor(
      * Nothing is written by this call. The write is [resolveDelete]'s, and it goes through the same coordinator the
      * tasks screen goes through — including its follow-ups, which are the reminder cancellations and the series' next
      * instance the single-row path performed and which no screen may have to remember to redo.
+     *
+     * The `catch` around the read says `error_delete_task`, the screen's existing word for a delete that could not be
+     * carried out. It is the same shape [runTransition] has used for years, and it is the one path on this screen that
+     * no case drives: making a Room read refuse on a fixture whose database is healthy costs a broken database, and a
+     * broken database would be testing the fixture rather than this method. Recorded as unexercised in Stage 16 §5's
+     * report rather than left implied.
      */
     fun requestDelete(task: Task) {
         viewModelScope.launch {

@@ -10,6 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import com.taskplanner.R
 import com.taskplanner.data.hierarchy.TaskDeleteCoordinator
@@ -22,6 +23,7 @@ import com.taskplanner.ui.tasks.DeleteDialog
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -54,11 +56,18 @@ import org.robolectric.shadows.ShadowDialog
  *
  * **What the cases insist on.** That a press writes nothing until it is answered; that the window is the branch
  * window when the row holds a branch and a plain confirmation when it does not; that each of the two answers leaves
- * the tree in the shape the domain promises, *including* the follow-ups that are not database state; that a refusal is
- * said rather than swallowed; and that the orphan the old path left — a live row naming a retired parent — cannot
- * appear at any point in the flow. The last of those is the regression the brief asked for, and it is written as a
- * query over the database rather than as a check that some method was called: a second implementation that orphaned
- * rows differently would still be caught.
+ * the tree in the shape the domain promises; that the follow-ups which are not database state — the reminder rows and
+ * the wakeups they armed, for every row in the branch — go with the delete rather than being left for a screen to
+ * remember; that a refusal is said rather than swallowed; and that the orphan the old path left, a live row naming a
+ * retired parent, cannot appear at any point in the flow. The last of those is the regression the brief asked for, and
+ * it is written as a query over the database rather than as a check that some method was called: a second
+ * implementation that orphaned rows differently would still be caught.
+ *
+ * **And one thing that is not about the tree.** The screen's list is a live query, so a reload that launches a second
+ * collector without cancelling the first leaves the view model holding one reader per command it has answered. That is
+ * what `answering_a_delete_replaces_the_screen_s_reader_of_its_query_instead_of_adding_one` measures, counting the
+ * view model scope's still-active children; §5's review found the shape and the count, `expected:<1> but was:<2>`,
+ * is what it was found with.
  *
  * **The harness.** A `LifecycleRegistry` screen rather than a hosted fragment, for the reason §4 gave: what the
  * window needs is a real `STARTED` transition and a Main dispatcher that is a real looper, because a `Dialog` cannot
@@ -200,6 +209,20 @@ class CategoryTaskDeleteTest {
         else -> error("the screen is showing ${state.javaClass.simpleName}, not a list")
     }
 
+    /**
+     * How many coroutines the view model is still holding open.
+     *
+     * The screen's list is a live Room query, so its reader stays active for the life of the view model; every other
+     * coroutine the screen launches finishes. A count that grows is therefore a query with more than one reader
+     * attached to it, each writing the same state — the shape a reload leaves when it launches a second collector
+     * instead of replacing the first. Read from the view model's own scope, which is the scope the collector lives in.
+     */
+    private fun liveReaders(): Int =
+        viewModel.viewModelScope.coroutineContext[Job]!!.children.count { it.isActive }
+
+    private fun hasReminderFor(uuid: String): Boolean =
+        runBlocking { fixture.reminderDao.getLiveForTask(uuid) }.isNotEmpty()
+
     // ── the cases ─────────────────────────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -230,7 +253,6 @@ class CategoryTaskDeleteTest {
         val promote = window.getButton(DialogInterface.BUTTON_POSITIVE)
         val subtree = window.getButton(DialogInterface.BUTTON_NEGATIVE)
         val cancel = window.getButton(DialogInterface.BUTTON_NEUTRAL)
-        assertNotNull("the branch window offers both deletes and a cancel", cancel)
         assertEquals("by the sentence the resources carry", window.context.getString(R.string.delete_policy_promote), promote!!.text)
         assertEquals("the destructive one on the negative button", window.context.getString(R.string.delete_policy_subtree), subtree!!.text)
         assertEquals("and the way out is the window's own", window.context.getString(R.string.cancel), cancel!!.text)
@@ -350,8 +372,12 @@ class CategoryTaskDeleteTest {
 
         val secondMark = press(other)
 
-        assertEquals("the second press opened no window", secondMark, ShadowDialog.getShownDialogs().size)
-        assertEquals(mark + 1, ShadowDialog.getShownDialogs().size)
+        assertEquals("the first press opened exactly the one window", mark + 1, secondMark)
+        assertEquals(
+            "and the second press opened no other — it was refused while the first was still unanswered",
+            secondMark,
+            ShadowDialog.getShownDialogs().size
+        )
         assertEquals(
             "and it said which refusal the reader met, rather than vanishing",
             R.string.delete_one_question_at_a_time,
@@ -371,5 +397,50 @@ class CategoryTaskDeleteTest {
         assertTrue("the open window is gone with the view that held it", !window.isShowing)
         assertEquals("and nothing was written by its passing", emptyList<String>(), allRows().filter { it.isDeleted }.map { it.uuid })
         assertEquals("the branch is intact", 2, live().size)
+    }
+
+    @Test
+    fun a_branch_deleted_here_retires_the_reminder_rows_of_every_row_in_it() {
+        val parent = row("parent", position = 0)
+        val child = row("child", parent = "parent", position = 1)
+        val due = fixture.timeBase.wall + 86_400_000L
+        runBlocking {
+            fixture.reminderRepository.applyReminders(parent.copy(dueDate = due), listOf(30))
+            fixture.reminderRepository.applyReminders(child.copy(dueDate = due), listOf(15))
+        }
+        pump()
+        assertTrue("the branch was armed before the delete", hasReminderFor(parent.uuid))
+
+        val window = theOneWindow(press(parent))
+        click(window, DialogInterface.BUTTON_NEGATIVE)
+
+        assertEquals(
+            "the head's reminder went with it",
+            emptyList<String>(),
+            runBlocking { fixture.reminderDao.getLiveForTask(parent.uuid) }.map { it.taskUuid }
+        )
+        assertEquals(
+            "and so did the child's, which the raw single-row delete never even saw — the follow-ups are the " +
+                "coordinator's, which is why this screen does not have to remember them",
+            emptyList<String>(),
+            runBlocking { fixture.reminderDao.getLiveForTask(child.uuid) }.map { it.taskUuid }
+        )
+    }
+
+    @Test
+    fun answering_a_delete_replaces_the_screen_s_reader_of_its_query_instead_of_adding_one() {
+        val leaf = row("leaf", position = 0)
+        val readers = liveReaders()
+
+        val window = theOneWindow(press(leaf))
+        click(window, DialogInterface.BUTTON_POSITIVE)
+
+        assertEquals(
+            "the reload the delete asked for attached no second reader: a screen that collects a live query in a " +
+                "launch it never cancels grows one observer per command it answers, all of them writing the same list",
+            readers,
+            liveReaders()
+        )
+        assertEquals("and the row really did go", emptyList<String>(), shownTitles())
     }
 }

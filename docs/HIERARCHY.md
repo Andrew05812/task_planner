@@ -413,19 +413,53 @@ narrower one.
 
 The doors, each checked at its call site:
 
-| Door | Resolves the tree? | Evidence |
-| --- | --- | --- |
-| A task card's delete, and the selection bar's | yes — `requestDelete` → `DeleteDialog` → `resolveDelete` → the coordinator | `UnifiedTaskDeleteTest` (25), `HierarchyDeleteCommandTest` (12) |
-| A category row's long-press | yes, since §5. It used to call `taskRepository.deleteTask`, one tombstone with no question, and left children naming the row they hang from | `CategoryTaskDeleteTest` (9) |
-| The archive's "delete forever" | yes, since §5, through `hardDelete`: the branch is resolved first and the physical verb then takes the rows that are already retired. `parent_uuid` has no foreign key behind it, so the database would not have objected | `ArchiveHardDeleteTest` (4) |
-| Account merge (`AuthRepository`), series cancel (`RecurrenceRepository`), a tombstone applied by sync (`SyncAppliers`) | no — none of them is a reader's Task delete | named in Stage 16 §5's audit as open findings, not rewritten |
-| Notifications, `TaskRepository.deleteAllTasksForCurrentUser` | nothing to check: the reminder path issues no delete, and the "delete all mine" method has no caller in `app/src` at all | the greps are in the report |
+| Door | Resolves the tree? | Safe against the cloud? | Evidence |
+| --- | --- | --- | --- |
+| A task card's delete, and the selection bar's | yes — `requestDelete` → `DeleteDialog` → `resolveDelete` → the coordinator | yes: the row stays as a tombstone, which is what the sync queue pushes and what `TaskDao.findTaskByUuid` reads so a pull cannot resurrect it | `UnifiedTaskDeleteTest` (25), `HierarchyDeleteCommandTest` (12) |
+| A category row's long-press | yes, since §5. It used to call `taskRepository.deleteTask`, one tombstone with no question, and left children naming the row they hang from | yes, same route | `CategoryTaskDeleteTest` (11) |
+| The archive's "delete forever" | yes, since §5, through `hardDelete`: the branch is resolved first and the physical verb then takes the rows that are already retired. `parent_uuid` has no foreign key behind it, so the database would not have objected | **no, and this is the one that has to be answered** — see *What a physical delete does to a tombstone* | `ArchiveHardDeleteTest` (4), `ArchiveDeleteRefusalTest` (3) |
+| Account merge (`AuthRepository`), series cancel (`RecurrenceRepository`), a tombstone applied by sync (`SyncAppliers`) | no — none of them is a reader's Task delete | the merge removes rows physically like the archive did; the other two only tombstone, which the queue does carry | named in Stage 16 §5's audit as open findings, not rewritten |
+| Notifications, `TaskRepository.deleteAllTasksForCurrentUser`, `TaskRepository.deleteTask` | nothing to check for the first: the reminder path issues no delete. The other two are **uncalled in `app/src/main`** — the "delete all mine" method has no caller at all, and `deleteTask` is reached only by five test fixtures that want one row retired without ceremony | tombstone only, for the two that write | the greps are in the report; `deleteTask`'s KDoc says what a screen would break by calling it |
 
 The two public bulk commands that used to sit next to `deleteRows` — `deleteSelected` and `deleteSelectedFor` — are
 deleted. They were unwired since §4 and reachable by any caller, which is the shape of a door: a public method that can
-write without asking, tested by twelve cases that pinned a route no reader could take. The suites call
+write without asking, tested by fourteen cases that pinned a route no reader could take — twelve in
+`HierarchyDeleteCommandTest`, one in `TasksViewModelTest`, one in `TasksRecurrenceTest`. The suites call
 `com.taskplanner.testing.deleteThroughTheWindow` instead, which presses, takes the one request the channel holds and
-answers it the way the window's buttons do, so what is pinned now is reachable.
+answers it the way the window's buttons do, so what is pinned now is reachable. No assertion in those fourteen cases
+changed, which is the proof the lift of `deleteRows` was faithful rather than rewritten; the one thing that did move is
+*when* a mid-loop ask reaches the screen, and `TaskDeleteCoordinator.delete`'s KDoc names it.
+
+### What a physical delete does to a tombstone
+
+A soft delete is the app's promise to the cloud: `TaskDao.getAllRowsOnce` includes retired rows, with the comment "the
+sync queue has to push deletions too", and `TaskDao.findTaskByUuid` deliberately reads tombstones, with the comment
+"otherwise a deleted row could be re-inserted". Both guards live on one row, and the row is what "delete forever"
+removes.
+
+So a final delete on a row whose deletion has not been pushed yet — the push is a WorkManager pass, not the tap — leaves
+Firestore holding a live document that this device will never tell otherwise, and any pull that later sees that document
+re-inserts the row the reader deleted for good, because the local evidence that it was ever deleted is gone. The archive
+did this before §5 too, and worse: it physically removed rows without making a tombstone at all, so the cloud was never
+told. What §5 changed is that the two-step became *the* domain verb for a final delete, which is where a hole stops
+being one screen's quirk.
+
+The fix is a purge, not a re-ordering: take the row out of the table once the sync queue no longer lists it. That needs
+a pass over the queue, which is Stage 16 §11's territory, so §11 carries the requirement — *a retired row may be
+physically removed only when `getPendingSyncTasks` no longer names it* — and `TaskDeleteCoordinator.hardDelete`'s KDoc
+states the same thing where a caller will read it. What it does not do is pretend: the sentence "safe for sync" appears
+nowhere near this verb.
+
+### The one delete that can be refused, and what it says
+
+`hardDelete` resolves the branch with the promote, and the promote refuses a row that is still being measured. That
+state is reachable from the archive: `completeAndArchive` stops the timer on the way in, but a pull writes
+`archived = remote.archived` (`SyncAppliers.applyRemoteTask`) and never touches this device's `TrackingSession` rows, so
+a task started here and archived on another phone arrives in the archive still running. The screen then has to say so,
+and since §5 it does: `ArchiveState.refusalRes` carries `delete_blocked_running` in the reader's language, and the row
+and its branch stay exactly where they were. The channel beside it, `ArchiveState.error`, still shows an exception's own
+words — Stage 14 §4 named that as this screen's share of a three-screen debt belonging to the error-handling stage, and
+§5 did not quietly take it on.
 
 ## Can a parent be ambiguous? measured, and what the write does about it
 

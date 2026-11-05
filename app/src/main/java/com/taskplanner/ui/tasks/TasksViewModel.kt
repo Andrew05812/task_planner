@@ -790,6 +790,10 @@ class TasksViewModel @Inject constructor(
         // into the window the reader is shown. The behaviour the tests pinned here is unchanged on purpose: a set the
         // pre-read found to hold a branch writes nothing and is not called a success (`askedBeforeWriting`), while a
         // row that grew a child *after* the pre-read is reported through `onChoice` and the rows that did go stay gone.
+        // The one thing that did move is when a mid-loop ask reaches `onChoice`: it used to arrive while the loop still
+        // had rows left, and now arrives after its last write. `TaskDeleteCoordinator.delete`'s KDoc carries the
+        // reason that is invisible to a reader here, and the suites that pin the consequence — a set that still holds a
+        // question keeps its selection open — pin the outcome, not the instant.
         val outcome = deleteCoordinator.delete(ids, policy)
         outcome.asks.forEach { onChoice(it.branchRows, it.children, it.affectedRows) }
         outcome.refusal?.let { reportDeleteRefusal(it) }

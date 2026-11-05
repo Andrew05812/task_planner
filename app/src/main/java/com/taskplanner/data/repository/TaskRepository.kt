@@ -163,7 +163,21 @@ class TaskRepository @Inject constructor(
         taskDao.deleteTasksByIds(ids)
     }
 
-    /** Single visible delete path: soft delete keeps a tombstone for sync. */
+    /**
+     * One row, tombstoned, with no question asked of the tree.
+     *
+     * This used to be described as the app's single visible delete path, and until Stage 16 §5 it was. It is not now:
+     * the tasks card, the selection bar, the category row and the archive's "delete forever" all reach a Task through
+     * [com.taskplanner.data.hierarchy.TaskDeleteCoordinator], which reads the branch first, asks the reader when there
+     * is one to ask about, and re-hangs or retires the rows underneath. Nothing in `app/src/main` calls this method any
+     * more; what is left of its callers is five test fixtures that want one row retired and no ceremony around it.
+     *
+     * It is still a door, and the honest word about it is that a new screen using it re-opens the defect
+     * `CategoryTaskDeleteTest` was written to close: a parent deleted here keeps its children naming a tombstone, which
+     * the task list then draws one level too high. It stays because removing a method five fixtures set up rows with
+     * would touch six files to no reader's benefit — and a user-facing delete that needs it should be asking the
+     * coordinator instead.
+     */
     suspend fun deleteTask(task: Task) = softDeleteTasks(listOf(task.id))
 
     suspend fun deleteAllTasksForCurrentUser() = softDeleteTasks(getAllTasksOnce().map { it.id })

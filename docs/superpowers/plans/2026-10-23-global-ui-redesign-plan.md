@@ -7042,20 +7042,61 @@ can find it. The category screen shows Task 4's window rather than a narrower on
 goes through the same coordinator.
 
 Two public bulk commands, `deleteSelected` and `deleteSelectedFor`, were deleted. They had been unwired since §4 and
-were reachable by any caller — a public method that can write without asking is a second door, and twelve cases were
-pinning a route no reader can take. The suites now call
-`com.taskplanner.testing.deleteThroughTheWindow`, which presses, takes the one request the channel holds and answers
-it as a button would; every assertion in those cases is unchanged, which is also the proof that the lift of
-`deleteRows` was faithful rather than rewritten: 60 tests across the four tasks-screen suites passed with no edit to
-them at all.
+were reachable by any caller — a public method that can write without asking is a second door, and fourteen cases were
+pinning a route no reader can take: twelve in `HierarchyDeleteCommandTest`, one in `TasksViewModelTest`, one in
+`TasksRecurrenceTest`. The suites now call `com.taskplanner.testing.deleteThroughTheWindow`, which presses, takes the
+one request the channel holds and answers it as a button would. No *assertion* in those fourteen cases changed, which is
+the proof that the lift of `deleteRows` was faithful rather than rewritten: 60 tests across the four tasks-screen suites
+passed against the coordinator. The files were edited — how a case reaches the command, and the KDoc around it — and the
+honest claim is about the assertions, not about the diff stat; `git show --stat` on the commit lists three of those four
+files, and a reviewer told otherwise should trust the commit. One behaviour did move, and it is named in
+`TaskDeleteCoordinator.delete`'s KDoc rather than left for a reader to find: a mid-loop ask now reaches the screen after
+the loop's last write instead of between its links, which nothing in the app can observe and no test pins.
 
-The route audit is in `task-5-report.md` §6, one row per door with its call site: the merge (`AuthRepository:637,644`),
+The route audit is in `task-5-report.md` §6, one row per door with its call site and its answer to the four questions
+the brief asks — hierarchy-aware, can a parent go, does it need the branch choice, is the caller safe — with the last
+one split between the tree and the cloud, because they are not the same question. The merge (`AuthRepository:637,644`),
 the series cancel (`RecurrenceRepository:165`) and the sync-applied tombstone (`SyncAppliers:83`) each reach a
-`deleteTask`-adjacent verb without consulting the tree, none of them is a reader's Task delete, and each is recorded
-as an open finding rather than rewritten. The reminder path issues no delete at all, and
-`TaskRepository.deleteAllTasksForCurrentUser` has no caller anywhere in `app/src` — a dead method, recorded rather
-than wired.
+`deleteTask`-adjacent verb without consulting the tree, none of them is a reader's Task delete, and each is recorded as
+an open finding rather than rewritten. The reminder path issues no delete at all. Two methods in `TaskRepository` are
+now uncalled in production: `deleteAllTasksForCurrentUser`, which has no caller anywhere in `app/src`, and
+`deleteTask`, which five test fixtures still use to retire one row without ceremony — its KDoc says what a screen would
+break by calling it.
 
-Not proven: any device frame of the category window or the archive's tree after a "delete forever" (T10), the archive's
-refusal sentence — that screen's error channel carries a raw string rather than a resource id, so the case is named in
-the KDoc and left; and a batch of overlapping heads sequenced in one pass, which is still one transaction per head.
+**Round 2 — what the review found, and what each item turned out to be.** The review of `3a734f4..9a6c98a` returned
+five MAJORs and eight MINORs, and the shape of the round is that the code was mostly right and the prose around it was
+not: `TaskRepository`'s "single visible delete path" was a claim about a method this block had just dethroned;
+`hardDelete`'s KDoc said the reminder follow-ups happened inside the hierarchy repository's transaction when
+`finishDelete` runs outside it; `ArchiveViewModel` called an archived row with a running timer "a state the app does not
+build" when a pull writes `archived` without touching this device's sessions, so the row is reachable and the refusal
+that names it was being dropped on the floor; and the report claimed a mutation's failure message that §5.1 had already
+shown to be a different assertion's. Two of the five are defects with code behind them, and both were taken through
+RED first, because the brief's rule is that a claim is only evidence if a run produced it:
+
+* `CategoryTasksViewModel.loadCategoryTasks` launched a fresh collector of a live Room query on every call and cancelled
+  none, and §5 added a call site to it — so every delete the screen answered left another reader of the same query
+  attached to the same state. Measured before the fix as `expected:<1> but was:<2>` over the view model scope's active
+  children (`CategoryTaskDeleteTest.answering_a_delete_replaces_the_screen_s_reader_of_its_query_instead_of_adding_one`);
+  a reload now replaces the reader. The same shape pre-dates §5 in `runTransition`, which is the reason the fix is one
+  `cancel()` rather than a rebuilt collector.
+* The archive's refusal was silent. `ArchiveDeleteRefusalTest` failed with `expected:<2131886308> but was:<null>` while
+  its control — a row that really is only archived, which goes and says nothing — passed, so the failure is the dropped
+  outcome and not the harness. `ArchiveState.refusalRes` now carries `delete_blocked_running` as a resource id, and the
+  exception channel beside it is left alone on purpose: Stage 14 §4 wrote that `ArchiveViewModel`'s `e.message` belongs
+  to the error-handling stage, and §5 does not do another stage's work on the side.
+* The `DELETING`-then-physically-deleted question is true, older than this block, and not fixable here: closing it needs
+  a purge pass over the sync queue, which is §11's territory. §11 now carries the requirement — remove a retired row
+  only once `getPendingSyncTasks` no longer names it — `TaskDeleteCoordinator.hardDelete`'s KDoc states it where a
+  caller will read it, and `docs/HIERARCHY.md` has a section for it instead of a table cell.
+
+The MINORs went the same way: the reminder/series assertion the brief asked the category regression test to carry is
+there now (`a_branch_deleted_here_retires_the_reminder_rows_of_every_row_in_it`), the two assertions that could not
+fail are gone, `ArchiveHardDeleteTest`'s first case asserts the child survives rather than only that nothing dangles,
+and the counts the report got wrong — sixteen hand-built view models where there are fifteen, twelve cases where there
+are fourteen — are counted off the tree in §5's report §8. Where a finding was wrong the report says so and quotes the
+fixture.
+
+Not proven: any device frame of the category window or the archive's tree after a "delete forever" (T10); the archive's
+*exception* sentence, still an exception's own words for the reason just given; and a batch of overlapping heads
+sequenced in one pass, which is still one transaction per head.
+

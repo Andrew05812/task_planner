@@ -1197,7 +1197,15 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    either direction, no completion time invented for a topic, and no task row touched. Phase 4's rendering work is
    therefore complete in code and in JVM assertions; what it still owes is the camera (§19).
 5. **Controls**: indent/outdent in the editor and on the row; a long-press move for whole subtrees.
-6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping.
+6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping. The sync half has one named defect
+   to close, found by Stage 16 §5's review and recorded in `docs/HIERARCHY.md` under *What a physical delete does to a
+   tombstone*: `TaskDeleteCoordinator.hardDelete` — the archive's "delete forever" — tombstones a row and removes it from
+   the table in the same call, so the deletion is never pushed and the local evidence a pull needs in order not to
+   resurrect the row is destroyed with it (`TaskDao.getAllRowsOnce` and `TaskDao.findTaskByUuid` both read tombstones on
+   purpose, and say so in their comments). The requirement is a purge, not a re-order: a retired row may be physically
+   removed only once `TaskDao.getPendingSyncTasks` no longer names it. It predates §5 — the archive used to remove rows
+   with no tombstone at all — and §5 made the two-step the domain verb, which is why it is stated here rather than left
+   in a KDoc.
 7. **Device proof** at 320dp and at font scale 1.3, light and dark.
 
 ## 16.9 Acceptance criteria
