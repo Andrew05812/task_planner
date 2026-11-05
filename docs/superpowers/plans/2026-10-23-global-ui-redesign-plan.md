@@ -7124,3 +7124,18 @@ Not proven: any device frame of the category window or the archive's tree after 
 *exception* sentence, still an exception's own words for the reason just given; and a batch of overlapping heads
 sequenced in one pass, which is still one transaction per head.
 
+**Published, and what CI said.** `90e1c4f`, `9a6c98a`, `f41bf5c` and `400fb08` went to `feat/global-ui-redesign`
+together; the remote tip is `400fb08a1c14e18010b603e96e718c4000082ac2` and the branch is 0/0 with its upstream. CI on
+that commit ran twice. The first time,
+[run 42040339867](https://github.com/Andrew05812/task_planner/actions/runs/42040339867), came back
+**completed / failure**: one case out of 2079 tests, `WorkAdjustmentUiTest > a stretch that ends where or before it
+began is refused by the form`, `expected:<A stretch cannot end at or before it starts.> but was:<null>` — the form
+refused (the two assertions before it passed) and the notice was not on the screen when it was read. The second time,
+dispatched on the same SHA with no code between the two,
+[run 42042301021](https://github.com/Andrew05812/task_planner/actions/runs/42042301021) came back **completed /
+success**. That pair is the flake's best portrait yet, and it is written here as it happened rather than as the second
+run only: same commit, same tree, one red and one green, so the difference is not in this branch's source. Nothing in
+`WorkAdjustmentUiTest` was relaxed and nothing was `@Ignore`d; the case stays an open finding with its reproduction,
+not with an explanation.
+
+
