@@ -62,22 +62,30 @@ import org.robolectric.shadows.ShadowDialog
  * in two steps. [press] therefore marks the list of shown dialogs before the press and reads it after, and
  * [theOneWindow] asserts the count before it lets a test look at a word.
  *
- * **The counter is live, and so is the rest of the file — both re-run on the tree this class ships in.** Two scratch
- * edits, each against these 23 tests, then reverted and `cmp`-verified byte-identical (round 2 measured them at 22
- * tests; these are the numbers the committed tree reproduces):
+ * **The counter is live, and so is the rest of the file — every claim here was re-run on the tree that ships.** Two
+ * scratch edits, each against these 25 tests, then reverted and `cmp`-verified byte-identical. Earlier drafts of this
+ * comment quoted counts from smaller versions of the file (22, then 23 tests); those numbers are gone on purpose, and
+ * what follows is reproducible by anyone with five minutes:
  *  * a press that puts *two* windows up at once (`DeleteDialog.show` drawing the plain confirmation as well as the
- *    branch window for `asksForBranch`) fails **19 of 23**, every one of them at
+ *    branch window for `asksForBranch`) fails **20 of 25**, every one of them at
  *    `one press puts exactly one window on the screen expected:<1> but was:<2>` — the count is what refuses it. The
- *    four that stay green are the presses that never stack: the two plain-confirmation cases, the selection-bar
- *    authority case, and the second-press case, whose own guard means no second request reaches a drawer at all;
+ *    five that stay green are `a_row_with_no_children_raises_one_dialog_and_it_is_the_plain_confirmation`,
+ *    `a_plain_batch_of_rows_without_children_raises_one_confirmation_naming_the_count`,
+ *    `the_bulk_press_asks_about_the_selection_the_reader_is_holding_and_not_the_one_last_drawn`,
+ *    `pressing_the_bar_with_nothing_selected_says_so_instead_of_vanishing` and
+ *    `a_second_press_while_a_question_is_open_adds_no_window_and_writes_nothing`: presses that never open a branch
+ *    window, so there is nothing for the mutation to stack;
  *  * the shape the roadmap actually forbids — a confirmation first, the branch question only after the reader
- *    confirms (`requestDelete` reporting `branchRows = 0` for a press the summary calls a branch) — is caught one
- *    line later rather than by the count, because its second window only appears on the answer: **15 of 23** fail,
- *    starting at which window the press opened
- *    (`… the branch in its second half is part of the question expected:<[Tasks with subtasks]> but was:<[Delete tasks?]>`)
- *    and continuing on the delete a confirmed-but-unasked branch does not perform. The eight that stay green are the
- *    cases that never ask about a branch, plus the two lifecycle cases — whose window is refused a second time by
- *    the count assertion they run before reading any word.
+ *    confirms (`requestDelete` reporting `branchRows = 0` for a press the summary calls a branch) — fails **17 of 25**,
+ *    and not on the count: its second window only appears on the answer, so what refuses it is which window the press
+ *    opened (`… expected:<[Tasks with subtasks]> but was:<[Delete tasks?]>`), the delete the unasked branch never
+ *    performs, and — since [click] began insisting the button it presses is on the screen — the two cancel cases that
+ *    used to "cancel" by tapping a neutral button their window had never offered. The eight green are that
+ *    mutation's honest blind spots: the same five as above, plus `a_recreate_does_not_summon_the_dialog_a_second_time`
+ *    and `stopping_the_view_takes_the_open_window_with_it_and_writes_nothing`, which are about a window going away
+ *    rather than which window opens, and
+ *    `an_answer_given_against_a_tree_that_grew_a_child_is_asked_about_again_and_writes_nothing`, which builds its own
+ *    stale read and so cannot be fooled by the read being wrong.
  *
  * The sentence this replaces claimed the second mutation failed at `expected:<1> but was:<2>`; that run had never
  * been done, and done now it says something narrower and worth keeping straight: the count refuses two windows at
@@ -209,8 +217,8 @@ class UnifiedTaskDeleteTest {
      * The two must be driven in that alternating order, and the looper must get the last word. A coroutine that wakes
      * from a Room read posts its *next* suspending call back through Main — so draining storage first and the looper
      * last would read a tree where the second delete of a batch had been written and the third had not even started.
-     * The repetition is the convergence: each pass lets one more link of the chain run, and the bound makes a cycle
-     * that never settles fail as a wrong assertion rather than hang.
+     * The repetition is the convergence: each pass lets one more link of the chain run, and a cycle that never
+     * settles is stopped by a named failure rather than being judged on whatever partial state it happened to reach.
      */
     private fun pump() {
         val looper = shadowOf(Looper.getMainLooper())
@@ -267,8 +275,21 @@ class UnifiedTaskDeleteTest {
 
     private fun buttonOf(window: AlertDialog, which: Int): String? = window.getButton(which)?.text?.toString()
 
+    /**
+     * Presses one action of a window, and refuses to pretend an absent action was pressed.
+     *
+     * AppCompat builds all three button views from the alert layout whether or not the dialog offered them, so
+     * `getButton(BUTTON_NEUTRAL)` is non-null on a window with no cancel — and `performClick()` on that invisible
+     * view still routes through the controller's click handler and dismisses. Without the `isShown` check below, a
+     * case that means "the reader cancelled" would pass on a window that never offered a way out, which is how three
+     * of this file's cases stayed green under a mutation they were written to catch. A click is only evidence when
+     * the thing clicked was on the screen.
+     */
     private fun click(window: AlertDialog, which: Int) {
-        window.getButton(which).performClick()
+        val button = window.getButton(which)
+        assertNotNull("the window has no button ${which}to click", button)
+        assertTrue("the action the test presses must be one the window shows", button!!.isShown)
+        button.performClick()
         pump()
     }
 
@@ -431,26 +452,37 @@ class UnifiedTaskDeleteTest {
         val floor = app.resources.getDimensionPixelSize(R.dimen.touch_target_min)
 
         val actions = listOf(
-            DialogInterface.BUTTON_POSITIVE to "hand the children up",
-            DialogInterface.BUTTON_NEGATIVE to "delete the branch",
-            DialogInterface.BUTTON_NEUTRAL to "cancel"
+            DialogInterface.BUTTON_POSITIVE to R.string.delete_policy_promote,
+            DialogInterface.BUTTON_NEGATIVE to R.string.delete_policy_subtree,
+            DialogInterface.BUTTON_NEUTRAL to R.string.cancel
         )
-        // The count is read off the window, not off the list this test just wrote: three buttons that are really
-        // three different views is a claim about the dialog, and a missing neutral action or two fates sharing one
-        // button fails here instead of being an number this file agreed with itself about.
-        assertEquals(
-            "the window offers three actions",
-            3,
-            actions.mapNotNull { window.getButton(it.first) }.distinct().size
-        )
-        actions.forEach { (which, name) ->
+        // Three claims per action, none of them a number this file agreed with itself about. AppCompat inflates all
+        // three button views whether or not the dialog offered them, so "three non-null views" is true of a window
+        // with two actions too — what a window cannot fake is a button that is shown, says the one thing it was
+        // asked to say, and is a different view from its neighbours.
+        val views = actions.map { (which, label) ->
             val button = window.getButton(which)
-            assertNotNull("$name is on the window", button)
+            assertNotNull("the window built a view for action $which", button)
             assertTrue(
-                "$name measures ${button!!.height}px against the app's floor of ${floor}px",
+                "action $which is not shown, so a reader has nothing to press",
+                button!!.isShown
+            )
+            assertEquals(
+                "and the shown view speaks its own resource",
+                app.getString(label),
+                button.text.toString()
+            )
+            assertTrue(
+                "the action measures ${button.height}px against the app's floor of ${floor}px",
                 button.height >= floor
             )
+            button
         }
+        assertEquals(
+            "the three actions are three views, not one view wearing three names",
+            3,
+            views.distinctBy { System.identityHashCode(it) }.size
+        )
     }
 
     // ── the answers, and what each one writes ────────────────────────────────────────────────────────────────
@@ -919,6 +951,70 @@ class UnifiedTaskDeleteTest {
             app.getString(R.string.delete_branch_title),
             titleOf(window)
         )
+    }
+
+    @Test
+    fun pressing_the_bar_with_nothing_selected_says_so_instead_of_vanishing() {
+        val only = row("buy stamps", position = 0)
+        val before = shape()
+        viewModel.toggleSelection(only.id)
+        pump()
+        viewModel.toggleSelection(only.id)
+        pump()
+        assertEquals("the set is empty", emptySet<Long>(), viewModel.selectedIds)
+
+        val mark = ShadowDialog.getShownDialogs().size
+        viewModel.requestDeleteSelection()
+        pump()
+
+        assertEquals(
+            "a bar whose set emptied is still on screen, and its delete still answers — with a reason, not with " +
+                "silence: this is the same swallow §4 closed on the other two paths",
+            emptyList<Dialog>(),
+            windowsSince(mark)
+        )
+        assertEquals(
+            "the reader is told there is nothing to delete",
+            R.string.delete_nothing_selected,
+            viewModel.state.value.error
+        )
+        assertEquals("and no row was touched", before, shape())
+    }
+
+    @Test
+    fun an_answer_given_against_a_tree_that_grew_a_child_is_asked_about_again_and_writes_nothing() {
+        val leaf = row("buy stamps", position = 0)
+        // The reader was shown the plain confirmation: at the moment of the read nothing was under this row.
+        val asked = DeleteRequest(ids = listOf(leaf.id), branchRows = 0, children = 0, affectedRows = 1)
+
+        // …and a child appeared before the answer reached the write — a sync landing, a series instance, a second
+        // device. The write path re-reads, so the confirmation the reader gave cannot silently become a branch delete.
+        row("parcel desk", parent = "buy stamps", position = 1)
+        pump()
+        // Measured after the tree grew: the claim is that the refused answer writes nothing more, so the snapshot has
+        // to be the tree the answer arrived against — not the one the read saw, which the child has already changed.
+        val before = shape()
+        val mark = ShadowDialog.getShownDialogs().size
+        viewModel.resolveDelete(asked, null)
+        pump()
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "the branch question comes back, about the tree as it is now",
+            app.getString(R.string.delete_branch_title),
+            titleOf(window)
+        )
+        assertEquals(
+            "and it carries the two rows the first read never saw",
+            app.getString(
+                R.string.delete_branch_message,
+                app.resources.getQuantityString(R.plurals.delete_branch_children, 1, 1),
+                app.resources.getQuantityString(R.plurals.delete_branch_rows, 2, 2)
+            ),
+            messageOf(window)
+        )
+        assertEquals("nothing was written on the way to asking", before, shape())
+        assertEquals("and the tree still has both rows live", 2, stored().size)
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────────────────
