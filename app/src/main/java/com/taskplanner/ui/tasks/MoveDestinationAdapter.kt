@@ -75,12 +75,14 @@ class MoveDestinationAdapter(
          * A pair carrying two destinations is not something `TaskHierarchyPolicy.destinationsFor` offers by design:
          * its loop asks each topic of the caller's list once — `offer(topic, null)` and then one `offer` per row
          * filed under that uuid — and a parent whose *task* identity is doubled is refused before it is offered at
-         * all. The assumption under that answer is worth naming, because nothing here checks it:
-         * [TaskHierarchyPolicy.ambiguousUuids] is built from `Task` uuids and never from `TaskGroup` ones, so a
-         * snapshot holding two groups under one uuid would put two destinations on this pair and `areItemsTheSame`
-         * would answer "one row" — the merge would be silent. No fixture in `HierarchyMoveSheetTest` or
-         * `HierarchyDestinationTest` seeds two groups with one uuid, which is why this is recorded as the contract's
-         * precondition rather than as a case the list is proven to survive.
+         * all. What that answer rests on is worth naming precisely, because the hazard it forecloses is foreclosed
+         * one layer up rather than here: [TaskHierarchyPolicy.ambiguousUuids] is built from `Task` uuids and never
+         * from `TaskGroup` ones, yet a snapshot cannot hold two groups under one uuid at all — `TaskGroup.uuid` is
+         * that table's primary key, its upsert replaces on conflict, and every topic query reads
+         * `SELECT * FROM task_groups` by that key. So the pair cannot double for a list this policy built. It doubles only for
+         * a list a caller assembles itself — the hand-built `MoveDestination` values the two test classes write —
+         * and nothing in this file checks that; today no caller but those tests builds one. That is why this reads
+         * as the callback's precondition rather than as a case the list is proven to survive.
          * `internal` because `HierarchyMoveSheetTest` asks these two questions of the callback the list runs on,
          * rather than of a copy of them.
          */

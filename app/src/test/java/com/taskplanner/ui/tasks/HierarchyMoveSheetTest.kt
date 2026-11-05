@@ -69,7 +69,9 @@ import org.robolectric.shadows.ShadowDialog
  *  * **The sheet names where the block sits before it offers anywhere to move it.** `dialog_move_to.xml` puts a
  *    header — the head's own title and the app's «Now …» sentence — above the list, and [MoveToDialog.open] is the
  *    only writer of those two views, so this file reads both sentences off the panel and measures that the header is
- *    the thing the reader reaches first. A destination list with no «from» over it is half the question §6.3 asks.
+ *    the first thing the sheet itself draws, above every destination. A destination list with no «from» over it is
+ *    half the question §6.3 asks. (The dialog's own title — `move_to_title`, what a screen reader takes as the
+ *    heading — sits above this panel, and nothing here claims to measure that order.)
  *
  * The rows are built by [MoveDestinationAdapter] from `item_move_destination.xml`, on the editor's own published
  * snapshot ([TasksViewModel.hierarchyContext]) — [TaskHierarchyPolicy.factsOf] over `stored`, the whole profile,
@@ -284,8 +286,9 @@ class HierarchyMoveSheetTest {
      * **[FULL_SHEET_HEIGHT_PX] is a fixture bound, and a growing fixture has to check it.** The rows read back from
      * this layout are a viewport's output, so every equality that compares them to a whole list is viewport-coupled:
      * `move to offers every destination the policy admits` asks `admitted.size == rows.size` ("one row per admitted
-     * destination, and not one more"), and the last two claims of `the sheet reads the whole stored profile, not the
-     * filtered screen` ask the drawn rows to equal the policy's list row for row. A destination list that outgrew the
+     * destination, and not one more"), and `the sheet reads the whole stored profile, not the filtered screen` ends
+     * with a row-for-row equality and then a one-row count — both of them read back from this viewport. A
+     * destination list that outgrew the
      * constant would fail those as a *short sheet*, not as a dropped row — the same shape the recycling case is
      * written to expect from a deliberately small viewport. The floor is arithmetic rather than taste: a row measures
      * at least `touch_target_min`, which `a row is at least the touch floor and the panel survives 320dp` checks, so
@@ -1172,7 +1175,10 @@ class HierarchyMoveSheetTest {
      * the RecyclerView was a change to what a reader is told that no assertion in the repository could see. The two
      * sentences are compared to `getString(R.string.move_current_path_format, …)` assembled from the same resources
      * production reads, and the order is measured off the laid-out panel (`bottom <= top`) rather than read out of the
-     * XML, because the claim a reader can disprove is the one about where the header is drawn.
+     * XML, because the claim a reader can disprove is the one about where the header is drawn. The head drawn here is
+     * a topic-less row with no ancestors, so these two equalities pin the «no topic» leg and the row's own title; the
+     * topic leg and the walked ancestor legs are pinned by the confirmation case, which compares the same production
+     * `currentPathLegs` output across a real three-level path.
      */
     @Test
     fun `a row is at least the touch floor and the panel survives 320dp`() {
@@ -1209,8 +1215,16 @@ class HierarchyMoveSheetTest {
         // is this one because the panel is already laid out here. `open()` writes the two lines and nothing outside
         // that file reads either view, so before these five assertions a deleted write, a swapped pair or a header
         // pushed below the list were all changes no test in the repository could see.
-        val headTitle = panel.findViewById<TextView>(R.id.moveSheetHeadTitle)
-        val headPath = panel.findViewById<TextView>(R.id.moveSheetCurrentPath)
+        // Both views are required rather than assumed: a renamed id then reports as "the header stopped being drawn"
+        // with a named message, which is the sentence the next reader needs, instead of as a bare null pointer.
+        // `requireNotNull` is used over `assertNotNull` because the calls below pass the view to `words(view: View)`,
+        // and a non-null local states the precondition once rather than leaning on a smart cast.
+        val headTitle = requireNotNull(panel.findViewById<TextView>(R.id.moveSheetHeadTitle)) {
+            "the panel carries no head-title view for the dialog to write into"
+        }
+        val headPath = requireNotNull(panel.findViewById<TextView>(R.id.moveSheetCurrentPath)) {
+            "the panel carries no current-path view above the destination list"
+        }
         assertEquals("the sheet says which block it is moving, in that block's own title",
             head.title, words(headTitle))
         assertEquals("and where it hangs now, in the app's own «Now …» sentence over the path the dialog assembles — " +
