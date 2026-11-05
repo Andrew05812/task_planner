@@ -139,6 +139,11 @@
          control, and a reader who pressed Delete on the confirmation and got neither a delete nor a window would
          have no way to know the app was still holding the first question. -->
     <string name="delete_one_question_at_a_time">Answer the delete question already on the screen first</string>
+    <!-- Stage 16 §4: the selection bar stays up while its set empties (unticking the last row leaves the mode on),
+         so its delete control can be pressed with nothing in the set. That press writes nothing and opens nothing,
+         and it is a refusal of a different kind — nothing to ask about rather than a question already asked — so it
+         gets its own sentence instead of borrowing the one above. -->
+    <string name="delete_nothing_selected">No tasks are selected to delete</string>
     <!-- Stage 16 §7: the card's fold control. The resting description is what the layout carries before a row is
          bound; `branch_collapse` and `branch_expand` replace it per state, and each names BOTH the state the row is
          in and what the press does, because "Свернуть" and "Развернуть" differ by one unstressed prefix and a screen

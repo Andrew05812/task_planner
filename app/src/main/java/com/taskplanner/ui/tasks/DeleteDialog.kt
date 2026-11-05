@@ -1,6 +1,7 @@
 package com.taskplanner.ui.tasks
 
 import android.content.Context
+import android.os.Looper
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -240,7 +241,19 @@ object DeleteDialog {
                             onBusy()
                             continue
                         }
-                        val window = show(context(), request) { policy -> onAnswer(request, policy) }
+                        // The looper check is the precondition above turned into a named failure: without it a caller
+                        // on a non-looper scope loses the whole window inside a collector that swallows the exception,
+                        // and the symptom is a screen that shows nothing — which is what this round was about.
+                        check(Looper.myLooper() != null) {
+                            "DeleteDialog.bind draws a Dialog, so its collector needs a looper thread"
+                        }
+                        val window = show(context(), request) { policy ->
+                            // Cleared on the answer, not only on dismissal: AppCompat defers the actual dismiss to a
+                            // handler message, so a window being answered still reports `isShowing` for a moment, and a
+                            // re-ask that lands in that moment would otherwise be refused as if a question were up.
+                            open = null
+                            onAnswer(request, policy)
+                        }
                         window.setOnDismissListener { open = null }
                         open = window
                     }

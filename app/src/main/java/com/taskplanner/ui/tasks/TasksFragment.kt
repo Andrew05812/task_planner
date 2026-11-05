@@ -444,9 +444,12 @@ class TasksFragment : Fragment() {
      * What the press is about is the view model's live selection, so the screen says only that its bar was pressed
      * ([TasksViewModel.requestDeleteSelection]) rather than handing back `lastState.selectedIds`, the set the *last
      * render* drew. The two can differ by a tick: a tick lands in the selection at once, while the drawn state
-     * catches up when the render collector runs, and a press taken from the snapshot asks about the rows the reader
-     * was looking at a moment ago — measured as one row and its singular sentence where the bar counted two. The
-     * snapshot is a copy of a copy of the selection; the selection is the authority.
+     * catches up when the render collector runs. The lag itself is pinned by
+     * `the_bulk_press_asks_about_the_selection_the_reader_is_holding_and_not_the_one_last_drawn`; what it would have
+     * cost is inferred from that and not claimed as measured here, because this screen's two click handlers are read
+     * by a test, not run by one — a press taken from the snapshot would have asked about the rows the reader was
+     * looking at a moment ago, in that draw's sentence. The snapshot is a copy of a copy of the selection; the
+     * selection is the authority.
      */
     private fun confirmDeleteSelected() {
         viewModel.requestDeleteSelection()

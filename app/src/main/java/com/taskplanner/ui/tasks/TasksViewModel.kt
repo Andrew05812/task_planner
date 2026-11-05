@@ -679,9 +679,17 @@ class TasksViewModel @Inject constructor(
      * [fromSelection] only says whether a completed answer should close selection mode; the batch itself is evaluated
      * as one set by [deleteRows], which is what stops the first half of a selection being deleted while the second
      * half is still unasked.
+     *
+     * An empty set is a refusal with a reason, not a silent return. The selection bar stays on screen while its set
+     * empties — unticking the last row leaves the mode on — so its delete control can genuinely be pressed with
+     * nothing in the set, and a press that opens no window and writes nothing is what §4's whole round exists to stop
+     * being silent about.
      */
     fun requestDelete(ids: List<Long>, fromSelection: Boolean = false) {
-        if (ids.isEmpty()) return
+        if (ids.isEmpty()) {
+            _state.update { it.copy(error = R.string.delete_nothing_selected) }
+            return
+        }
         viewModelScope.launch {
             try {
                 val summary = hierarchyRepository.deleteBatchSummary(ids)
@@ -706,12 +714,11 @@ class TasksViewModel @Inject constructor(
      * The set comes from [selectedIds], the live authority the ticks write, and not from the last rendered state. The
      * screen used to hand its own snapshot over, and the two are not the same object at the same moment: a tick lands
      * in the selection immediately, while `state.value.selectedIds` only catches up when the render collector has run
-     * — so a reader who ticked a second row and pressed Delete before that render finished was asked about the rows
-     * the *previous* draw had, with the previous draw's sentence. Measured, not theorised: with the snapshot as the
-     * source, two ticks and a press opened «Are you sure you want to delete this task?» — one row, singular — while the
-     * bar counted two, and the confirmation the reader then gave was not the set they had built. Keeping the read here
-     * also keeps the rule where §4 put it: the screen says that the bar was pressed, and the view model says what that
-     * press means.
+     * — and `the_bulk_press_asks_about_the_selection_the_reader_is_holding_and_not_the_one_last_drawn` pins exactly
+     * that lag, by ticking a second row without pumping and comparing the two reads. What the lag costs is a
+     * consequence this class cannot run and therefore does not claim to have measured: a press taken from the
+     * snapshot asks about the rows the previous draw had, with the previous draw's sentence — one row, singular, over
+     * a bar counting two. The screen says that the bar was pressed; the view model says what that press means.
      */
     fun requestDeleteSelection() {
         requestDelete(selectedIds.toList(), fromSelection = true)
@@ -759,6 +766,13 @@ class TasksViewModel @Inject constructor(
         if (_deleteRequests.trySend(request).isFailure) reportDeleteBusy()
     }
 
+    /**
+     * The selection bar's delete, written directly. **Unwired since §4** — no screen calls this any more, only tests
+     * do; the live path is [requestDeleteSelection] → the window → [resolveDelete]. It is also the one public delete
+     * door that can answer with nothing at all: an empty set returns without a word, which is the silence §4 spent
+     * this round closing elsewhere. Task 5 owns it — route it through the same coordinator or delete it; do not wire
+     * a screen to it as it stands.
+     */
     fun deleteSelected(
         onDone: () -> Unit = {},
         policy: HierarchyDeletePolicy? = null,
