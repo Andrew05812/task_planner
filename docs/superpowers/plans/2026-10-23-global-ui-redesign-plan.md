@@ -7240,5 +7240,27 @@ difference, and no device claim is made for either binary because step 10 only *
 What CI has no way to reach stays unreachable: no device, no Firebase project, so no document has travelled to Firestore
 on the strength of this run. T6a is closed on the confirmed CI conclusion at the published SHA.
 
+**Then the branch's own prose produced two reds, and both of them are evidence.** This paragraph and the last were
+committed as markdown-only commits — `019c1d6`, then `05967a6` — and CI failed both of them, step 8, with the one method
+that has haunted this branch: `WorkAdjustmentUiTest > a stretch that ends where or before it began is refused by the
+form`, `expected:<A stretch cannot end at or before it starts.> but was:<null>`. The proof that no program changed
+between the green run and these two reds is not an argument, it is a hash: `git rev-parse f650ce6:app 019c1d6:app
+05967a6:app` answers `3546e7f40ac73f232651c9b311f82926ba848fd2` three times, and `git diff --name-only f650ce6..05967a6`
+prints exactly `docs/superpowers/plans/2026-10-23-global-ui-redesign-plan.md`. A re-dispatch on the same tip, with no
+commit between — 42077472214 — came back **`completed / success`**, 16 of 16 steps, and its own artifacts read 2085
+tests / 0 failures / 0 ignored over 159 class pages, 177 lint warnings, and that class's page listing all eleven methods
+`success`, the failing one among them. So the tip is green on the bytes it carries, and the flake is recorded as three
+CI reds (42040339867, 42075084726, 42075889978) against three CI greens on commits whose `app` trees are the same.
+
+What was measured locally, in search of a cause rather than of a green tick: the class alone three times
+(`1m 13s`, `43s`, `42s`, all green), then the whole `com.taskplanner.ui.*` package in one invocation — **84 classes,
+888 tests, 0 failures, 0 errors, 0 skipped**, `5m 42s`, `WorkAdjustmentUiTest` itself `tests="11" failures="0"` — and
+`compileDebugUnitTestKotlin UP-TO-DATE` in each, so those are the committed bytes. The hypothesis the shape of the
+evidence invites is Material's process-wide `SnackbarManager` surviving inside a shared Robolectric sandbox, so a notice
+queues behind another class's 3500 ms Snackbar and reads as `null`; it was tested at package scale here and did not
+reproduce, and every failure the method has ever had is inside a full-suite pass. That is a finding with two
+reproductions still owed — the full suite locally, and a forced pair — so it is carried as its own task rather than
+fixed by guessing, and nothing in it was relaxed, ignored, renamed or re-aimed.
+
 
 
