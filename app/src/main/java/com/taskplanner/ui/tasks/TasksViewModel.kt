@@ -8,8 +8,8 @@ import com.taskplanner.R
 import com.taskplanner.data.hierarchy.HierarchyCollapseResult
 import com.taskplanner.data.hierarchy.HierarchyDeletePolicy
 import com.taskplanner.data.hierarchy.HierarchyDeleteRefusal
-import com.taskplanner.data.hierarchy.HierarchyDeleteResult
 import com.taskplanner.data.hierarchy.HierarchyMoveResult
+import com.taskplanner.data.hierarchy.TaskDeleteCoordinator
 import com.taskplanner.data.hierarchy.TaskHierarchyPolicy
 import com.taskplanner.data.model.Category
 import com.taskplanner.data.model.Priority
@@ -202,7 +202,13 @@ class TasksViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val workTrackingRepository: WorkTrackingRepository,
     private val workStatisticsRepository: WorkStatisticsRepository,
-    private val hierarchyRepository: TaskHierarchyRepository
+    private val hierarchyRepository: TaskHierarchyRepository,
+    // Stage 16 §5 lifted the delete orchestration into the domain, and the lift has to be provably faithful: the
+    // tests that pinned `deleteRows` before it pin it now, with the same arguments and the same assertions. Hilt
+    // injects its own `@Singleton`, so the app has one coordinator; a test that builds this class by hand gets one
+    // wired to the repositories it already passed, which is the same object over the same database.
+    private val deleteCoordinator: TaskDeleteCoordinator =
+        TaskDeleteCoordinator(hierarchyRepository, taskRepository)
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TasksState())
@@ -692,7 +698,7 @@ class TasksViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                val summary = hierarchyRepository.deleteBatchSummary(ids)
+                val summary = deleteCoordinator.summary(ids)
                 offerDelete(
                     DeleteRequest(
                         ids = ids,
@@ -767,81 +773,27 @@ class TasksViewModel @Inject constructor(
     }
 
     /**
-     * The selection bar's delete, written directly. **Unwired since §4** — no screen calls this any more, only tests
-     * do; the live path is [requestDeleteSelection] → the window → [resolveDelete]. It is also the one public delete
-     * door that can answer with nothing at all: an empty set returns without a word, which is the silence §4 spent
-     * this round closing elsewhere. Task 5 owns it — route it through the same coordinator or delete it; do not wire
-     * a screen to it as it stands.
-     */
-    fun deleteSelected(
-        onDone: () -> Unit = {},
-        policy: HierarchyDeletePolicy? = null,
-        onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit = { _, _, _ -> }
-    ) {
-        viewModelScope.launch {
-            try {
-                val ids = selectionFlow.value.first.toList()
-                if (ids.isEmpty()) return@launch
-                if (deleteRows(ids, policy, onChoice)) {
-                    exitSelection()
-                    onDone()
-                }
-            } catch (e: Exception) {
-                setError(e)
-            }
-        }
-    }
-
-    /**
-     * Deletes [ids] through the tree rules, asking the reader rather than choosing for them when a row holds a branch.
+     * The write behind an answer, in the domain's hands since Stage 16 §5.
      *
-     * [onChoice] runs instead of a write when [policy] is null and one of the rows has something under it: the batch
-     * is checked as a whole first, so a two-row selection where the second row is a parent cannot delete the first
-     * and then ask. Says whether the batch went through, so a bulk command only closes selection mode once it did.
+     * [onChoice] is this screen's window: the coordinator returns the numbers of a set it would not write, and the
+     * request goes back on the channel for the reader to answer. The two public bulk commands that used to sit beside
+     * this one — `deleteSelected` and `deleteSelectedFor` — are deleted: they could write without asking, no screen
+     * called them, and a second door is the exact thing §4 closed.
      */
-    fun deleteSelectedFor(
-        ids: List<Long>,
-        policy: HierarchyDeletePolicy? = null,
-        onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit = { _, _, _ -> }
-    ) {
-        viewModelScope.launch {
-            try {
-                deleteRows(ids, policy, onChoice)
-            } catch (e: Exception) {
-                setError(e)
-            }
-        }
-    }
-
     private suspend fun deleteRows(
         ids: List<Long>,
         policy: HierarchyDeletePolicy?,
         onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit
     ): Boolean {
-        if (policy == null) {
-            val summary = hierarchyRepository.deleteBatchSummary(ids)
-            if (summary.branchRows > 0) {
-                onChoice(summary.branchRows, summary.children, summary.affectedRows)
-                return false
-            }
-        }
-        var refused: HierarchyDeleteRefusal? = null
-        val gone = HashSet<Long>()
-        for (id in ids) {
-            // A subtree delete takes the rows under it, and a selection can hold both a parent and its own child.
-            // Deleting the child again would report it as missing — a sentence about a row the reader already retired.
-            if (id in gone) continue
-            when (val outcome = hierarchyRepository.deleteTask(id, policy)) {
-                is HierarchyDeleteResult.Deleted -> {
-                    gone += outcome.deletedRows.map { it.id }
-                    taskRepository.finishDelete(outcome.deletedRows, outcome.retiredReminders)
-                }
-                is HierarchyDeleteResult.Confirm -> onChoice(1, outcome.childCount, outcome.subtreeSize)
-                is HierarchyDeleteResult.Refused -> refused = outcome.reason
-            }
-        }
-        refused?.let { reportDeleteRefusal(it) }
-        return refused == null
+        // Stage 16 §5: the read-ask-write-follow-ups sequence is the domain's now, shared with the category screen,
+        // and this class keeps only what belongs to a screen — turning a refusal into the state's error id and an ask
+        // into the window the reader is shown. The behaviour the tests pinned here is unchanged on purpose: a set the
+        // pre-read found to hold a branch writes nothing and is not called a success (`askedBeforeWriting`), while a
+        // row that grew a child *after* the pre-read is reported through `onChoice` and the rows that did go stay gone.
+        val outcome = deleteCoordinator.delete(ids, policy)
+        outcome.asks.forEach { onChoice(it.branchRows, it.children, it.affectedRows) }
+        outcome.refusal?.let { reportDeleteRefusal(it) }
+        return outcome.refusal == null && !outcome.askedBeforeWriting
     }
 
     /** A refusal the reader can act on, named in their language: the state carries the id, the screen the words. */

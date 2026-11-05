@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.taskplanner.data.model.Priority
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.testing.AppFixture
+import com.taskplanner.testing.deleteThroughTheWindow
 import java.util.concurrent.Executor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -229,7 +230,7 @@ class TasksViewModelTest {
         assertEquals(setOf(keep, doomed), viewModel.state.value.selectedIds)
 
         // the mass action bar deletes the selection; here only the doomed row is still selected
-        viewModel.deleteSelectedFor(listOf(doomed))
+        viewModel.deleteThroughTheWindow(listOf(doomed), awaitIdle = { fixture.awaitIdle() })
 
         awaitTitles(viewModel, listOf("Keep me"))
         assertEquals(

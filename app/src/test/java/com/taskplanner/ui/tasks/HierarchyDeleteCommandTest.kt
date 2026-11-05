@@ -11,6 +11,8 @@ import com.taskplanner.data.model.TrackingSession
 import com.taskplanner.data.model.TrackingState
 import com.taskplanner.data.repository.TaskHierarchyRepository
 import com.taskplanner.testing.AppFixture
+import com.taskplanner.testing.deleteSelectionThroughTheWindow
+import com.taskplanner.testing.deleteThroughTheWindow
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -33,16 +35,21 @@ import org.robolectric.shadows.ShadowAlarmManager
 /**
  * The tasks screen's delete command, after Stage 16 gave a row the right to have rows under it.
  *
- * Before an indent existed, `deleteSelectedFor` could hand a list of ids to the repository and be done: every row was
- * a top-level row, so nothing was orphaned and no question had to be asked. Stage 15 put a nested notebook in the
+ * Before the tree could be edited at all, a delete could hand a list of ids to the repository and be done: every row
+ * was a top-level row, so nothing was orphaned and no question had to be asked. Stage 15 put a nested notebook in the
  * same table through the Keep import, and Stage 16 lets the reader nest by hand — so the screen now has to answer
  * "what happens to the branch?" and it may not answer it on the reader's behalf.
  *
- * **The shape this pins.** The command is asked with no policy and either deletes or *asks*: [TasksViewModel.deleteSelectedFor]
- * hands the screen the branch's size through `onChoice` and writes nothing until the reader picks one of the two
+ * **The shape this pins.** The command is asked with no policy and either deletes or *asks*: the press reads the tree
+ * and hands the screen the branch's size through `onChoice`, and writes nothing until the reader picks one of the two
  * operations. A row with nothing under it never asks — a dialog with one possible answer is noise — and a refusal is
  * reported through the state's error channel as a resource id, the way every other failure on this screen already
  * is, so the sentence the reader sees is the one their language speaks.
+ *
+ * **Why the cases call a helper and not the view model.** `TasksViewModel.deleteSelected` and `deleteSelectedFor`
+ * were deleted by Stage 16 §5, and the two local helpers below send the same command through the route a reader takes
+ * — see [com.taskplanner.testing.deleteThroughTheWindow]. Pinning a method no screen can reach would pin a door that
+ * does not exist.
  *
  * The follow-ups the old single call performed are checked here too rather than assumed: an import-created branch
  * deleted through the new path must still cancel the alarms of the rows that went and must still let a running series
@@ -101,12 +108,33 @@ class HierarchyDeleteCommandTest {
 
     private fun live(): List<String> = runBlocking { fixture.taskDao.getRowsInStoredOrder(userId) }.map { it.title }
 
+    /**
+     * The command the cases send, taken through the only door a delete has left.
+     *
+     * `TasksViewModel.deleteSelectedFor` and `deleteSelected` were removed in Stage 16 §5: two public methods that
+     * could write without asking, wired to no screen — the live path is `requestDelete` → the window →
+     * `resolveDelete`, and a second way in is exactly the kind of door §4 spent its round closing. Both helpers here
+     * are that round trip without a dialog, and the shared implementation is documented in
+     * [com.taskplanner.testing.deleteThroughTheWindow].
+     */
+    private fun deleteSelectedFor(
+        ids: List<Long>,
+        policy: HierarchyDeletePolicy? = null,
+        onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit = { _, _, _ -> }
+    ) = viewModel.deleteThroughTheWindow(ids, policy, { fixture.awaitIdle() }, onChoice)
+
+    /** The selection bar's press, for the one case that is about the selection rather than a list of ids. */
+    private fun deleteSelected(
+        policy: HierarchyDeletePolicy? = null,
+        onChoice: (branchRows: Int, children: Int, subtree: Int) -> Unit = { _, _, _ -> }
+    ) = viewModel.deleteSelectionThroughTheWindow(policy, { fixture.awaitIdle() }, onChoice)
+
     @Test
     fun a_leaf_deletes_straight_through_and_never_opens_the_branch_question() {
         val leaf = row("leaf", position = 0)
         val asked = AtomicInteger(0)
 
-        viewModel.deleteSelectedFor(listOf(leaf.id), onChoice = { _, _, _ -> asked.incrementAndGet() })
+        deleteSelectedFor(listOf(leaf.id), onChoice = { _, _, _ -> asked.incrementAndGet() })
         fixture.awaitIdle()
 
         assertEquals("nothing was asked", 0, asked.get())
@@ -120,7 +148,7 @@ class HierarchyDeleteCommandTest {
         row("second", parent = "first", position = 2)
         val asked = AtomicReference<Pair<Int, Int>?>(null)
 
-        viewModel.deleteSelectedFor(listOf(parent.id), onChoice = { _, children, subtree ->
+        deleteSelectedFor(listOf(parent.id), onChoice = { _, children, subtree ->
             asked.set(children to subtree)
         })
         fixture.awaitIdle()
@@ -140,7 +168,7 @@ class HierarchyDeleteCommandTest {
         row("child", parent = "parent", position = 1)
         row("grandchild", parent = "child", position = 2)
 
-        viewModel.deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.PROMOTE_CHILDREN)
+        deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.PROMOTE_CHILDREN)
         fixture.awaitIdle()
 
         assertEquals("the parent is gone from the list", listOf("child", "grandchild"), live())
@@ -156,7 +184,7 @@ class HierarchyDeleteCommandTest {
         row("grandchild", parent = "child", position = 2)
         row("neighbour", position = 3)
 
-        viewModel.deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertEquals("only the neighbour is left", listOf("neighbour"), live())
@@ -174,7 +202,7 @@ class HierarchyDeleteCommandTest {
         row("child", parent = "parent", position = 2)
         val asked = AtomicInteger(0)
 
-        viewModel.deleteSelectedFor(listOf(leaf.id, parent.id), onChoice = { _, _, _ -> asked.incrementAndGet() })
+        deleteSelectedFor(listOf(leaf.id, parent.id), onChoice = { _, _, _ -> asked.incrementAndGet() })
         fixture.awaitIdle()
 
         assertEquals("one question for the whole batch", 1, asked.get())
@@ -187,7 +215,7 @@ class HierarchyDeleteCommandTest {
         val parent = row("parent", position = 1)
         row("child", parent = "parent", position = 2)
 
-        viewModel.deleteSelectedFor(listOf(leaf.id, parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelectedFor(listOf(leaf.id, parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertEquals("every row of the batch went, and the branch with its head", emptyList<String>(), live())
@@ -212,7 +240,7 @@ class HierarchyDeleteCommandTest {
             )
         }
 
-        viewModel.deleteSelectedFor(listOf(timed.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelectedFor(listOf(timed.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertEquals(
@@ -229,7 +257,7 @@ class HierarchyDeleteCommandTest {
         runBlocking { fixture.taskRepository.deleteTask(gone) }
         fixture.awaitIdle()
 
-        viewModel.deleteSelectedFor(listOf(gone.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelectedFor(listOf(gone.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertEquals(R.string.delete_row_missing, viewModel.state.value.error)
@@ -248,7 +276,7 @@ class HierarchyDeleteCommandTest {
         fixture.awaitIdle()
         assertTrue("the branch was armed before the delete", hasAlarmFor(parent.uuid))
 
-        viewModel.deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertEquals(
@@ -273,7 +301,7 @@ class HierarchyDeleteCommandTest {
         fixture.awaitIdle()
         assertEquals("two reminders, two alarms on the real clock", 2, alarms().size)
 
-        viewModel.deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelectedFor(listOf(parent.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertEquals(
@@ -289,7 +317,7 @@ class HierarchyDeleteCommandTest {
         val parent = row("parent", position = 0)
         val child = row("child", parent = "parent", position = 1)
 
-        viewModel.deleteSelectedFor(listOf(parent.id, child.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelectedFor(listOf(parent.id, child.id), policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertNull(
@@ -308,7 +336,7 @@ class HierarchyDeleteCommandTest {
         fixture.awaitIdle()
         assertEquals("the row is selected", setOf(parent.id), viewModel.selectedIds)
 
-        viewModel.deleteSelected()
+        deleteSelected()
         fixture.awaitIdle()
 
         assertEquals(
@@ -317,7 +345,7 @@ class HierarchyDeleteCommandTest {
             viewModel.selectedIds
         )
 
-        viewModel.deleteSelected(policy = HierarchyDeletePolicy.DELETE_SUBTREE)
+        deleteSelected(policy = HierarchyDeletePolicy.DELETE_SUBTREE)
         fixture.awaitIdle()
 
         assertEquals("and answering the question closes the mode", emptySet<Long>(), viewModel.selectedIds)

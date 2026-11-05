@@ -9,6 +9,7 @@ import com.taskplanner.data.model.SyncState
 import com.taskplanner.data.model.Task
 import com.taskplanner.data.model.TaskStatus
 import com.taskplanner.testing.AppFixture
+import com.taskplanner.testing.deleteThroughTheWindow
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -298,7 +299,7 @@ class TasksRecurrenceTest {
     fun `deleting the open instance from the list gives the series its next task`() {
         val task = save("Stretch", repeat = RepeatPlan(preset = RepeatPreset.EVERY_N_DAYS, interval = 3))
 
-        viewModel.deleteSelectedFor(listOf(task.id))
+        viewModel.deleteThroughTheWindow(listOf(task.id), awaitIdle = { fixture.awaitIdle() })
 
         awaitUntil("the replacement instance to appear") { titles() == listOf("Stretch") }
         val next = openTasks().single()
