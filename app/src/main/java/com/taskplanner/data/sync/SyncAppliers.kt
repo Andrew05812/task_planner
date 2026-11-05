@@ -24,7 +24,11 @@ import javax.inject.Singleton
  *  1. a local row with unsent changes (sync_state != SYNCED) always wins — an offline edit must
  *     never be silently dropped in favour of a cloud snapshot;
  *  2. otherwise the newer updated_at wins, deletions included (the tombstone carries it);
- *  3. a remote update of a locally deleted row is ignored, so a delete never resurrects.
+ *  3. a remote update of a locally deleted row is ignored, so a delete never resurrects;
+ *  4. a field this build learned after the document was written is only written when the document carries it. Silence
+ *     about the branch fold is not an answer about it, and treating an absent key as `false` would open every branch
+ *     the reader had closed on the first pull after an upgrade. `SyncedTask.childrenCollapsed` is a nullable `Boolean`
+ *     for that reason, and the task applier is the one place the distinction is applied.
  */
 @Singleton
 class SyncAppliers @Inject constructor(
@@ -66,7 +70,12 @@ class SyncAppliers @Inject constructor(
                 estimatedMinutes = remote.estimatedMinutes,
                 seriesUuid = remote.seriesUuid,
                 occurrenceAt = remote.occurrenceAt,
-                parentUuid = remote.parentUuid
+                parentUuid = remote.parentUuid,
+                // A row this device has never seen has no local fold to keep, so the brief's backward-compatibility
+                // sentence applies here in full: a document that does not mention the fold arrives as an open branch,
+                // which is what every notebook written before v18 looked like. An explicit `false` and silence both
+                // land on the same value for a new row, and that is the only place in this class where they may.
+                childrenCollapsed = remote.childrenCollapsed ?: false
             )
             // An instance of a series that this device already produced keeps its own row: the user
             // may have edited or finished it, and the (series, occurrence) pair is the same task.
@@ -104,6 +113,13 @@ class SyncAppliers @Inject constructor(
                 seriesUuid = remote.seriesUuid,
                 occurrenceAt = remote.occurrenceAt,
                 parentUuid = remote.parentUuid,
+                // The presence rule, and the only new conflict decision in this class. A document that carries the key
+                // answers the question and its answer wins — `true` folds the row here, `false` opens it — under the
+                // two gates above, which are untouched: an unsynced local edit still wins outright, and an older
+                // document still writes nothing. A document that does not carry it said nothing about the fold, and
+                // silence is not permission to open a branch the reader closed on this device, so the row keeps its
+                // own value. That is what makes an upgrade from before v18 survivable in both directions at once.
+                childrenCollapsed = remote.childrenCollapsed ?: local.childrenCollapsed,
                 syncState = SyncState.SYNCED,
                 updatedAt = remote.updatedAt
             )

@@ -112,6 +112,12 @@ private const val F_NAME = "name"
 private const val F_COLOR = "color"
 private const val F_ICON = "icon"
 private const val F_PARENT_UUID = "parent_uuid"
+/**
+ * The branch fold of a *task*. Schema v18's `tasks.children_collapsed`, and deliberately not the `collapsed` key
+ * above, which belongs to a `TaskGroup` — the topic's own fold and a task's branch are two different states on two
+ * different rows, and sharing a key between them would let one device's topic write the other's tree.
+ */
+private const val F_CHILDREN_COLLAPSED = "children_collapsed"
 private const val F_COLLAPSED = "collapsed"
 private const val F_IS_COMPLETED = "is_completed"
 private const val F_SORT_ORDER = "sort_order"
@@ -167,7 +173,20 @@ data class SyncedTask(
      * reason it is on the wire: a subtree that syncs as a flat list has collapsed on the other device, and
      * there is no way to see that from either screen afterwards.
      */
-    val parentUuid: String? = null
+    val parentUuid: String? = null,
+    /**
+     * Whether this row's branch is folded on the device that wrote it. `null` means the document said nothing.
+     *
+     * The three states are not two, and the difference is the whole point. A row the reader closed is a fact; a row
+     * the reader left open is a different fact; and a document written before Stage 16 §7 gave the fold a column is
+     * neither — it is silence. Reading silence as `false` would make the first pull after an upgrade unfold every
+     * branch on the device on the strength of a document that never mentioned the subject, which is why this is a
+     * nullable `Boolean` and why `fromFields` casts it with `as?` instead of the `bool()` helper every other flag on
+     * this class uses. `of` always fills it in, because a row of this build does know its own state, and
+     * `SyncAppliers` decides per branch what absence means: an unknown for a row that already exists here, open for
+     * one that does not.
+     */
+    val childrenCollapsed: Boolean? = null
 ) {
     fun fields(): Map<String, Any?> = mapOf(
         F_UUID to uuid,
@@ -184,6 +203,7 @@ data class SyncedTask(
         F_CATEGORY_UUID to categoryUuid,
         F_GROUP_UUID to groupUuid,
         F_PARENT_UUID to parentUuid,
+        F_CHILDREN_COLLAPSED to childrenCollapsed,
         F_ARCHIVED to archived,
         F_ARCHIVED_AT to archivedAt,
         F_STARTED_AT to startedAt,
@@ -218,7 +238,8 @@ data class SyncedTask(
             estimatedMinutes = task.estimatedMinutes,
             seriesUuid = task.seriesUuid,
             occurrenceAt = task.occurrenceAt,
-            parentUuid = task.parentUuid
+            parentUuid = task.parentUuid,
+            childrenCollapsed = task.childrenCollapsed
         )
 
         fun fromFields(fields: Map<String, Any?>): SyncedTask? {
@@ -247,7 +268,11 @@ data class SyncedTask(
                 estimatedMinutes = fields.intOrNull(F_ESTIMATED_MINUTES),
                 seriesUuid = fields.string(F_SERIES_UUID),
                 occurrenceAt = fields.longOrNull(F_OCCURRENCE_AT),
-                parentUuid = fields.string(F_PARENT_UUID)
+                parentUuid = fields.string(F_PARENT_UUID),
+                // Cast, not `fields.bool(...)`: a missing key, a null and a value of the wrong type all mean the
+                // document never spoke about the fold, and `SyncAppliers` needs to be able to tell that apart from an
+                // answer of `false`. `bool(...)` would silently turn a legacy document into an instruction to open.
+                childrenCollapsed = fields[F_CHILDREN_COLLAPSED] as? Boolean
             )
         }
     }

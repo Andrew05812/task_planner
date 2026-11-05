@@ -1197,7 +1197,10 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    either direction, no completion time invented for a topic, and no task row touched. Phase 4's rendering work is
    therefore complete in code and in JVM assertions; what it still owes is the camera (§19).
 5. **Controls**: indent/outdent in the editor and on the row; a long-press move for whole subtrees.
-6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping. The sync half has one named defect
+6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping. **T6a is in**: the task document now
+carries `children_collapsed` beside `parent_uuid`, and it is read with its *presence* rather than only its value, so a
+document written before v18 cannot open a branch the reader closed (§16.5's field note and `docs/BACKUP_AND_SYNC.md`).
+The backup-JSON half is T7, and the report half is T8. The sync half still has one named defect
    to close, found by Stage 16 §5's review and recorded in `docs/HIERARCHY.md` under *What a physical delete does to a
    tombstone*: `TaskDeleteCoordinator.hardDelete` — the archive's "delete forever" — tombstones a row and removes it from
    the table in the same call, so the deletion is never pushed and the local evidence a pull needs in order not to

@@ -12,6 +12,7 @@ import com.taskplanner.data.model.TaskStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -317,6 +318,52 @@ class SyncDocumentFormatTest {
             false, SyncedGroup.fromFields(SyncedGroup.of(
                 TaskGroup(uuid = "g2", userId = 42L, name = "Other")
             ).fields())?.completed
+        )
+    }
+
+    @Test
+    fun `a folded branch says so in its document`() {
+        // The fold is the reader's own arrangement of the tree: §7 made it survive a rotation, and the same argument
+        // that put `parent_uuid` on the wire puts it here. A document without it shows the second device a branch the
+        // reader closed — the reader's own work, lost to a pull.
+        val folded = SyncedTask.of(task().copy(childrenCollapsed = true), "category-1").fields()
+
+        assertTrue("the key is the one §6 names, and it is not the topic's `collapsed`", folded.containsKey("children_collapsed"))
+        assertEquals(true, folded["children_collapsed"])
+    }
+
+    @Test
+    fun `an open branch says it is open rather than saying nothing`() {
+        // `false` has to be sayable. If only a closed branch puts a value on the wire, then opening a branch on one
+        // device is indistinguishable from a document that never heard of the fold, and the other device stays closed
+        // with no way for a later push to correct it.
+        val open = SyncedTask.of(task(), "category-1").fields()
+
+        assertEquals(false, open["children_collapsed"])
+        assertEquals(
+            "and the round trip keeps the answer rather than dropping it",
+            false, SyncedTask.fromFields(open)?.fields()?.get("children_collapsed")
+        )
+    }
+
+    @Test
+    fun `a document from before the fold existed is still silent about it after passing through this build`() {
+        // Absence is not evidence that anybody opened the branch, so a reader must not turn it into `false`: on the
+        // first pull after an upgrade that would unfold every branch the reader had closed, and it would do it on the
+        // strength of a document that never mentioned the subject. Asserted through the document this build would send
+        // on, because that is where a silent read becomes a claim.
+        val legacy = SyncedTask.of(task().copy(childrenCollapsed = true), "category-1")
+            .fields()
+            .filterKeys { it != "children_collapsed" }
+        val read = SyncedTask.fromFields(legacy)
+
+        assertNull(
+            "a document that does not speak the fold's language, or speaks it in the wrong type, reads as silence",
+            read?.fields()?.get("children_collapsed")
+        )
+        assertNull(
+            "and a wrong-typed value is silence too, not a crash and not a false",
+            SyncedTask.fromFields(legacy + ("children_collapsed" to "yes, please"))?.fields()?.get("children_collapsed")
         )
     }
 

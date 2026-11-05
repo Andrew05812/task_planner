@@ -127,8 +127,26 @@ partial write cannot leave a document that names no task. Deploy with
 What a document contains is decided by the `SyncedTask` / `SyncedCategory` / `SyncedGroup` /
 `SyncedRule` / `SyncedReminder` types, not by the Firestore layer, so the format is readable without
 a project to push it to. A document carries the entity's own fields — for a task that now includes
-`start_time`, `end_time`, `estimated_minutes`, `series_uuid` and `occurrence_at` — and never a local
-row id, a numeric `user_id` or the `sync_state` of the device that wrote it.
+`start_time`, `end_time`, `estimated_minutes`, `series_uuid`, `occurrence_at`, and the two the
+hierarchy added, `parent_uuid` (the row this one is written under) and `children_collapsed` (whether
+the reader folded this row's branch) — and never a local row id, a numeric `user_id` or the
+`sync_state` of the device that wrote it.
+
+`children_collapsed` is deliberately *not* the `collapsed` key of a topic document: a `TaskGroup`'s
+own fold and a task's branch are states of two different rows, and one device writing the topic must
+not answer for the tree.
+
+The fold has one compatibility rule of its own, because documents written before schema v18 exist.
+A task document is read with the key's **presence**, not merely its value: `true` says the branch is
+folded, `false` says the reader opened it, and no key at all says the document never had the idea —
+which is why `SyncedTask.childrenCollapsed` is a nullable `Boolean` and why `fromFields` casts it
+rather than using the `bool()` helper every other flag on that class reads through. Applying a
+document then keeps both sentences the brief asks for: a row this device does not have yet and a
+document that says nothing arrive as an open branch, because that is what every notebook written
+before v18 looked like; a row this device already has keeps its own fold when the document is silent,
+so the first pull after an upgrade cannot open every branch the reader closed. An explicit `false`
+does update a folded local row, under the same `sync_state` and `updatedAt` gates as any other field.
+`SyncAppliersTest` pins all three cases, and `SyncDocumentFormatTest` pins the wire shape.
 
 Offline first: every local change is stored with `sync_state` (`PENDING`, `SYNCED`, `DELETING`, …)
 and a `uuid`; WorkManager pushes and pulls when a network is available, and passes queued while

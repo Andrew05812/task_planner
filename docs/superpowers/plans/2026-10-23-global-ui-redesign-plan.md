@@ -7137,5 +7137,61 @@ success**. That pair is the flake's best portrait yet, and it is written here as
 run only: same commit, same tree, one red and one green, so the difference is not in this branch's source. Nothing in
 `WorkAdjustmentUiTest` was relaxed and nothing was `@Ignore`d; the case stays an open finding with its reproduction,
 not with an explanation.
+## 20γ — Stage 16 T6a: the branch fold joins the task document, where silence is not an answer
+
+§7 gave the fold a column (`tasks.children_collapsed`, v18) and §15's foundation gave the tree's other half —
+`parent_uuid` — its place on the wire. The fold did not travel, which means a reader who closes a branch on the phone
+sees it open on the tablet, and nothing in either screen can explain why. T6a closes exactly that gap, in one field, and
+the interesting part is not the field: it is that a document can be *silent* about it.
+
+The brief asks two things that pull against each other — an old document without the key must read as open, and a
+document that does not mention the fold must not unfold a newer local branch — and `false` cannot do both, because a
+document that never had the idea is not evidence that anybody opened anything. So the wire type is
+`SyncedTask.childrenCollapsed: Boolean?`, `of()` always fills it in (a row of this build knows its own state), and
+`fromFields()` casts with `as?` instead of the `bool()` helper every other flag on the class reads through. Absence, a
+null and a value of the wrong type all become `null` — silence, no crash — and the applier is the one place that decides
+what silence means per branch: a row this device does not have arrives open, because that is what every notebook written
+before v18 looked like; a row it does have keeps what it already said. An explicit `false` still updates a folded local
+row, and the two conflict gates above it — an unsynced local edit wins outright, an older document writes nothing — are
+untouched, so the fold grows no rule of its own.
+
+Six cases, three per existing sync class, written and run against the untouched code first:
+
+* `SyncDocumentFormatTest > a folded branch says so in its document` — RED as `the key is the one §6 names, and it is
+  not the topic's ` + '`collapsed`' + `',` because the key did not exist;
+* `an open branch says it is open rather than saying nothing` — RED as `expected:<false> but was:<null>`, twice over:
+  once in the document, once in what a device that reads it would send on;
+* `a document from before the fold existed is still silent about it after passing through this build` — green before the
+  change (nothing wrote the key at all) and proven non-vacuous by the mutation below;
+* `SyncAppliersTest > a task that arrives from a document older than the fold is stored open`, the same
+  green-before/proven-after status, for the row rather than the document;
+* `a branch the cloud says is open is opened here too` — RED as `an explicit false is a statement, and it arrives`,
+  because the applier did not write the column at all;
+* `a document that predates the fold cannot unfold a branch the reader closed here` — green before, and the one case that
+  would pass for the wrong reason if the presence rule were written as a default.
+
+Two mutations, one per shape of the rule. M1 replaces `as?` with `fields.bool(...)`: `38 tests completed, 2 failed` —
+the silence case (`expected null, but was:<false>`) and the unfold case (`and the closed branch stays closed`) — which is
+the whole upgrade hazard in one run. M2 makes the insert fallback `?: true` instead of `?: false`:
+`17 tests completed, 1 failed`, the legacy-insert case alone. Both files came back byte-identical afterwards
+(`store restored: byte-identical 9c120f497f1b2569`, `appliers restored: byte-identical 23a090f3a2334c0d`).
+
+What is *not* claimed: there is still no Firebase project, so no document has been pushed to or read from Firestore. The
+format and the merge rules are what run here, against a real Room database. The push path is confirmed by reading it,
+not by guessing at it: `SyncRepository.pushPending` hands each pending row to `FirestoreSyncStore.pushTask`
+(`SyncRepository.kt:143`), which writes `SyncedTask.of(task, categoryUuid).fields()` (`FirestoreSyncStore.kt:32-35`) —
+one field list, used by the push and by the tests alike — so the key leaves the device with every other field and the
+push needed no change of its own. The same three lines are where §11's purge will have to look: `setSyncState(... SYNCED)`
+sits at `SyncRepository.kt:142`, one line *above* the push it claims to record.
+
+Two gaps T6a leaves open, named rather than absorbed. A *task*-level "an unsent local edit beats a newer document"
+case does not exist in `SyncAppliersTest` — the rule is pinned for a series (`an unsent local change to a series beats a
+newer document from the cloud`) and the fold inherits the protection because the gate returns before any field is written,
+but the fold is not itself asserted behind that gate; the brief fixed the new-case count at six, so it is carried to
+T6b rather than added here. And the purge §5's review asked §11 to build — remove a retired row only once a *confirmed*
+push has carried it — is still unwritten, along with the rest of the hierarchy's convergence: a document whose
+`parent_uuid` names a row this device does not have yet, two devices folding the same branch differently, and the
+collapse state of a row that arrives before its parent. That is T6b, and the wire is now ready for it.
+
 
 

@@ -427,4 +427,69 @@ class SyncAppliersTest {
         val series = fixture.recurrenceDao.findByUuid(stored.seriesUuid!!)!!
         assertEquals("the pattern arrives as this profile's own", user.id, series.userId)
     }
+
+    @Test
+    fun `a task that arrives from a document older than the fold is stored open`() = runTest {
+        // There is no cloud yet, so "older document" is made here: the same row, written by this build, with the key
+        // taken back out of it. A row the cloud says nothing about is drawn open, which is what the column's default
+        // says and what a notebook written before v18 looked like on every screen.
+        val user = signedIn()
+        val legacy = SyncedTask.fromFields(
+            SyncedTask.of(
+                Task(uuid = "old-branch", title = "Legacy", description = "", userId = user.id,
+                    childrenCollapsed = true, syncState = SyncState.SYNCED, updatedAt = 100L),
+                categoryUuid = null
+            ).fields().filterKeys { it != "children_collapsed" }
+        )!!
+
+        assertTrue(appliers.applyRemoteTask(user.id, legacy, emptyMap()))
+
+        assertFalse(
+            "silence about the fold arrives as an open branch rather than as a crash or a guess",
+            fixture.taskDao.getTaskByUuid("old-branch")!!.childrenCollapsed
+        )
+    }
+
+    @Test
+    fun `a branch the cloud says is open is opened here too`() = runTest {
+        val user = signedIn()
+        val folded = Task(uuid = "tree-open", title = "Quarterly report", description = "", userId = user.id,
+            childrenCollapsed = true, syncState = SyncState.SYNCED, updatedAt = 100L)
+        fixture.taskDao.insertTask(folded)
+
+        val remote = SyncedTask.of(
+            folded.copy(childrenCollapsed = false, title = "Quarterly report, renamed", updatedAt = 200L),
+            categoryUuid = null
+        )
+
+        assertTrue(appliers.applyRemoteTask(user.id, remote, emptyMap()))
+
+        val stored = fixture.taskDao.getTaskByUuid("tree-open")!!
+        assertFalse("an explicit false is a statement, and it arrives", stored.childrenCollapsed)
+        assertEquals("and the row's other fields travel with it, on the rules that already decided them",
+            "Quarterly report, renamed", stored.title)
+    }
+
+    @Test
+    fun `a document that predates the fold cannot unfold a branch the reader closed here`() = runTest {
+        // The two sentences of §6 that pull against each other, in one row: the document is newer, so it does update
+        // the title — and it says nothing about the fold, so the fold the reader made here survives it. Reading an
+        // absent key as `false` would make the first pull after an upgrade open every closed branch on the device.
+        val user = signedIn()
+        val local = Task(uuid = "tree-keep", title = "Project", description = "", userId = user.id,
+            childrenCollapsed = true, syncState = SyncState.SYNCED, updatedAt = 100L)
+        fixture.taskDao.insertTask(local)
+
+        val newerLegacy = SyncedTask.fromFields(
+            SyncedTask.of(local.copy(title = "Project, renamed", updatedAt = 200L), categoryUuid = null)
+                .fields().filterKeys { it != "children_collapsed" }
+        )!!
+
+        assertTrue("the document is newer, so the rest of it does apply",
+            appliers.applyRemoteTask(user.id, newerLegacy, emptyMap()))
+
+        val stored = fixture.taskDao.getTaskByUuid("tree-keep")!!
+        assertEquals("Project, renamed", stored.title)
+        assertTrue("and the closed branch stays closed", stored.childrenCollapsed)
+    }
 }
