@@ -11,6 +11,7 @@ import com.taskplanner.data.model.TaskGroup
 import com.taskplanner.data.model.TaskStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -357,6 +358,11 @@ class SyncDocumentFormatTest {
             .filterKeys { it != "children_collapsed" }
         val read = SyncedTask.fromFields(legacy)
 
+        assertNotNull(
+            "the reader must still recognise a task it can apply — every assertion below is on a safe call, so a null " +
+                "here would satisfy all three of them without anything being read at all",
+            read
+        )
         assertNull(
             "a document that does not speak the fold's language, or speaks it in the wrong type, reads as silence",
             read?.fields()?.get("children_collapsed")

@@ -1197,23 +1197,31 @@ Stage 17 (dragging a subtree) and Stage 18 (selecting a subtree).
    either direction, no completion time invented for a topic, and no task row touched. Phase 4's rendering work is
    therefore complete in code and in JVM assertions; what it still owes is the camera (§19).
 5. **Controls**: indent/outdent in the editor and on the row; a long-press move for whole subtrees.
-6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping. **T6a is in**: the task document now
-carries `children_collapsed` beside `parent_uuid`, and it is read with its *presence* rather than only its value, so a
-document written before v18 cannot open a branch the reader closed (§16.5's field note and `docs/BACKUP_AND_SYNC.md`).
-The backup-JSON half is T7, and the report half is T8. The sync half still has one named defect
-   to close, found by Stage 16 §5's review and recorded in `docs/HIERARCHY.md` under *What a physical delete does to a
-   tombstone*: `TaskDeleteCoordinator.hardDelete` — the archive's "delete forever" — tombstones a row and removes it from
-   the table in the same call, so the deletion is never pushed and the local evidence a pull needs in order not to
-   resurrect the row is destroyed with it (`TaskDao.getAllRowsOnce` and `TaskDao.findTaskByUuid` both read tombstones on
-   purpose, and say so in their comments). The requirement is a purge, not a re-order: a retired row may be physically
-   removed only once its own `sync_state` has come back to `SYNCED` — the state `SyncRepository.pushPending` sets when it
-   has carried that row to the cloud. Not `TaskDao.getPendingSyncTasks`, which a first draft of this requirement named:
-   its SQL is `sync_state != 'SYNCED' OR is_deleted = 1`, so it lists every tombstone forever and the purge it gates
-   would never run. And because `SyncRepository.pushPending` marks a row `SYNCED` *before* it calls `store.pushTask`,
-   that state is intent rather than confirmation: §11 must first make the marking follow the confirmed write, or the
-   purge would delete tombstones that were never delivered and re-open the hole it closes. It predates §5 — the archive used to remove rows
-   with no tombstone at all — and §5 made the two-step the domain verb, which is why it is stated here rather than left
-   in a KDoc.
+6. **Carry it everywhere**: backup JSON, Firestore fields, CSV/PDF report grouping. **T6a is in**: the task document
+   now carries `children_collapsed` beside `parent_uuid`, and it is read with its *presence* rather than only its value,
+   so a document written before v18 cannot open a branch the reader closed (the field note on
+   `SyncedTask.childrenCollapsed` and *Sync* in `docs/BACKUP_AND_SYNC.md`). Two things review named and this block did
+   not fix, both for T6b: a topic's `is_completed` carries the same upgrade hazard with no presence rule —
+   `FirestoreSyncStore.kt:378` reads it through `bool(...)` and `applyRemoteGroup` writes it unconditionally, so a group
+   document predating §8 says "not completed" about a topic the reader finished; and no test asserts that a document
+   carrying an explicit `children_collapsed = true` reaches a device that has no local row — delete the insert branch's
+   fallback line and the suite stays green, because `Task.childrenCollapsed` defaults to `false` anyway. The brief fixed
+   the new-case count at six, so the gap is stated here rather than filled by a seventh case. The backup half is not a
+   missing field: `BackupData.tasks` serialises the `Task` entity itself, so both columns already travel in every file —
+   what T7 owns is the format-version bump and the tree validation. The report half is T8. The sync half still has one
+   named defect to close, found by Stage 16 §5's review and recorded in `docs/HIERARCHY.md` under *What a physical
+   delete does to a tombstone*: `TaskDeleteCoordinator.hardDelete` — the archive's "delete forever" — tombstones a row
+   and removes it from the table in the same call, so the deletion is never pushed and the local evidence a pull needs in
+   order not to resurrect the row is destroyed with it (`TaskDao.getAllRowsOnce` and `TaskDao.findTaskByUuid` both read
+   tombstones on purpose, and say so in their comments). The requirement is a purge, not a re-order: a retired row may be
+   physically removed only once its own `sync_state` has come back to `SYNCED`, the state `SyncRepository.pushPending`
+   sets when it carries that row to the cloud — and not `TaskDao.getPendingSyncTasks`, which a first draft of this
+   requirement named: its SQL is `sync_state != 'SYNCED' OR is_deleted = 1`, so it lists every tombstone forever and the
+   purge gated on it would never run. And because `pushPending` marks a row `SYNCED` at `SyncRepository.kt:142`, one
+   line *above* the `store.pushTask` at `:143`, that state is intent rather than confirmation: §11 must first make the
+   marking follow the confirmed write, or the purge would delete tombstones that were never delivered and re-open the
+   hole it closes. It predates §5 — the archive used to remove rows with no tombstone at all — and §5 made the two-step
+   the domain verb, which is why it is stated here rather than left in a KDoc.
 7. **Device proof** at 320dp and at font scale 1.3, light and dark.
 
 ## 16.9 Acceptance criteria

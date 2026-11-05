@@ -7184,8 +7184,31 @@ one field list, used by the push and by the tests alike — so the key leaves th
 push needed no change of its own. The same three lines are where §11's purge will have to look: `setSyncState(... SYNCED)`
 sits at `SyncRepository.kt:142`, one line *above* the push it claims to record.
 
-Two gaps T6a leaves open, named rather than absorbed. A *task*-level "an unsent local edit beats a newer document"
-case does not exist in `SyncAppliersTest` — the rule is pinned for a series (`an unsent local change to a series beats a
+Review of `a3acab0` returned no BLOCKER — the three states hold on every path a reader can walk, including the
+series-instance insert and the remote-deletes-local branch — and three MAJORs, each of them about what this section was
+claiming rather than what the code does. The insert branch's *value* is proven by M2 and its *presence* by nothing: a
+document carrying an explicit `children_collapsed = true` arriving at a device with no local row is the motivating case of
+the whole block, and deleting the line that writes it leaves all 2085 tests green, because the model's own default is
+`false`. The gate that was measured (`lintDebug`, 0/151) had been read out of a report file stamped hours before the
+sources it described — `lintReportDebug` answered UP-TO-DATE, and the numbers were taken on trust from it; the chain was
+re-run on the post-review tree for this section's numbers. And the fourth conflict rule was written in a class-wide voice
+the code contradicts one class away — a topic's `is_completed` is read through `bool(...)` and written unconditionally —
+so `SyncAppliers`'s list now keeps 1-3 universal, says plainly that rule 4 is the task fold's own, and names the sibling
+hazard where the next sync block will read it. Three smaller ones went with them: the rule list's own title, an
+`assertNotNull` in front of assertions that were safe calls and so could pass on a null, and roadmap §16.8 phase 6's claim
+that the backup is missing these fields, when `BackupData.tasks` serialises the `Task` entity and so already carries both
+— T7's work is the version bump and the tree validation.
+
+Gates, both chains: the first (the tree as committed) read **159 classes / 2085 tests / 1 failure / 0 errors /
+0 skipped**, `BUILD FAILED in 16m 49s`, the failure the known `WorkAdjustmentUiTest` case that was green when re-run
+alone; the second, on the tree this review leaves and the one published, **159 / 2085 / 0 / 0 / 0**,
+`BUILD SUCCESSFUL in 13m 19s`, lint re-executed into a report dated after every source edit and reading 0 errors / 151
+warnings, `check-localization.py` pass with no string added, APK SHA-256
+`f177a9c245b6d45f5da837cf39bc54e96943a8f3595744341f664ad4b5070191`.
+
+Four gaps T6a leaves open, named rather than absorbed. The insert of an explicit `true`, and the same presence rule for a
+topic's `is_completed`, both written into roadmap §16.8 phase 6. A *task*-level "an unsent local edit beats a newer
+document" case does not exist in `SyncAppliersTest` — the rule is pinned for a series (`an unsent local change to a series beats a
 newer document from the cloud`) and the fold inherits the protection because the gate returns before any field is written,
 but the fold is not itself asserted behind that gate; the brief fixed the new-case count at six, so it is carried to
 T6b rather than added here. And the purge §5's review asked §11 to build — remove a retired row only once a *confirmed*

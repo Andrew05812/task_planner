@@ -24,11 +24,19 @@ import javax.inject.Singleton
  *  1. a local row with unsent changes (sync_state != SYNCED) always wins — an offline edit must
  *     never be silently dropped in favour of a cloud snapshot;
  *  2. otherwise the newer updated_at wins, deletions included (the tombstone carries it);
- *  3. a remote update of a locally deleted row is ignored, so a delete never resurrects;
- *  4. a field this build learned after the document was written is only written when the document carries it. Silence
- *     about the branch fold is not an answer about it, and treating an absent key as `false` would open every branch
- *     the reader had closed on the first pull after an upgrade. `SyncedTask.childrenCollapsed` is a nullable `Boolean`
- *     for that reason, and the task applier is the one place the distinction is applied.
+ *  3. a remote update of a locally deleted row is ignored, so a delete never resurrects.
+ *
+ * And one rule that is a task's, about one field, stated separately because it is not universal:
+ *  4. `children_collapsed` is written to an existing row only when the document carries the key
+ *     (`SyncedTask.childrenCollapsed` is a nullable `Boolean` for that reason). A field this build learned late has
+ *     nothing to say about a document written before it existed, and reading silence as `false` would open every
+ *     branch the reader closed on the first pull after an upgrade.
+ *
+ * The same hazard sits one class away and is *not* fixed here, so it is named rather than smoothed over: a topic's
+ * `is_completed` is read through `Map.bool(...)` (`FirestoreSyncStore.kt:378`) and written to the local row
+ * unconditionally (`applyRemoteGroup`), so a group document predating §8 says "not completed" about a topic the reader
+ * finished. Both that and the fold's own coverage gap are written into roadmap §16.8 phase 6, where the next sync
+ * block will meet them.
  */
 @Singleton
 class SyncAppliers @Inject constructor(
