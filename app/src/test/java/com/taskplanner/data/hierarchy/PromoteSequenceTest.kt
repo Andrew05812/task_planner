@@ -2,7 +2,6 @@ package com.taskplanner.data.hierarchy
 
 import com.taskplanner.data.model.Task
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -104,10 +103,9 @@ class PromoteSequenceTest {
         val after = promote(stored)
 
         assertEquals("the answer is the sequence it was given", stored.map { it.title }, after.map { it.title })
-        assertTrue(
-            "and every row still sits at its own number, which is what writes no position",
-            after.mapIndexed { index, row -> row.order == index }.all { it }
-        )
+        // Whether that answer costs any *write* is not this class's to prove: positions are assigned by place only
+        // when the repository hands the list to `writePositions`, and a fixture whose rows already sit at their own
+        // index could not tell a no-op from a re-numbering. `HierarchyDeleteTest` measures it against a database.
     }
 
     @Test
@@ -168,14 +166,47 @@ class PromoteSequenceTest {
 
     @Test
     fun a_head_this_sequence_does_not_hold_leaves_it_as_it_was() {
-        val stored = profile("one" to null, "two" to null)
+        val stored = profile("one" to null, "two" to "one")
+        // An id the profile does not hold, paired with the whole profile as its "children": were the guard absent,
+        // every row below would be taken as lifted and placed behind a head that is not there, and the answer would
+        // come back empty rather than unchanged.
+        val absent = Task(
+            id = 99L,
+            uuid = "gone",
+            title = "gone",
+            description = "",
+            userId = 1L,
+            parentUuid = null,
+            order = 7
+        )
 
-        val after = TaskHierarchyPolicy.sequenceAfterPromote(stored, profile("gone" to null).first(), emptyList())
+        val after = TaskHierarchyPolicy.sequenceAfterPromote(stored, absent, stored)
 
-        assertEquals("nothing to lift, so nothing to re-arrange and no exception", stored, after)
+        assertEquals("no head to give a place to, so the sequence is the one it was given", stored, after)
     }
 
-    /** The titles of the rows whose own subtree is not printed as one block directly behind them. */
+    @Test
+    fun a_row_written_before_the_parent_that_lifted_is_put_behind_it() {
+        // The other way a split can be seeded: the grandchild written *ahead* of the child that owns it. The lifted
+        // block is still the child with its own rows, and the answer still holds every row once.
+        val stored = profile("head" to null, "early" to "parent", "parent" to "head")
+
+        val after = promote(stored)
+
+        assertEquals(
+            "the child takes the head's place with its own row behind it",
+            listOf("head", "parent", "early"),
+            after.map { it.title }
+        )
+        assertEquals("and nothing is printed apart from its head", emptyList<String>(), splitBlocks(after))
+    }
+
+    /**
+     * The titles of the rows whose own subtree is not printed, in order, directly behind them.
+     *
+     * The comparison is of two sequences rather than two sets: a branch printed with its rows scrambled inside it is
+     * the same defect one row later, and a set comparison would call it whole.
+     */
     private fun splitBlocks(rows: List<Task>): List<String> = rows.filter { head ->
         val block = TaskHierarchyPolicy.subtreeOf(rows, head).filterNot { it.id == head.id }
         if (block.isEmpty()) {
@@ -183,6 +214,6 @@ class PromoteSequenceTest {
         }
         val from = rows.indexOfFirst { it.id == head.id } + 1
         val window = rows.subList(from, minOf(from + block.size, rows.size))
-        window.map { it.id }.toSet() != block.map { it.id }.toSet()
+        window.map { it.id } != block.map { it.id }
     }.map { it.title }
 }

@@ -359,8 +359,11 @@ are the ones Stage 16 §9 names:
   lifted rows are then *re-numbered in the same transaction*: each child takes a place inside the block its head
   headed, with everything under it behind it, so the stored sequence still says the shape the parent links say. A
   promote that wrote parent links and left the numbers alone printed a grandchild below its parent's sibling — the
-  indent comes from the links and the order from the sequence, and the two disagreed. Nothing outside the head's block
-  is re-numbered, and a branch whose child already sat with its own rows costs no position write at all.
+  indent comes from the links and the order from the sequence, and the two disagreed. The re-arrangement therefore
+  reaches no further than the head's own block, and a branch whose child already sat with its own rows moves nothing
+  and writes no position. What it does not promise is a small write in every profile: positions are assigned by place,
+  so a profile whose numbers hold a gap — one that any earlier delete leaves — is densified by this write exactly as
+  the first drag of such a profile densifies it, and rows after the gap are written though they did not move.
 * **`DELETE_SUBTREE`** marks the row and every descendant as tombstones. Nothing is physically removed: history is
   retired, so a second device can be told about it and a restore can still read the shape of what the reader had.
 

@@ -105,11 +105,12 @@ class HierarchyDeleteTest {
     private fun rowsByName(): Map<String, Task> = everyRow().associateBy { it.title }
 
     /**
-     * The titles of the rows in [rows] whose block is printed apart from them.
+     * The titles of the rows in [rows] whose block is not printed, in order, directly behind them.
      *
      * Every hierarchy write in this app promises the same thing: a row's subtree sits immediately after it, so the
-     * stored sequence and the drawn tree say the same shape. A row whose parent is not in [rows] is not judged —
-     * this asks about the block a write made, not about rows another profile owns. The answer is the heads that
+     * stored sequence and the drawn tree say the same shape. A leaf is not judged, because its block is empty. The
+     * comparison is of two sequences rather than two sets — a branch printed whole but with its rows scrambled
+     * inside it is the same defect one row later, and a set would call it fixed. The answer names the heads that
      * break the promise rather than a bare false, because a failure has to say which branch was left split.
      */
     private fun splitBranches(rows: List<Task>): List<String> {
@@ -119,7 +120,7 @@ class HierarchyDeleteTest {
             if (block.isEmpty()) return@forEach
             val from = rows.indexOfFirst { it.id == head.id } + 1
             val window = rows.subList(from, minOf(from + block.size, rows.size))
-            if (window.map { it.id }.toSet() != block.map { it.id }.toSet()) split.add(head.title)
+            if (window.map { it.id } != block.map { it.id }) split.add(head.title)
         }
         return split
     }
@@ -313,6 +314,60 @@ class HierarchyDeleteTest {
             live().filter { it.id != head.id }.map { listOf(it.title, it.order) }
         )
         assertEquals("one row re-hung and one tombstone: no position was rewritten", 2, outcome.rowsWritten)
+    }
+
+    @Test
+    fun a_promote_densifies_a_profile_an_earlier_delete_left_gapped() {
+        // Positions are assigned by place, so the gap any earlier delete leaves moves the numbers of every row after
+        // it — the same reconciliation the first drag of such a profile pays, and the reason the promise §4b makes
+        // is about *which rows change place* rather than about how few rows are written.
+        val gone = row("gone", position = 0)
+        val head = row("head", position = 1)
+        row("first", parent = "head", position = 2)
+        row("second", parent = "head", position = 3)
+        row("under-first", parent = "first", position = 4)
+        delete(gone)
+
+        val outcome = delete(head, HierarchyDeletePolicy.PROMOTE_CHILDREN) as HierarchyDeleteResult.Deleted
+
+        assertEquals(
+            "the branch is still left whole, which is the claim the gap does not change",
+            listOf("first", "under-first", "second"),
+            live().map { it.title }
+        )
+        assertEquals(
+            "and the profile's numbers are dense behind the two tombstones",
+            listOf(1, 2, 3),
+            live().map { it.order }
+        )
+        assertEquals(
+            "two rows re-hung, three positions rewritten, one tombstone: the rows after the gap are written as " +
+                "the documentation says they are",
+            6,
+            outcome.rowsWritten
+        )
+    }
+
+    @Test
+    fun a_row_with_no_identity_adopts_nothing_when_it_is_deleted() {
+        // `uuid = ''` is the column's own default and `parent_uuid = ''` is what a pull or a legacy row writes for
+        // "no parent". Read as a real identity they would make every blank-parented row of the profile a child of
+        // the first blank-uuid row, so one press would re-hang and re-place rows nobody named. `TaskIdentityAuditTest`
+        // pins that answer for a drag; this is the delete reading it the same way.
+        val head = row("no uuid", uuid = "", position = 0)
+        row("blank one", parent = "", uuid = "blank one", position = 1)
+        row("blank two", parent = "", uuid = "blank two", position = 2)
+
+        val outcome = delete(head, HierarchyDeletePolicy.PROMOTE_CHILDREN) as HierarchyDeleteResult.Deleted
+
+        assertEquals("nothing was adopted, so nothing was re-hung", emptyList<Long>(), outcome.promotedTaskIds)
+        assertEquals("only the row pressed is a tombstone", listOf(head.id), outcome.deletedRows.map { it.id })
+        assertEquals(
+            "and the two unparented rows kept their links and their places",
+            listOf(listOf("blank one", "", 1), listOf("blank two", "", 2)),
+            live().map { listOf(it.uuid, it.parentUuid, it.order) }
+        )
+        assertEquals("one row written: the tombstone, and nothing else", 1, outcome.rowsWritten)
     }
 
     @Test

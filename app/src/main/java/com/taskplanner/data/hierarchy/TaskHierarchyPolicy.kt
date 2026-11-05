@@ -767,26 +767,53 @@ object TaskHierarchyPolicy {
     }
 
     /**
+     * The rows of [rows] that hang directly under [head], in the order they are read.
+     *
+     * One rule for the two readers that need it — the delete that asks what a branch holds and the delete that writes
+     * it. It lives here rather than inline because a blank identity is not an adoption: `uuid` defaults to `''` and a
+     * pulled or legacy row writes `parent_uuid = ''` to mean "no parent", so comparing the two columns hands every
+     * blank-parented row of the profile to the first blank-uuid row it meets. `TaskIdentityAuditTest`'s
+     * `blank_links_are_roots_and_a_blank_identity_adopts_nothing` pins that answer for a drag; a delete reading a
+     * different one would ask the reader about a number of children it then treats another way, or move rows nobody
+     * named.
+     */
+    fun directChildrenOf(rows: List<Task>, head: Task): List<Task> =
+        if (head.uuid.isBlank()) {
+            emptyList()
+        } else {
+            canonicalSequence(rows.filter { it.parentUuid == head.uuid && it.id != head.id })
+        }
+
+    /**
      * The order the profile's rows sit in once [head] is deleted and its [children] are lifted into its place.
      *
      * A promote answers who hangs from whom; this answers where those rows are then read. Both belong to the write,
      * because the promise every other hierarchy write keeps is that a row's subtree sits immediately after it —
-     * `moveWithinSiblings`, `indentTask`, `outdentTask` and `moveSubtreeUnder` all move a whole block for exactly
-     * that reason. Promote wrote parent links and no position, so a lifted row kept the number it had while its own
-     * child kept a later one, and `TaskTree.depthsByTaskId` — which indents from parent links and takes the sequence
-     * as it is written — printed that grandchild below its parent's sibling. The stored sequence then contradicted
-     * the tree drawn from it.
+     * `moveWithinSiblings`, `outdentTask` and `moveSubtreeUnder` all move a whole block for exactly that reason, and
+     * `indentTask` needs no position because the row it re-hangs already has its own rows behind it. Promote wrote
+     * parent links and no position, so a lifted row kept the number it had while its own child kept a later one, and
+     * `TaskTree.depthsByTaskId` — which indents from parent links and takes the sequence as it is written — printed
+     * that grandchild below its parent's sibling. The stored sequence then contradicted the tree drawn from it.
      *
-     * [children] are the rows hanging directly under [head], in the order they are read, as a caller holding this
-     * same sequence computes them; each one brings its own subtree, and the blocks go where the head sat, in that
-     * order. The head stays in the answer and keeps its own place, because the delete is a tombstone — the row is
-     * still the profile's — and keeping its number is what bounds the write: the lifted rows fill the places the
-     * head's block already held, so nothing outside the block is re-numbered and a promote that moves nobody, a
-     * child already printed with its own rows below it, rewrites no position at all.
+     * [children] are the rows hanging directly under [head], in the order they are read, as
+     * [directChildrenOf] computes them from this same sequence; each one brings its own subtree, and the blocks go where
+     * the head sat, in that order. The head stays in the answer and keeps its own place, because the delete is a
+     * tombstone — the row is still the profile's — and its keeping that place is what confines the *re-arrangement*
+     * to the block: the lifted rows fill the places the head's block held, so no row is moved relative to a row
+     * outside the block, and a branch whose child was already printed with its own rows is re-arranged nowhere at
+     * all.
+     *
+     * Re-arrangement is not the same thing as the size of the write. Positions are assigned by place, so a profile
+     * whose numbers hold a gap — one that any earlier delete leaves — is densified by this write exactly as the
+     * first drag densifies one, and rows after the gap are written though they did not move. `HierarchyDeleteTest`'s
+     * `a_promote_densifies_a_profile_an_earlier_delete_left_gapped` pins that cost, and `docs/HIERARCHY.md` states
+     * the rule for every write.
      *
      * The answer is then a permutation of [stored]: every row once, none lost, none twice. A [head] this sequence does
      * not hold leaves it as it was, and rows in [children] that are not in it would be placed as asked — the same
      * reading `sequenceAfterMove` takes of its own block, and the reason the caller hands rows it read beside these.
+     * Each child costs one walk of the profile: [subtreeOf] rebuilds its parent map per call, so a head with many
+     * children in a large profile is O(children x rows) here, which §14's benchmark is the place that gets measured.
      */
     fun sequenceAfterPromote(stored: List<Task>, head: Task, children: List<Task>): List<Task> {
         if (stored.none { it.id == head.id }) return stored

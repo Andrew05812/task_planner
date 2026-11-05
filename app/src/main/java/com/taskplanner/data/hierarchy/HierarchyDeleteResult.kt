@@ -77,10 +77,12 @@ enum class HierarchyDeleteRefusal {
  * alarms cancelled could not find the rows again to cancel them. Leaving them would be a wakeup that fires into an
  * empty sweep — which is what the single-row delete's own path never did.
  *
- * [Deleted.rowsWritten] counts the row statements the delete cost: every child re-hung, every position the lifted
- * blocks moved, every row that became a tombstone. It is a measurement rather than a promise, and the shape it is
- * worth reading for is the small one — a branch whose child was already printed with its own rows costs no position
- * write at all, because the places the head's block held are the only places a promote is allowed to change.
+ * [Deleted.rowsWritten] counts the task rows the delete touched: every child re-hung, every position the lifted
+ * blocks moved, every row that became a tombstone. It is not a count of SQL statements — one statement retires a
+ * whole block, and the reminder rows this transaction soft-deletes are not in the number — and it is a measurement
+ * rather than a promise. The shape worth reading it for is the small one: a branch whose child was already printed
+ * with its own rows moves no row and adds nothing to the count. Rows whose *numbers* merely shift because the
+ * profile holds a gap from an earlier delete do add to it, which is the same cost the first drag of a profile pays.
  *
  * [Confirm] is not an error. It is the domain refusing to answer a question the reader owns: a row with rows under it
  * has two deletes and only they can say which one they meant. A caller that already knows — because the dialog asked

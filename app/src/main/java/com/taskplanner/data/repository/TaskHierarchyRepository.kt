@@ -36,8 +36,9 @@ import javax.inject.Singleton
  * The promises are about shape, and one of them is easy to lose because no single row breaks it: **a row's whole
  * subtree is printed immediately after it**. The screen takes the order it draws from the stored sequence and the
  * indent from the parent links, so a sequence that puts a child after its parent's sibling shows a row hanging under
- * a card that is not its parent. Every write here moves blocks rather than rows for that reason — and a delete moves
- * the block it retires out of the way, leaving the lifted children to fill the place their head held.
+ * a card that is not its parent. Each write answers that promise in the way its own change allows: a move or an
+ * outdent relocates a whole block, an indent needs no position because the row it re-hangs already has its own rows
+ * behind it, and a delete gives the lifted children the places the block their head headed held.
  */
 @Singleton
 class TaskHierarchyRepository @Inject constructor(
@@ -223,10 +224,12 @@ class TaskHierarchyRepository @Inject constructor(
      * grandparent, or the topic — and each keeps its own descendants, its topic and its place among its siblings, so
      * a branch does not fall to the margin because a line above it disappeared. Their *positions* are written in the
      * same transaction, because a child left standing at its old number would be read after its parent's sibling: the
-     * lifted blocks take the places the head's block held, and no row outside that range is touched.
+     * lifted blocks take the places the head's block held, so no row is moved relative to a row outside that range.
+     * Positions are assigned by place, so a profile that already holds a gap is densified by this write as it is by
+     * the first drag, and rows after the gap are written though they did not move.
      * [HierarchyDeletePolicy.DELETE_SUBTREE] marks the row and every descendant as tombstones; nothing is removed
-     * physically, because history is retired rather than deleted, and nothing is re-numbered, because a block that
-     * goes leaves no hole inside it.
+     * physically, because history is retired rather than deleted, and no position is written, because a block that
+     * goes whole leaves no row stranded behind it.
      *
      * A row of either set that is being measured refuses the whole request: an open interval has seconds already
      * spent on it, and a delete that stopped the timer on its own would throw that work away or leave a timer
@@ -261,7 +264,7 @@ class TaskHierarchyRepository @Inject constructor(
             if (beingMeasured != null) {
                 return@withTransaction HierarchyDeleteResult.Refused(HierarchyDeleteRefusal.MEASUREMENT_RUNNING)
             }
-            val children = stored.filter { it.parentUuid == head.uuid && it.id != head.id }
+            val children = TaskHierarchyPolicy.directChildrenOf(stored, head)
             if (policy == null && children.isNotEmpty()) {
                 // Asked without an answer, and the answer is not this class's to give: nothing is written, and the
                 // screen is handed the size of what it has to ask about.
@@ -281,8 +284,11 @@ class TaskHierarchyRepository @Inject constructor(
                 // Lifting a row is only half of moving it. The screen draws its order from this sequence and its
                 // indent from the parent links, so a child re-hung without a place left behind its parent's
                 // sibling — Stage 16 §4's defect, now §4b's fix. The head keeps its own place in the answer because
-                // it is the row that goes, and the blocks take the rest of the room its block held; rows outside it
-                // keep their numbers, so `writePositions` writes only what the branch actually moved.
+                // it is the row that goes, and the lifted blocks take the rest of the room its block held, so the
+                // re-arrangement reaches no further than the branch. `writePositions` then writes the rows whose
+                // number is not the place they ended up in: a branch that was already whole moves no row and writes
+                // no position, while a profile holding a gap from an earlier delete is densified here exactly as the
+                // first drag densifies it.
                 val reordered = TaskHierarchyPolicy.sequenceAfterPromote(stored, head, children)
                 written = children.size + writePositions(stored, reordered, now).size
             }
@@ -327,7 +333,7 @@ class TaskHierarchyRepository @Inject constructor(
         var children = 0
         val affected = HashSet<Long>()
         stored.filter { it.id in wanted }.forEach { head ->
-            val childCount = if (head.uuid.isBlank()) 0 else stored.count { it.parentUuid == head.uuid && it.id != head.id }
+            val childCount = TaskHierarchyPolicy.directChildrenOf(stored, head).size
             if (childCount > 0) branchRows++
             children += childCount
             affected += TaskHierarchyPolicy.subtreeOf(stored, head).map { it.id }
