@@ -32,6 +32,12 @@ import javax.inject.Singleton
  * Each operation is one transaction over the profile's stored rows, and each answers with a named result rather
  * than a half-applied change: [TaskHierarchyPolicy] decides, this class writes what it decided, and a refusal
  * writes nothing at all.
+ *
+ * The promises are about shape, and one of them is easy to lose because no single row breaks it: **a row's whole
+ * subtree is printed immediately after it**. The screen takes the order it draws from the stored sequence and the
+ * indent from the parent links, so a sequence that puts a child after its parent's sibling shows a row hanging under
+ * a card that is not its parent. Every write here moves blocks rather than rows for that reason — and a delete moves
+ * the block it retires out of the way, leaving the lifted children to fill the place their head held.
  */
 @Singleton
 class TaskHierarchyRepository @Inject constructor(
@@ -215,9 +221,12 @@ class TaskHierarchyRepository @Inject constructor(
      *
      * [HierarchyDeletePolicy.PROMOTE_CHILDREN] re-hangs the immediate children on whatever held this row — the
      * grandparent, or the topic — and each keeps its own descendants, its topic and its place among its siblings, so
-     * a branch does not fall to the margin because a line above it disappeared.
+     * a branch does not fall to the margin because a line above it disappeared. Their *positions* are written in the
+     * same transaction, because a child left standing at its old number would be read after its parent's sibling: the
+     * lifted blocks take the places the head's block held, and no row outside that range is touched.
      * [HierarchyDeletePolicy.DELETE_SUBTREE] marks the row and every descendant as tombstones; nothing is removed
-     * physically, because history is retired rather than deleted.
+     * physically, because history is retired rather than deleted, and nothing is re-numbered, because a block that
+     * goes leaves no hole inside it.
      *
      * A row of either set that is being measured refuses the whole request: an open interval has seconds already
      * spent on it, and a delete that stopped the timer on its own would throw that work away or leave a timer
@@ -269,7 +278,13 @@ class TaskHierarchyRepository @Inject constructor(
                 children.forEach { child ->
                     taskDao.setTaskParent(child.id, head.parentUuid?.takeIf { it.isNotBlank() }, now)
                 }
-                written = children.size
+                // Lifting a row is only half of moving it. The screen draws its order from this sequence and its
+                // indent from the parent links, so a child re-hung without a place left behind its parent's
+                // sibling — Stage 16 §4's defect, now §4b's fix. The head keeps its own place in the answer because
+                // it is the row that goes, and the blocks take the rest of the room its block held; rows outside it
+                // keep their numbers, so `writePositions` writes only what the branch actually moved.
+                val reordered = TaskHierarchyPolicy.sequenceAfterPromote(stored, head, children)
+                written = children.size + writePositions(stored, reordered, now).size
             }
             val doomed = if (chosen == HierarchyDeletePolicy.DELETE_SUBTREE) block else listOf(head)
             taskDao.softDeleteTasks(doomed.map { it.id }, now)

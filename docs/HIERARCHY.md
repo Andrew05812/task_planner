@@ -355,7 +355,12 @@ are the ones Stage 16 §9 names:
 
 * **`PROMOTE_CHILDREN`** deletes the chosen row and re-hangs its immediate children on whatever held it — the
   grandparent, or the topic. A grandchild keeps hanging from its own parent, and every row keeps its topic, its owner
-  and its place among its siblings, so a branch does not fall to the margin because a line above it disappeared.
+  and its place among its siblings, so a branch does not fall to the margin because a line above it disappeared. The
+  lifted rows are then *re-numbered in the same transaction*: each child takes a place inside the block its head
+  headed, with everything under it behind it, so the stored sequence still says the shape the parent links say. A
+  promote that wrote parent links and left the numbers alone printed a grandchild below its parent's sibling — the
+  indent comes from the links and the order from the sequence, and the two disagreed. Nothing outside the head's block
+  is re-numbered, and a branch whose child already sat with its own rows costs no position write at all.
 * **`DELETE_SUBTREE`** marks the row and every descendant as tombstones. Nothing is physically removed: history is
   retired, so a second device can be told about it and a restore can still read the shape of what the reader had.
 

@@ -499,19 +499,17 @@ class UnifiedTaskDeleteTest {
 
         assertEquals(
             "the head is gone and both its rows are live again",
-            listOf("week one", "week two", "draft"),
+            listOf("week one", "draft", "week two"),
             stored().map { it.uuid }
         )
-        // What a promote leaves in the sequence is what a promote is: the head is retired, its direct children are
-        // lifted to the head's parent, and nobody is re-positioned. `getRowsInStoredOrder` is the raw stored order, so
-        // `draft` — a child of `week one` — stays written after `week two`, which is `week one`'s sibling. That is not
-        // a claim about the drawn tree being right: `TaskTree.depthsByTaskId` indents from parent links, independent of
-        // position, so the list shows `draft` at `week one`'s depth *below* `week two`, stranding a grandchild under
-        // its parent's sibling. The fix is re-sequencing the promoted subtrees in the domain and is tracked as T4b, in
-        // another dispatch; `TaskHierarchyPolicy.canonicalSequence` is not the place that would settle it — it is a
-        // tie-breaking sort by `order, dueDate, id`, which fixes *ties* the query leaves open and moves nothing else.
-        // This assertion therefore describes today's behaviour, not a promise: when T4b lands, this expectation flips
-        // back to `week one, draft, week two` and the test that owns the claim is the one that changes.
+        // The order above is the promise, not a description of a side effect: a promote decides both who the lifted
+        // rows hang from and where they are read, and `draft` is read behind the row it hangs from rather than behind
+        // its parent's sibling. That is what every other hierarchy write already did by moving whole blocks, and
+        // `TaskHierarchyPolicy.sequenceAfterPromote` is where the rule lives now — `HierarchyDeleteTest` and
+        // `PromoteSequenceTest` own the claim at the domain, where a split would fail there first. What this case
+        // adds is that the reader who pressed the button gets the same answer: the screen draws its order from the
+        // stored sequence and its indent from `TaskTree.depthsByTaskId`, so before §4b the two disagreed here and a
+        // grandchild was printed under the wrong card.
         assertNull(
             "the promoted rows hang on nothing now",
             allRows().first { it.uuid == "week one" }.parentUuid

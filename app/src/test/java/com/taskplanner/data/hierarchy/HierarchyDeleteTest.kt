@@ -104,6 +104,26 @@ class HierarchyDeleteTest {
 
     private fun rowsByName(): Map<String, Task> = everyRow().associateBy { it.title }
 
+    /**
+     * The titles of the rows in [rows] whose block is printed apart from them.
+     *
+     * Every hierarchy write in this app promises the same thing: a row's subtree sits immediately after it, so the
+     * stored sequence and the drawn tree say the same shape. A row whose parent is not in [rows] is not judged —
+     * this asks about the block a write made, not about rows another profile owns. The answer is the heads that
+     * break the promise rather than a bare false, because a failure has to say which branch was left split.
+     */
+    private fun splitBranches(rows: List<Task>): List<String> {
+        val split = ArrayList<String>()
+        rows.forEach { head ->
+            val block = TaskHierarchyPolicy.subtreeOf(rows, head).filterNot { it.id == head.id }
+            if (block.isEmpty()) return@forEach
+            val from = rows.indexOfFirst { it.id == head.id } + 1
+            val window = rows.subList(from, minOf(from + block.size, rows.size))
+            if (window.map { it.id }.toSet() != block.map { it.id }.toSet()) split.add(head.title)
+        }
+        return split
+    }
+
     private fun reminderFor(task: Task, offset: Int, due: Long) = Reminder(
         uuid = Reminder.identity(task.uuid, offset),
         taskUuid = task.uuid,
@@ -234,6 +254,65 @@ class HierarchyDeleteTest {
         assertEquals("and that parent still hangs from the row above the one deleted", "l1", byTitle.getValue("l3").parentUuid)
         assertEquals("only the chosen row went", 3, live().size)
         assertEquals("and the answer names the one row that was re-hung", listOf(child.id), outcome.promotedTaskIds)
+    }
+
+    @Test
+    fun promoting_a_head_lifts_each_child_together_with_the_rows_under_it() {
+        val head = row("head", position = 0)
+        row("first", parent = "head", position = 1)
+        row("second", parent = "head", position = 2)
+        row("under-first", parent = "first", position = 3)
+
+        delete(head, HierarchyDeletePolicy.PROMOTE_CHILDREN)
+
+        assertEquals(
+            "a lifted row is read with the rows under it, not after its sibling",
+            listOf("first", "under-first", "second"),
+            live().map { it.title }
+        )
+        assertEquals("and the branch it makes is not printed apart from itself", emptyList<String>(), splitBranches(live()))
+    }
+
+    @Test
+    fun a_promote_leaves_no_row_printed_before_its_own_parent_and_moves_no_neighbour() {
+        row("before", position = 0)
+        val head = row("head", position = 1)
+        row("first", parent = "head", position = 2)
+        row("second", parent = "head", position = 3)
+        row("under-first", parent = "first", position = 4)
+        row("after", position = 5)
+
+        delete(head, HierarchyDeletePolicy.PROMOTE_CHILDREN)
+
+        val after = live()
+        assertEquals(
+            "the lifted block reads as the head left it, and the rows beside it never moved",
+            listOf("before", "first", "under-first", "second", "after"),
+            after.map { it.title }
+        )
+        assertEquals("nothing in the profile is left split", emptyList<String>(), splitBranches(after))
+        assertEquals(
+            "and the neighbours kept their own positions, so the write is bounded by the block",
+            listOf("before" to 0, "after" to 5),
+            after.filter { it.title == "before" || it.title == "after" }.map { it.title to it.order }
+        )
+    }
+
+    @Test
+    fun a_promote_that_moves_nobody_writes_no_position() {
+        val head = row("head", position = 0)
+        row("child", parent = "head", position = 1)
+        row("grandchild", parent = "child", position = 2)
+        val before = live().filter { it.id != head.id }.map { listOf(it.title, it.order) }
+
+        val outcome = delete(head, HierarchyDeletePolicy.PROMOTE_CHILDREN) as HierarchyDeleteResult.Deleted
+
+        assertEquals(
+            "a block that was already whole keeps every number it had",
+            before,
+            live().filter { it.id != head.id }.map { listOf(it.title, it.order) }
+        )
+        assertEquals("one row re-hung and one tombstone: no position was rewritten", 2, outcome.rowsWritten)
     }
 
     @Test

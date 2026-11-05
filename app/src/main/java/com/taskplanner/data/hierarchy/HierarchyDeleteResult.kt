@@ -77,6 +77,11 @@ enum class HierarchyDeleteRefusal {
  * alarms cancelled could not find the rows again to cancel them. Leaving them would be a wakeup that fires into an
  * empty sweep — which is what the single-row delete's own path never did.
  *
+ * [Deleted.rowsWritten] counts the row statements the delete cost: every child re-hung, every position the lifted
+ * blocks moved, every row that became a tombstone. It is a measurement rather than a promise, and the shape it is
+ * worth reading for is the small one — a branch whose child was already printed with its own rows costs no position
+ * write at all, because the places the head's block held are the only places a promote is allowed to change.
+ *
  * [Confirm] is not an error. It is the domain refusing to answer a question the reader owns: a row with rows under it
  * has two deletes and only they can say which one they meant. A caller that already knows — because the dialog asked
  * first, or because it is deleting a batch it checked as a whole — passes a [HierarchyDeletePolicy] and never sees
