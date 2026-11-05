@@ -7223,13 +7223,16 @@ HTTP 204, which is acceptance of a request and not a verdict; the verdict is run
 [42072595832](https://github.com/Andrew05812/task_planner/actions/runs/42072595832) on `f650ce6`, attempt 1,
 **`completed / success`**, one job, 16 of 16 steps success, 17:14:12Z to 17:23:19Z.
 
-CI's three uploaded artifacts were downloaded and read rather than trusted. Its unit-test report is the same shape as
-the local one and agrees with it exactly: `index.html` counts **2085 tests, 0 failures, 0 ignored**, over **159** class
-pages — which includes `WorkAdjustmentUiTest`, green on the published commit. Its lint report opens
-**`Lint Report: 177 warnings`** with no error section, against 0 errors / 151 warnings on this machine; the gap is not
-reconciled and is not smoothed over — CI's own overview table attributes 35 rows to `GradleDependency` where this
-machine's warm dependency catalogue yields 9, and that table's per-id sum (175) does not even match its own header, so
-the attribution is approximate and nothing rests on it. The gate both runs are held to is 0 errors, and both report it.
+CI's three uploaded artifacts were downloaded and read rather than trusted. Its unit-test report agrees with the local
+chain exactly: `index.html` counts **2085 tests, 0 failures, 0 ignored** over **159** class pages, which includes
+`WorkAdjustmentUiTest` — green on the published commit. Its lint report opens **`Lint Report: 177 warnings`** with no
+error section, against 0 errors / 151 warnings on this machine, and the two reconcile to one check rather than being
+shrugged past: the whole difference is `GradleDependency`, **35** rows on the runner where this machine's warm, cached
+version catalogue yields **9**, so 35 − 9 = 26 = 177 − 151, and every other one of the nineteen issue ids matches
+between the reports. Reading it took two passes, and the first pass is worth recording: keying CI's overview table on
+`href="#Id"` drops its `SetTextI18n` row, which carries no anchor and holds 2, so the table appeared to sum to 175
+against its own header's 177 — a report disagreeing with itself is evidence about the reader's parse, not about lint.
+Neither run is claimed to have produced the other's warning list; both are measured, and the gate is errors, at zero.
 Its `app-debug.apk` is 14 596 867 bytes, sha256 `708e8d3625de70361c043a522aed4282ad253766a6dc3ed9d38675ca83eac8b3`,
 against the local 14 970 155 bytes / `f177a9c245b6d45f5da837cf39bc54e96943a8f3595744341f664ad4b5070191`; the two builds
 of identical source differing in size and hash is the packaging non-reproducibility recorded at Stage 7, not a program
