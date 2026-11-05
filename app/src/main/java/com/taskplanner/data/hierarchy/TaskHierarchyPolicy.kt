@@ -765,4 +765,52 @@ object TaskHierarchyPolicy {
         val insertAt = if (placeAfter) at + 1 else at
         return rest.subList(0, insertAt) + block + rest.subList(insertAt, rest.size)
     }
+
+    /**
+     * The order the profile's rows sit in once [head] is deleted and its [children] are lifted into its place.
+     *
+     * A promote answers who hangs from whom; this answers where those rows are then read. Both belong to the write,
+     * because the promise every other hierarchy write keeps is that a row's subtree sits immediately after it —
+     * `moveWithinSiblings`, `indentTask`, `outdentTask` and `moveSubtreeUnder` all move a whole block for exactly
+     * that reason. Promote wrote parent links and no position, so a lifted row kept the number it had while its own
+     * child kept a later one, and `TaskTree.depthsByTaskId` — which indents from parent links and takes the sequence
+     * as it is written — printed that grandchild below its parent's sibling. The stored sequence then contradicted
+     * the tree drawn from it.
+     *
+     * [children] are the rows hanging directly under [head], in the order they are read, as a caller holding this
+     * same sequence computes them; each one brings its own subtree, and the blocks go where the head sat, in that
+     * order. The head stays in the answer and keeps its own place, because the delete is a tombstone — the row is
+     * still the profile's — and keeping its number is what bounds the write: the lifted rows fill the places the
+     * head's block already held, so nothing outside the block is re-numbered and a promote that moves nobody, a
+     * child already printed with its own rows below it, rewrites no position at all.
+     *
+     * The answer is then a permutation of [stored]: every row once, none lost, none twice. A [head] this sequence does
+     * not hold leaves it as it was, and rows in [children] that are not in it would be placed as asked — the same
+     * reading `sequenceAfterMove` takes of its own block, and the reason the caller hands rows it read beside these.
+     */
+    fun sequenceAfterPromote(stored: List<Task>, head: Task, children: List<Task>): List<Task> {
+        if (stored.none { it.id == head.id }) return stored
+        val lifted = ArrayList<Task>()
+        val moved = HashSet<Long>()
+        children.forEach { child ->
+            subtreeOf(stored, child).forEach { row ->
+                // The head is placed by the branch below, so a walk that reached it again — which needs a parent
+                // cycle, and `deleteTask` refuses a block whose identities are not single-valued before it gets here
+                // — must not be able to put it in the answer twice.
+                if (row.id != head.id && moved.add(row.id)) lifted.add(row)
+            }
+        }
+        val out = ArrayList<Task>(stored.size)
+        stored.forEach { row ->
+            when {
+                row.id == head.id -> {
+                    out.add(row)
+                    out.addAll(lifted)
+                }
+                row.id in moved -> Unit
+                else -> out.add(row)
+            }
+        }
+        return out
+    }
 }
