@@ -32,9 +32,11 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,9 +60,29 @@ import org.robolectric.shadows.ShadowDialog
  * **What this file measures is a number of windows.** Content alone cannot pin §4 — the old second window was
  * already a correct branch dialog, so every "does the message name the count" assertion passed with the flow still
  * in two steps. [press] therefore marks the list of shown dialogs before the press and reads it after, and
- * [theOneWindow] asserts the count before it lets a test look at a word. The counter's non-vacuity is proven by
- * mutation, in the task's report: putting the pre-confirmation back makes the branch cases fail at
- * `expected:<1> but was:<2>` while the rest of the file stays green.
+ * [theOneWindow] asserts the count before it lets a test look at a word.
+ *
+ * **The counter is live, and so is the rest of the file — both re-run on the tree this class ships in.** Two scratch
+ * edits, each against these 23 tests, then reverted and `cmp`-verified byte-identical (round 2 measured them at 22
+ * tests; these are the numbers the committed tree reproduces):
+ *  * a press that puts *two* windows up at once (`DeleteDialog.show` drawing the plain confirmation as well as the
+ *    branch window for `asksForBranch`) fails **19 of 23**, every one of them at
+ *    `one press puts exactly one window on the screen expected:<1> but was:<2>` — the count is what refuses it. The
+ *    four that stay green are the presses that never stack: the two plain-confirmation cases, the selection-bar
+ *    authority case, and the second-press case, whose own guard means no second request reaches a drawer at all;
+ *  * the shape the roadmap actually forbids — a confirmation first, the branch question only after the reader
+ *    confirms (`requestDelete` reporting `branchRows = 0` for a press the summary calls a branch) — is caught one
+ *    line later rather than by the count, because its second window only appears on the answer: **15 of 23** fail,
+ *    starting at which window the press opened
+ *    (`… the branch in its second half is part of the question expected:<[Tasks with subtasks]> but was:<[Delete tasks?]>`)
+ *    and continuing on the delete a confirmed-but-unasked branch does not perform. The eight that stay green are the
+ *    cases that never ask about a branch, plus the two lifecycle cases — whose window is refused a second time by
+ *    the count assertion they run before reading any word.
+ *
+ * The sentence this replaces claimed the second mutation failed at `expected:<1> but was:<2>`; that run had never
+ * been done, and done now it says something narrower and worth keeping straight: the count refuses two windows at
+ * once, and a confirmation-that-leads-somewhere is refused by the window's identity and by what the press then
+ * writes. Both halves of §4 are therefore watched, and neither rests on the other.
  *
  * **The domain supplies the shape, the screen only draws it.** No number here comes from a walk this file or the
  * screen performs: the request the dialog is built from is `deleteBatchSummary(ids)`, the same read the write path
@@ -73,10 +95,14 @@ import org.robolectric.shadows.ShadowDialog
  *
  * **The harness is production.** [DeleteDialog.bind] is the function `TasksFragment.setupObservers` calls, with the
  * real one-shot channel, the real dialog object and a real `LifecycleRegistry` driving the same
- * `repeatOnLifecycle(STARTED)` the fragment runs under; the rotation cases stop, recreate and press through it.
- * What the harness cannot reach is *which card control* calls `viewModel.requestDelete` — `TasksFragment` is an
- * `@AndroidEntryPoint` fragment and this module's unit-test classpath carries no Hilt test component, so that one
- * line is read rather than run, and the report says so.
+ * `repeatOnLifecycle(STARTED)` the fragment runs under; the rotation cases stop, recreate and press through it, and
+ * so does every refusal the collector reports through `onBusy`. What the harness still cannot reach is *which control*
+ * calls the view model — `TasksFragment` is an `@AndroidEntryPoint` fragment and this module's unit-test classpath
+ * carries no Hilt test component, so the two `setOnClickListener` lines are read rather than run, and the report says
+ * so. The bulk press's *set*, at least, moved onto the reachable side of that line this round: the screen now says
+ * only that its bar was pressed and [TasksViewModel.requestDeleteSelection] decides what that means, so
+ * [the_bulk_press_asks_about_the_selection_the_reader_is_holding_and_not_the_one_last_drawn] measures the authority
+ * the reader's ticks land in rather than a copy of a render.
  *
  * Robolectric gives the resource set of the test's own qualifiers, so every string is compared to
  * `getString(...)`/`getQuantityString(...)` and to no English word — the rule `EnglishLiteralAssertionTest` holds
@@ -168,7 +194,8 @@ class UnifiedTaskDeleteTest {
             scope = screen.scope,
             requests = viewModel.deleteRequests,
             context = { themed() },
-            onAnswer = { request, policy -> viewModel.resolveDelete(request, policy) }
+            onAnswer = { request, policy -> viewModel.resolveDelete(request, policy) },
+            onBusy = { viewModel.reportDeleteBusy() }
         )
         screen.moveTo(Lifecycle.State.RESUMED)
         pump()
@@ -189,13 +216,16 @@ class UnifiedTaskDeleteTest {
         val looper = shadowOf(Looper.getMainLooper())
         // A batch is a chain, not a step: three rows means three transactions, each with its reminder and series
         // follow-up in between, and every link wakes on Main and suspends on storage again. So the two are driven
-        // until the looper reports nothing left to run rather than a fixed number of times — and the bound stays, so
-        // a loop that never settles surfaces as a failed assertion instead of a hung build.
+        // until the looper reports nothing left to run rather than a fixed number of times.
         repeat(30) {
             looper.idle()
             runBlocking { fixture.awaitIdle() }
             if (looper.isIdle) return
         }
+        // A chain that never settles is not allowed to be judged on the partial state it happened to reach: that is
+        // the exact bug this class was written against — a batch whose third delete had not been dispatched yet read
+        // back as a tree the answer had left wrong. Bound alone was a way of hanging up a wrong assertion.
+        fail("pump did not converge in 30 passes: the press never settled, so anything read after it is a partial state")
     }
 
     /** Every window shown since the mark, in the order the screen put them up. */
@@ -405,7 +435,14 @@ class UnifiedTaskDeleteTest {
             DialogInterface.BUTTON_NEGATIVE to "delete the branch",
             DialogInterface.BUTTON_NEUTRAL to "cancel"
         )
-        assertEquals("the window offers three actions", 3, actions.size)
+        // The count is read off the window, not off the list this test just wrote: three buttons that are really
+        // three different views is a claim about the dialog, and a missing neutral action or two fates sharing one
+        // button fails here instead of being an number this file agreed with itself about.
+        assertEquals(
+            "the window offers three actions",
+            3,
+            actions.mapNotNull { window.getButton(it.first) }.distinct().size
+        )
         actions.forEach { (which, name) ->
             val button = window.getButton(which)
             assertNotNull("$name is on the window", button)
@@ -433,10 +470,16 @@ class UnifiedTaskDeleteTest {
             listOf("week one", "week two", "draft"),
             stored().map { it.uuid }
         )
-        // The order a promoted branch leaves behind is the order it arrived in: §4 retires the head and lifts its
-        // children, and it does not re-sequence anybody. `getRowsInStoredOrder` is the raw sequence, so a row written
-        // after its parent's sibling stays written after it — the tree the reader sees is `canonicalSequence`'s
-        // business, and §9's tests are where that contiguity is pinned. Claimed here as it is, not as it might read.
+        // What a promote leaves in the sequence is what a promote is: the head is retired, its direct children are
+        // lifted to the head's parent, and nobody is re-positioned. `getRowsInStoredOrder` is the raw stored order, so
+        // `draft` — a child of `week one` — stays written after `week two`, which is `week one`'s sibling. That is not
+        // a claim about the drawn tree being right: `TaskTree.depthsByTaskId` indents from parent links, independent of
+        // position, so the list shows `draft` at `week one`'s depth *below* `week two`, stranding a grandchild under
+        // its parent's sibling. The fix is re-sequencing the promoted subtrees in the domain and is tracked as T4b, in
+        // another dispatch; `TaskHierarchyPolicy.canonicalSequence` is not the place that would settle it — it is a
+        // tie-breaking sort by `order, dueDate, id`, which fixes *ties* the query leaves open and moves nothing else.
+        // This assertion therefore describes today's behaviour, not a promise: when T4b lands, this expectation flips
+        // back to `week one, draft, week two` and the test that owns the claim is the one that changes.
         assertNull(
             "the promoted rows hang on nothing now",
             allRows().first { it.uuid == "week one" }.parentUuid
@@ -524,6 +567,27 @@ class UnifiedTaskDeleteTest {
     }
 
     @Test
+    fun a_set_of_several_rows_with_one_branch_row_is_asked_about_as_a_set() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        val first = row("buy stamps", position = 2)
+        val second = row("post them", position = 3)
+
+        val window = theOneWindow(pressSelection(listOf(head.id, first.id, second.id)))
+
+        assertEquals(
+            "one branch row among three selected tasks is still a set, and the window may not address it as «this " +
+                "task» — the singular sentence names one head's own children, and two of these rows are not under it",
+            app.getString(
+                R.string.delete_branch_message_batch,
+                1,
+                app.resources.getQuantityString(R.plurals.delete_branch_rows, 4, 4)
+            ),
+            messageOf(window)
+        )
+    }
+
+    @Test
     fun a_bulk_selection_whose_branch_rows_are_in_the_second_half_writes_nothing_before_the_choice() {
         val first = row("buy stamps", position = 0)
         val second = row("post them", position = 1)
@@ -592,6 +656,40 @@ class UnifiedTaskDeleteTest {
         click(window, DialogInterface.BUTTON_NEUTRAL)
 
         assertEquals("a cancel keeps the batch the reader ticked", setOf(head.id), viewModel.selectedIds)
+    }
+
+    @Test
+    fun the_bulk_press_asks_about_the_selection_the_reader_is_holding_and_not_the_one_last_drawn() {
+        val first = row("buy stamps", position = 0)
+        val second = row("post them", position = 1)
+        viewModel.toggleSelection(first.id)
+        pump()
+        assertEquals(
+            "the render has caught up with the first tick",
+            setOf(first.id),
+            viewModel.state.value.selectedIds
+        )
+
+        viewModel.toggleSelection(second.id)
+
+        assertEquals("the reader has ticked both", setOf(first.id, second.id), viewModel.selectedIds)
+        assertEquals(
+            "and the drawn snapshot is still one row behind — which is the set the selection bar used to hand " +
+                "over, so a press taken from it asks about rows the reader has already outgrown",
+            setOf(first.id),
+            viewModel.state.value.selectedIds
+        )
+
+        val mark = ShadowDialog.getShownDialogs().size
+        viewModel.requestDeleteSelection()
+        pump()
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "the window asks about the two rows the reader ticked, not the one the last render drew",
+            app.getString(R.string.confirm_delete_selected_message, 2),
+            messageOf(window)
+        )
     }
 
     // ── the domain's refusals still reach the reader ─────────────────────────────────────────────────────────
@@ -745,6 +843,27 @@ class UnifiedTaskDeleteTest {
     }
 
     @Test
+    fun stopping_the_view_takes_the_open_window_with_it_and_writes_nothing() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        val before = shape()
+
+        val window = theOneWindow(press(head))
+        assertTrue("the question is on the screen before the view goes away", window.isShowing)
+
+        screen.moveTo(Lifecycle.State.CREATED)
+        pump()
+
+        assertFalse(
+            "a window the reader was never able to answer does not outlive the view that drew it: on a real " +
+                "rotation that is a leaked window and a lost question",
+            window.isShowing
+        )
+        assertEquals("and taking it down is not an answer — nothing was written", before, shape())
+        assertEquals("no row became a tombstone on the way out", emptyList<String>(), retired())
+    }
+
+    @Test
     fun a_second_press_while_a_question_is_open_adds_no_window_and_writes_nothing() {
         val head = row("field notes", position = 0)
         row("week one", parent = "field notes", position = 1)
@@ -761,6 +880,45 @@ class UnifiedTaskDeleteTest {
             windowsSince(mark)
         )
         assertEquals("and the tree is still the one they were asked about", before, shape())
+        assertEquals(
+            "the refused press still reaches the reader: a control that did nothing at all reads as a dead " +
+                "control, so the drop is named in the state the screen renders",
+            R.string.delete_one_question_at_a_time,
+            viewModel.state.value.error
+        )
+    }
+
+    @Test
+    fun a_press_the_screen_cannot_even_queue_names_the_same_reason() {
+        val head = row("field notes", position = 0)
+        row("week one", parent = "field notes", position = 1)
+        val other = row("buy stamps", position = 2)
+        screen.moveTo(Lifecycle.State.CREATED)
+        pump()
+
+        // The collector is stopped, so the first request is still sitting in the channel — and the channel holds
+        // one question. The second press has nowhere to go, and `trySend` is the only thing that knows it.
+        press(head)
+        val mark = ShadowDialog.getShownDialogs().size
+        viewModel.requestDelete(listOf(other.id))
+        pump()
+
+        assertEquals("nothing was put up while the screen was away", emptyList<Dialog>(), windowsSince(mark))
+        assertEquals(
+            "and a press dropped at the door is named just like one dropped at the window",
+            R.string.delete_one_question_at_a_time,
+            viewModel.state.value.error
+        )
+
+        screen.moveTo(Lifecycle.State.STARTED)
+        pump()
+
+        val window = theOneWindow(mark)
+        assertEquals(
+            "the question that did get queued is the one the screen returns with",
+            app.getString(R.string.delete_branch_title),
+            titleOf(window)
+        )
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────────────────
